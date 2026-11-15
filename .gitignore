@@ -81,3 +81,5 @@ Desktop.ini
 # External research artifacts do not belong in this source repository.
 /references/
 /artifacts/
+
+/src/main/webapp/META-INF/context.xml

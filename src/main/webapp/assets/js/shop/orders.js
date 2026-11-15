@@ -83,7 +83,8 @@
         list.append(error);
         const totals = totalsPanel(repository.cartTotals());
         if (items.every((line) => line.purchasable)) {
-            totals.append(link("주문하기", "checkout.jsp", {}, "button primary"));
+			//장바구니 주문하기 버튼>ordercontroller>기존주문서 화면
+            totals.append(link("주문하기", "app/order/form", {}, "button primary"));
         } else {
             totals.append(element("p", "error-message", "모든 상품의 상태와 재고를 확인한 후 주문할 수 있습니다."));
         }
@@ -96,7 +97,7 @@
         const items = repository.getCart();
         if (!items.length) {
             empty(root, "주문할 상품이 없습니다.");
-            root.append(link("장바구니로", "cart.jsp", {}, "button"));
+            root.append(link("장바구니로", "app/cart", {}, "button"));
             return;
         }
         root.append(element("p", "source-note", "실제 결제가 발생하지 않는 모의 주문입니다. 테스트용 배송 정보를 입력해 주세요."));
@@ -133,7 +134,9 @@
             submit.disabled = true;
             try {
                 const order = repository.placeOrder({ ...Object.fromEntries(new FormData(form)), token });
-                location.href = app.url(order.status === "PAYMENT_FAILED" ? "payment-failure.jsp" : "payment-success.jsp", { id: order.id });
+                location.href = app.url(
+					order.status === "PAYMENT_FAILED" 
+					? "app/order/failure" : "app/order/success", { id: order.id });//모의 결제 결과에 따라 성공 실패> controller를 거쳐 기존화면을 보여줌
             } catch (cause) {
                 error.textContent = cause.message;
                 submit.disabled = false;
@@ -156,7 +159,8 @@
         }
         orders.forEach((order) => {
             const row = element("article", "order-summary");
-            row.append(element("p", "", new Date(order.createdAt).toLocaleString("ko-KR")), element("h2", "", labels[order.status]), itemList(order.items), element("strong", "", money(order.totals.total)), link("주문 상세", "order.jsp", { id: order.id }, "button secondary"));
+            row.append(element("p", "", new Date(order.createdAt).toLocaleString("ko-KR")), element("h2", "", labels[order.status]), itemList(order.items), element("strong", "", money(order.totals.total)), 
+					link("주문 상세", "app/order/detail", { id: order.id }, "button secondary"));//주문 상세화면 연결
             root.append(row);
         });
     }
@@ -165,7 +169,7 @@
         const order = repository.getOrder(new URLSearchParams(location.search).get("id"));
         if (!order) {
             empty(root, "현재 회원의 주문을 찾을 수 없습니다.");
-            root.append(link("주문 내역", "orders.jsp", {}, "button"));
+            root.append(link("주문 내역", "app/order/list", {}, "button"));
             return;
         }
         const failed = order.status === "PAYMENT_FAILED";
@@ -176,20 +180,20 @@
         const detail = element("section", "order-detail");
         detail.append(itemList(order.items), element("h2", "", "배송 정보"), element("p", "", order.recipient + " · " + order.phone), element("p", "", "(" + order.postcode + ") " + order.address), element("p", "", order.memo));
         layout.append(detail, totalsPanel(order.totals));
-        root.append(layout, link(failed ? "장바구니에서 다시 시도" : "주문 내역 보기", failed ? "cart.jsp" : "orders.jsp", {}, "button primary"));
+        root.append(layout, link(failed ? "장바구니에서 다시 시도" : "주문 내역 보기", failed ? "app/cart" : "app/order/list", {}, "button primary"));
     }
 
     app.ready.then((repository) => {
         document.querySelectorAll('[data-shopping-route="cart"]').forEach((control) => {
             control.removeAttribute("data-unavailable");
             control.addEventListener("click", () => {
-                location.href = app.url("cart.jsp");
+                location.href = app.url("app/cart");//장바구니 버튼>/app/cart/>cartcontroller>기존장바구니화면
             });
         });
         document.querySelectorAll('[data-shopping-route="orders"]').forEach((control) => {
             control.removeAttribute("data-unavailable");
             control.addEventListener("click", () => {
-                location.href = app.url("orders.jsp");
+                location.href = app.url("app/order/list");//공통주문조회버튼>controller>기존주문목록화면
             });
         });
         if (!root || !["cart", "checkout", "payment-success", "payment-failure", "orders", "order"].includes(root.dataset.page)) {
