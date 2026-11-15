@@ -13,8 +13,6 @@
 <script src="${pageContext.request.contextPath}/assets/js/data/mock-repository.js" defer></script>
 <script src="${pageContext.request.contextPath}/assets/js/common/shop-ui.js" defer></script>
 <script src="${pageContext.request.contextPath}/assets/js/common/navigation.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/shop/storefront.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/shop/catalog.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/shop/member.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/shop/orders.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/admin/admin.js" defer></script>
+<script src="${pageContext.request.contextPath}/assets/js/common/shop-events.js" defer></script>
+<script src="${pageContext.request.contextPath}/assets/js/common/catalog.js" defer></script>
+<script src="${pageContext.request.contextPath}/assets/js/common/order-ui.js" defer></script>

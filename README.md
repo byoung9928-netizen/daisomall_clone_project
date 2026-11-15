@@ -62,6 +62,8 @@ JSP 기반 쇼핑몰 프론트엔드 학습 프로젝트입니다. 다이소몰 
 
 ## 검증 및 문서
 
+화면별 실제 HTML과 전용 JavaScript는 각 View JSP에 있습니다. 공통 HTML은 JSPF, 여러 화면에서 재사용하는 동작은 외부 JS로 공유합니다. [초보자 인수인계 문서](docs/guides/frontend-handover.md)에서 담당 파일과 수정 방법을 확인하세요. 기존 템플릿 복제 시스템은 제거했습니다.
+
 Java 11 / Tomcat 9.0.123과 Chrome headless에서 1440px·1280px·390px 검증을 수행했습니다. 실제 Eclipse Publish, 실물 모바일, Safari/Firefox 및 스크린리더는 미검증입니다. 세부 통과 항목과 범위는 보고서를 확인하세요.
 
 - [v0.2~v0.7 최종 보고서](docs/reports/frontend-v0.2-v0.7-summary.md)
