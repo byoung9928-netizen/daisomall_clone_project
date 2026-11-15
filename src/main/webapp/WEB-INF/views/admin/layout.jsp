@@ -6,6 +6,7 @@
         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin.css">
     </head>
     <body class="admin-body">
+        <%@ include file="../templates/all.jspf" %>
         <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
         <header class="admin-header">
             <a href="${pageContext.request.contextPath}/admin/" class="admin-brand">DAISO <span>MANAGER</span></a>

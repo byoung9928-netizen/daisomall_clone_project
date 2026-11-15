@@ -1,0 +1,8 @@
+<%@ page pageEncoding="UTF-8" %>
+<%-- Static markup; JavaScript clones these views and binds Mock data. --%>
+<template id="view-storefront-promotion-grid"><section class="promotion-grid" aria-label="이번 주 기획전"><div class="hero-carousel" aria-roledescription="캐러셀" aria-label="메인 기획전" data-view-part="storefront-hero-carousel"><div class="hero-slide" data-view-part="storefront-hero-slide"><p class="hero-eyebrow"></p><h1 class="hero-title"></h1><p class="hero-description"></p><img class="hero-illustration" alt=""></div><div class="carousel-controls"><span class="carousel-counter"></span><button type="button" class="carousel-control" data-carousel-previous>이전</button><button type="button" class="carousel-control" data-carousel-next>다음</button><button type="button" class="carousel-control" data-carousel-pause></button></div></div></section></template>
+<template id="view-storefront-category-shortcuts"><nav class="category-shortcuts" aria-label="주요 카테고리 바로가기"></nav></template>
+<template id="view-storefront-campaign-strip"><div class="campaign-strip"><strong>필요한 순간, 가까운 생활</strong><span>자체 제작 이미지와 Mock 상품으로 구성한 학습용 쇼핑몰입니다.</span></div></template>
+<template id="view-storefront-product-section"><section class="product-section"><p class="section-eyebrow">EVERYDAY PICKS</p><h2 class="section-title"></h2><div class="product-grid"></div></section></template>
+<template id="view-promotion-tile"><a><span class="eyebrow">DAILY SELECTION</span><h2></h2><span class="tile-caption">생활 속 작은 발견 →</span><img alt=""></a></template>
+<template id="view-category-shortcut"><a class="category-shortcut"><span class="shortcut-icon"></span><span data-category-name></span></a></template>

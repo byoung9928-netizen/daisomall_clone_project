@@ -1,0 +1,54 @@
+<%@ page pageEncoding="UTF-8" %>
+<%-- Static markup; JavaScript clones these views and binds Mock data. --%>
+<template id="view-orders-order-items"><ul class="order-items"></ul></template>
+<template id="view-orders-page-title"><h1 class="page-title">장바구니</h1></template>
+<template id="view-orders-checkout-layout"><div class="checkout-layout"></div></template>
+<template id="view-orders-cart-list"><div class="cart-list"></div></template>
+<template id="view-orders-error-message"><p class="error-message" role="alert"></p></template>
+<template id="view-orders-cart-row"><article class="cart-row"></article></template>
+<template id="view-orders-img"><img></template>
+<template id="view-orders-cart-product-info"><div class="cart-product-info"></div></template>
+<template id="view-orders-p"><p></p></template>
+<template id="view-orders-error-message-2"><p class="error-message">판매 상태 또는 재고를 확인해 주세요.</p></template>
+<template id="view-orders-p-2"><p>삭제되었거나 존재하지 않는 상품</p></template>
+<template id="view-orders-field"><label class="field">수량<input type="number" name="quantity" min="1" max="99" data-view-part="orders-input"></label></template>
+<template id="view-orders-strong-2"><strong></strong></template>
+<template id="view-orders-error-message-3"><p class="error-message">모든 상품의 상태와 재고를 확인한 후 주문할 수 있습니다.</p></template>
+<template id="view-orders-page-title-2"><h1 class="page-title">주문서</h1></template>
+<template id="view-orders-source-note"><p class="source-note">실제 결제가 발생하지 않는 모의 주문입니다. 테스트용 배송 정보를 입력해 주세요.</p></template>
+<template id="view-orders-checkout-layout-2"><div class="checkout-layout"></div></template>
+<template id="view-orders-page-title-3"><h1 class="page-title">주문 내역</h1></template>
+<template id="view-orders-source-note-2"><p class="source-note">현재 브라우저의 비회원 체험 주문만 표시합니다.</p></template>
+<template id="view-orders-order-summary"><article class="order-summary"></article></template>
+<template id="view-orders-p-3"><p></p></template>
+<template id="view-orders-h2-3"><h2></h2></template>
+<template id="view-orders-strong-3"><strong></strong></template>
+<template id="view-orders-page-title-4"><h1 class="page-title"></h1></template>
+<template id="view-orders-order-status"><p class="order-status"></p></template>
+<template id="view-orders-order-number"><p class="order-number"></p></template>
+<template id="view-orders-source-note-3"><p class="source-note"></p></template>
+<template id="view-orders-checkout-layout-3"><div class="checkout-layout"></div></template>
+<template id="view-orders-order-detail"><section class="order-detail"></section></template>
+<template id="view-orders-h2-4"><h2>배송 정보</h2></template>
+<template id="view-orders-p-4"><p></p></template>
+<template id="view-orders-p-5"><p></p></template>
+<template id="view-orders-p-6"><p></p></template>
+
+<template id="view-order-totals"><section class="totals-panel">
+    <h2>주문 금액</h2>
+    <div class="total-row"><span>상품 금액</span><strong data-total="subtotal"></strong></div>
+    <div class="total-row"><span>배송비</span><strong data-total="shipping"></strong></div>
+    <div class="total-row"><span>총 결제 금액</span><strong data-total="total"></strong></div>
+</section></template>
+<template id="view-order-item"><li><a></a><span></span></li></template>
+
+<template id="view-checkout-form"><form class="checkout-form">
+    <h2>배송 정보</h2>
+    <label class="field">받는 분<input type="text" name="recipient" required maxlength="120" autocomplete="off"></label>
+    <label class="field">연락처<input type="tel" name="phone" required maxlength="120" autocomplete="tel"></label>
+    <label class="field">우편번호 (5자리)<input type="text" name="postcode" required pattern="[0-9]{5}" maxlength="5" autocomplete="off"></label>
+    <label class="field">주소<input type="text" name="address" required maxlength="120" autocomplete="off"></label>
+    <label class="field">배송 요청사항 (선택)<input type="text" name="memo" maxlength="120" autocomplete="off"></label>
+    <label class="field">모의 결제 결과 선택<select name="outcome"><option value="success">성공</option><option value="failure">실패</option></select></label>
+    <p class="error-message" role="alert"></p><button type="submit" class="button primary">모의 결제하기</button>
+</form></template>

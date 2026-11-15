@@ -6,6 +6,7 @@
         <%@ include file="../WEB-INF/views/common/head.jspf" %>
     </head>
     <body>
+        <%@ include file="../WEB-INF/views/templates/all.jspf" %>
         <a class="skip-link" href="#main-content">본문 바로가기</a>
         <%@ include file="../WEB-INF/views/shop/common/header.jspf" %>
         <%@ include file="../WEB-INF/views/shop/common/navigation.jspf" %>

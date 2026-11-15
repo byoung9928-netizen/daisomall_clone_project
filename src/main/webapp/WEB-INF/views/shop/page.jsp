@@ -12,6 +12,7 @@
         <%@ include file="../common/head.jspf" %>
     </head>
     <body>
+        <%@ include file="../templates/all.jspf" %>
         <a class="skip-link" href="#main-content">본문 바로가기</a>
         <%@ include file="common/header.jspf" %>
         <%@ include file="common/navigation.jspf" %>

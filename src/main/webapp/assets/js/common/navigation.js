@@ -69,22 +69,15 @@
             list.replaceChildren();
             const items = childrenOf(parentId);
             items.forEach((item) => {
-                const row = document.createElement("li");
-                const button = document.createElement("button");
-                button.type = "button";
-                button.className = "category-item";
+                const row = window.Daiso.ui.view("category-row");
+                const button = row.querySelector("button");
                 button.dataset.id = item.id;
-                const label = document.createElement("span");
-                label.className = "category-item-label";
+                const label = row.querySelector(".category-item-label");
                 label.textContent = item.name;
-                button.append(label);
                 button.setAttribute("aria-pressed", String(selected[level - 1] === item.id));
                 if (childrenOf(item.id).length > 0) {
                     button.setAttribute("aria-controls", lists[level].id);
-                    const arrow = document.createElement("span");
-                    arrow.className = "category-item-arrow";
-                    arrow.textContent = "›";
-                    arrow.setAttribute("aria-hidden", "true");
+                    const arrow = window.Daiso.ui.view("category-arrow");
                     button.append(arrow);
                 }
                 button.addEventListener("pointerenter", (event) => {
@@ -97,7 +90,6 @@
                     browse(item);
                     confirmSelection(item);
                 });
-                row.append(button);
                 list.append(row);
             });
             if (items.length === 0) {
@@ -107,8 +99,7 @@
 
         function showEmpty(list, message) {
             list.replaceChildren();
-            const row = document.createElement("li");
-            row.className = "category-empty";
+            const row = window.Daiso.ui.view("category-empty");
             row.textContent = message;
             list.append(row);
         }

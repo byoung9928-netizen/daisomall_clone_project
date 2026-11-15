@@ -1,0 +1,4 @@
+<%@ page pageEncoding="UTF-8" %>
+<template id="view-category-row"><li><button type="button" class="category-item"><span class="category-item-label"></span></button></li></template>
+<template id="view-category-arrow"><span class="category-item-arrow" aria-hidden="true">›</span></template>
+<template id="view-category-empty"><li class="category-empty"></li></template>

@@ -1,0 +1,17 @@
+<%@ page pageEncoding="UTF-8" %>
+<%-- Static markup; JavaScript clones these views and binds Mock data. --%>
+<template id="view-member-field"><label class="field"></label></template>
+<template id="view-member-input"><input required></template>
+<template id="view-member-member-panel"><section class="member-panel"></section></template>
+<template id="view-member-page-title"><h1 class="page-title"></h1></template>
+<template id="view-member-p"><p>로그인 후 나의 쇼핑 내역을 확인하세요.</p></template>
+<template id="view-member-member-greeting"><p class="member-greeting"></p></template>
+<template id="view-member-p-2"><p></p></template>
+<template id="view-member-action-stack"><div class="action-stack"></div></template>
+<template id="view-member-p-3"><p>Mock 로그인이 필요합니다.</p></template>
+<template id="view-member-source-note"><p class="source-note">학습용 Mock 회원 화면입니다. 실제 개인정보를 입력하지 마세요. 비밀번호는 검증·저장하지 않습니다.</p></template>
+<template id="view-member-p-5"><p>체험 계정: demo@example.test / 임의 비밀번호 4자 이상</p></template>
+
+<template id="view-member-form-login"><form class="member-form"><label class="field">이메일<input name="email" type="email" required maxlength="120" autocomplete="email"></label><label class="field">임의 비밀번호 (4자 이상)<input name="password" type="password" required minlength="4" maxlength="120" autocomplete="current-password"></label><p class="error-message" role="alert"></p><p class="form-status" role="status"></p><button type="submit" class="button primary">로그인</button></form></template>
+<template id="view-member-form-signup"><form class="member-form"><label class="field">이메일<input name="email" type="email" required maxlength="120" autocomplete="email"></label><label class="field">임의 비밀번호 (4자 이상)<input name="password" type="password" required minlength="4" maxlength="120" autocomplete="new-password"></label><label class="field">이름<input name="name" type="text" required maxlength="50" autocomplete="name"></label><label class="field">전화번호 (예: 010-0000-0000)<input name="phone" type="tel" required maxlength="120" autocomplete="tel"></label><label class="check-field"><input type="checkbox" name="consent" required><span>이 브라우저에 체험용 정보를 저장하는 것에 동의합니다.</span></label><p class="error-message" role="alert"></p><p class="form-status" role="status"></p><button type="submit" class="button primary">회원가입</button></form></template>
+<template id="view-member-form-profile"><form class="member-form"><p data-member-email></p><label class="field">이름<input name="name" type="text" required maxlength="50" autocomplete="name"></label><label class="field">전화번호 (예: 010-0000-0000)<input name="phone" type="tel" required maxlength="120" autocomplete="tel"></label><p class="error-message" role="alert"></p><p class="form-status" role="status"></p><button type="submit" class="button primary">회원정보 저장</button></form></template>

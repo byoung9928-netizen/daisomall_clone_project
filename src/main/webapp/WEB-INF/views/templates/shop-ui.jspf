@@ -1,0 +1,26 @@
+<%@ page pageEncoding="UTF-8" %>
+<%-- Static markup; JavaScript clones these views and binds Mock data. --%>
+<template id="view-shop-ui-a"><a></a></template>
+<template id="view-shop-ui-button"><button type="button"></button></template>
+<template id="view-shop-ui-product-status"><span class="product-status"></span></template>
+<template id="view-shop-ui-empty-state"><p class="empty-state"></p></template>
+<template id="view-shop-ui-page-title"><h1 class="page-title">화면을 표시하지 못했습니다</h1></template>
+<template id="view-shop-ui-error-message"><p class="error-message"></p></template>
+<template id="view-product-card">
+    <article class="product-card">
+        <div class="product-cover"><img loading="lazy"></div>
+        <p class="product-price"></p>
+        <p class="product-name"></p>
+        <div class="product-badges"><span class="badge">택배배송</span><span class="badge" data-source-badge></span></div>
+        <p class="product-rating"></p>
+    </article>
+</template>
+<template id="view-product-card-linked">
+    <article class="product-card">
+        <a class="product-cover"><img loading="lazy"></a>
+        <p class="product-price"></p>
+        <a class="product-name"></a>
+        <div class="product-badges"><span class="badge">택배배송</span><span class="badge" data-source-badge></span></div>
+        <p class="product-rating"></p>
+    </article>
+</template>
