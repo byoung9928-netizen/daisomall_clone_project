@@ -1,0 +1,6 @@
+<%@ page pageEncoding="UTF-8" %>
+<header class="admin-header">
+            <a href="${pageContext.request.contextPath}/admin/" class="admin-brand">DAISO <span>MANAGER</span></a>
+            <span>체험용 관리자 · 실제 운영 시스템이 아닙니다</span>
+            <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
+        </header>

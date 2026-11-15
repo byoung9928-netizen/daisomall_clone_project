@@ -1,4 +1,6 @@
-# JSP View 구조
+# 이전 JSP 템플릿 구조 기록
+
+> 이 문서는 이전 리팩터링의 구조 기록입니다. 현재 브랜치는 아래 템플릿 복제 시스템을 제거했습니다. 현재 파일 위치·실행 순서·수정 방법은 [초보자 인수인계 문서](guides/frontend-handover.md)를 확인하세요.
 
 정적 마크업은 `src/main/webapp/WEB-INF/views`가 소유합니다. 기존 공개 JSP 진입 경로, CSS, Mock Repository와 저장 형식은 유지합니다.
 

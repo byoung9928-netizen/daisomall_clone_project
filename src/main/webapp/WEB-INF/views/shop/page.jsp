@@ -1,25 +1,16 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%
     String shopPage = String.valueOf(request.getAttribute("pageName"));
-    if (!shopPage.matches("catalog|product|login|signup|mypage|profile|cart|checkout|payment-success|payment-failure|orders|order")) {
-        response.sendError(404);
-        return;
+    String originalUri = (String) request.getAttribute("javax.servlet.forward.request_uri");
+    if (originalUri == null) originalUri = request.getRequestURI();
+    String viewPath;
+    switch (shopPage) {
+        case "login": case "signup": case "mypage": case "profile": viewPath = "member/" + shopPage + ".jsp"; break;
+        case "catalog": viewPath = "product/" + (originalUri.endsWith("/search.jsp") ? "search" : "list") + ".jsp"; break;
+        case "product": viewPath = "product/detail.jsp"; break;
+        case "cart": case "checkout": case "orders": case "payment-success": case "payment-failure": viewPath = "order/" + shopPage + ".jsp"; break;
+        case "order": viewPath = "order/detail.jsp"; break;
+        default: response.sendError(404); return;
     }
 %>
-<!DOCTYPE html>
-<html lang="ko">
-    <head>
-        <%@ include file="../common/head.jspf" %>
-    </head>
-    <body>
-        <%@ include file="../templates/all.jspf" %>
-        <a class="skip-link" href="#main-content">본문 바로가기</a>
-        <%@ include file="common/header.jspf" %>
-        <%@ include file="common/navigation.jspf" %>
-        <main id="main-content" class="container shop-page" data-page="<%= shopPage %>" tabindex="-1">
-            <p class="empty-state" role="status">화면을 불러오는 중입니다.</p>
-            <noscript><p>이 Mock 쇼핑몰의 데이터 표시에 JavaScript가 필요합니다.</p></noscript>
-        </main>
-        <%@ include file="common/footer.jspf" %>
-    </body>
-</html>
+<jsp:forward page='<%= "/WEB-INF/views/" + viewPath %>' />

@@ -5,7 +5,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const crypto = require("node:crypto");
 
 const stage = Number(process.argv[2] || 2);
-const base = "http://127.0.0.1:18089/daisomall/";
+const base = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:18089/daisomall/";
 const output = path.resolve("docs/reports/frontend-commerce-evidence");
 fs.mkdirSync(output, { recursive: true });
 

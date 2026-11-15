@@ -3,6 +3,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
+const currentBase = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:18089/daisomall/";
+const baselineBase = process.env.BASELINE_BASE_URL || "http://127.0.0.1:18090/daisomall/";
+const editForms = process.argv.includes("--edit");
+const routeFilter = process.argv.slice(2).find(value => !value.startsWith("--"));
 
 // Run the unchanged application on 18090 and the refactored application on 18089.
 // Each page receives the same browser storage, including identical order IDs/dates.
@@ -17,7 +21,7 @@ async function main() {
             const after = await context.newPage();
             const errors = [];
             after.on("pageerror", error => errors.push(error.message));
-            await before.goto("http://127.0.0.1:18090/daisomall/");
+            await before.goto(baselineBase);
             const seed = await before.evaluate(async () => {
                 const r = await window.Daiso.ready;
                 r.login("admin@example.test", "demo");
@@ -37,17 +41,23 @@ async function main() {
                 "order.jsp?id=" + seed.paid, "payment-success.jsp?id=" + seed.paid, "payment-failure.jsp?id=" + seed.failed,
                 ...["dashboard", "categories", "products", "inventory", "stores", "orders", "users"].map(view => "admin/?view=" + view),
                 "tests/common-layout.jsp"];
-            for (const [index, route] of routes.filter(route => !process.argv[2] || route === process.argv[2]).entries()) {
+            const selectedRoutes = routes.filter(route => (!routeFilter || route === routeFilter)
+                && (!editForms || /^admin\/\?view=(categories|products|inventory|stores|users)$/.test(route)));
+            for (const [index, route] of selectedRoutes.entries()) {
                 const screenshots = [];
                 const texts = [];
                 const layouts = [];
-                for (const [page, port] of [[before, 18090], [after, 18089]]) {
-                    assert.equal((await page.goto(`http://127.0.0.1:${port}/daisomall/${route}`)).status(), 200, route);
+                for (const [page, base] of [[before, baselineBase], [after, currentBase]]) {
+                    assert.equal((await page.goto(base + route)).status(), 200, route);
                     await page.evaluate(async () => { await window.Daiso.ready; await document.fonts.ready; });
                     await page.waitForTimeout(100);
+                    if (editForms) {
+                        await page.locator("tbody button:enabled").first().click();
+                        await page.locator(".admin-editor-form").waitFor({ state: "visible" });
+                    }
                     await page.evaluate(async () => Promise.all([...document.images].filter(image => image.complete && image.naturalWidth).map(image => image.decode().catch(() => {}))));
                     texts.push((await page.locator("main").innerText()).replace(/\s+/g, " ").trim());
-                    layouts.push(await page.locator("main").evaluate(main => [...main.querySelectorAll("h1,h2,h3,p,a,img,input,select,button,label,section,article,table,th,td,ul,li,div")].map(node => {
+                    layouts.push(await page.locator("main").evaluate(main => [...main.querySelectorAll("h1,h2,h3,p,a,img,input,select,button,label,section,article,table,th,td,ul,li,div")].filter(node => node.getClientRects().length > 0).map(node => {
                         const box = node.getBoundingClientRect();
                         return [node.tagName, node.className, ...[box.x, box.y, box.width, box.height].map(value => Math.round(value * 100) / 100), "value" in node ? node.value : null];
                     })));

@@ -11,7 +11,7 @@ public class PreviewServer {
         Tomcat tomcat = new Tomcat();
         tomcat.setBaseDir(base.toString());
         tomcat.setHostname("localhost");
-        tomcat.setPort(18089);
+        tomcat.setPort(args.length > 1 ? Integer.parseInt(args[1]) : 18089);
         tomcat.getConnector().setProperty("address", "127.0.0.1");
         Context context = tomcat.addWebapp("/daisomall", webRoot.toString());
         context.setParentClassLoader(PreviewServer.class.getClassLoader());
