@@ -51,6 +51,20 @@ public class UserController {
         return "shop/home";
     }
     
+    @DaisoGetMapping("/member/mypage")
+    public String mypage(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+
+        if (session == null || session.getAttribute("member_id") == null) {
+            return "redirect:/member/login";
+        }
+
+        request.setAttribute("memberName", session.getAttribute("name"));
+        request.setAttribute("memberEmail", session.getAttribute("email"));
+
+        return "member/mypage";
+    }
+    
     @DaisoPostMapping("/member/login")
     public String login(HttpServletRequest request) {
         try {
