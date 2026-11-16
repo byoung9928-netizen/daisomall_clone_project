@@ -1,0 +1,112 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductDAO.Category,daiso.product.controller.ProductView" %>
+<%
+    String context = request.getContextPath();
+    String catalogError = (String) request.getAttribute("catalogError");
+    if (catalogError != null) {
+%>
+<main id="main-content" class="container shop-page" data-page="catalog" tabindex="-1">
+    <h1 class="page-title"><%= ProductView.escape(catalogError) %></h1>
+    <a class="button" href="<%= ProductView.url(context, "/list.jsp", Map.of()) %>">전체 상품 보기</a>
+</main>
+<%
+    } else {
+        String route = (String) request.getAttribute("catalogRoute");
+        Map<String, String> filters = (Map<String, String>) request.getAttribute("catalogParams");
+        List<Category> categories = (List<Category>) request.getAttribute("productCategories");
+        List<Category> trail = (List<Category>) request.getAttribute("categoryPath");
+        List<ProductDTO> products = (List<ProductDTO>) request.getAttribute("products");
+        int currentPage = (Integer) request.getAttribute("catalogPage");
+        int totalPages = (Integer) request.getAttribute("catalogPages");
+        int productCount = (Integer) request.getAttribute("productCount");
+        String parentId = trail.isEmpty() ? null : trail.get(trail.size() - 1).id;
+        String price = filters.get("maxPrice");
+%>
+<main id="main-content" class="container shop-page" data-page="catalog" tabindex="-1">
+    <%@ include file="breadcrumbs.jspf" %>
+    <h1 class="page-title"><%= ProductView.escape(request.getAttribute("catalogTitle")) %></h1>
+    <% if ("store".equals(filters.get("collection"))) { %>
+        <p class="source-note">상품명이나 품번으로 상품을 찾을 수 있습니다. 매장별 재고 정보는 제공되지 않습니다.</p>
+    <% } %>
+    <nav class="category-chips" aria-label="하위 카테고리">
+        <% for (Category child : categories) {
+               if (java.util.Objects.equals(child.parentId, parentId)) { %>
+            <a class="category-chip" href="<%= ProductView.url(context, route, ProductView.with(filters, "category", child.id)) %>"><%= ProductView.escape(child.name) %></a>
+        <%     }
+           } %>
+    </nav>
+    <div class="catalog-layout">
+        <form class="catalog-filter" id="catalog-filter" method="get" action="<%= ProductView.url(context, route, Map.of()) %>">
+            <h2>상품 필터</h2>
+            <% for (String key : List.of("q", "category", "collection")) {
+                   if (!filters.get(key).isEmpty()) { %>
+                <input type="hidden" name="<%= key %>" value="<%= ProductView.escape(filters.get(key)) %>">
+            <%     }
+               } %>
+            <label class="field">최대 가격
+                <select name="maxPrice">
+                    <option value="">전체 가격</option>
+                    <% for (String value : List.of("1000", "3000", "5000")) { %>
+                        <option value="<%= value %>" <%= value.equals(price) ? "selected" : "" %>><%= ProductView.money(Integer.parseInt(value)) %> 이하</option>
+                    <% }
+                       if (!price.isEmpty() && !List.of("1000", "3000", "5000").contains(price)) { %>
+                        <option value="<%= ProductView.escape(price) %>" selected><%= ProductView.money(Integer.parseInt(price)) %> 이하</option>
+                    <% } %>
+                </select>
+            </label>
+            <label class="field">브랜드
+                <input type="search" name="brand" maxlength="100" placeholder="브랜드명" value="<%= ProductView.escape(filters.get("brand")) %>">
+            </label>
+            <label class="field">판매 상태
+                <select name="status">
+                    <option value="">전체 상태</option>
+                    <option value="AVAILABLE" <%= "AVAILABLE".equals(filters.get("status")) ? "selected" : "" %>>판매 중</option>
+                    <option value="SOLD_OUT" <%= "SOLD_OUT".equals(filters.get("status")) ? "selected" : "" %>>품절</option>
+                    <option value="SCHEDULED" <%= "SCHEDULED".equals(filters.get("status")) ? "selected" : "" %>>판매 예정</option>
+                </select>
+            </label>
+            <label class="check-field">
+                <input type="checkbox" name="available" value="true" <%= "true".equals(filters.get("available")) ? "checked" : "" %>>
+                <span>구매 가능한 상품만</span>
+            </label>
+            <button type="submit" class="button secondary">필터 적용</button>
+            <a class="text-button" href="<%= ProductView.url(context, route, Map.of("q", filters.get("q"), "category", filters.get("category"), "collection", filters.get("collection"))) %>">필터 초기화</a>
+        </form>
+        <section class="catalog-products">
+            <div class="catalog-toolbar">
+                <p class="result-count" role="status">전체 <%= java.text.NumberFormat.getIntegerInstance(java.util.Locale.KOREA).format(productCount) %>개</p>
+                <label class="sort-label">정렬
+                    <select name="sort" form="catalog-filter">
+                        <% String[][] sorts = {
+                               {"recommended", "추천순"}, {"newest", "신상품순"}, {"priceAsc", "가격낮은순"},
+                               {"priceDesc", "가격높은순"}, {"rating", "별점순"}, {"reviews", "리뷰많은순"}
+                           };
+                           for (String[] option : sorts) { %>
+                            <option value="<%= option[0] %>" <%= option[0].equals(filters.get("sort")) ? "selected" : "" %>><%= option[1] %></option>
+                        <% } %>
+                    </select>
+                </label>
+            </div>
+            <div class="product-grid catalog-grid">
+                <% for (ProductDTO item : products) { %>
+                    <%@ include file="card.jspf" %>
+                <% }
+                   if (products.isEmpty()) { %>
+                    <p class="empty-state">조건에 맞는 상품이 없습니다. 필터나 검색어를 바꿔 보세요.</p>
+                <% } %>
+            </div>
+            <% if (totalPages > 1) { %>
+                <nav class="catalog-toolbar" aria-label="상품 목록 페이지">
+                    <% if (currentPage > 1) { %>
+                        <a class="button secondary" rel="prev" href="<%= ProductView.url(context, route, ProductView.with(filters, "page", Integer.toString(currentPage - 1))) %>">이전 상품</a>
+                    <% } %>
+                    <span aria-current="page"><%= currentPage %> / <%= totalPages %></span>
+                    <% if (currentPage < totalPages) { %>
+                        <a class="button secondary load-more" rel="next" href="<%= ProductView.url(context, route, ProductView.with(filters, "page", Integer.toString(currentPage + 1))) %>">상품 더 보기</a>
+                    <% } %>
+                </nav>
+            <% } %>
+        </section>
+    </div>
+</main>
+<% } %>

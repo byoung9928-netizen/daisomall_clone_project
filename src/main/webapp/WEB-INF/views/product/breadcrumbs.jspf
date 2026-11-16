@@ -1,0 +1,15 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.Collections,java.util.List,java.util.Map,daiso.product.controller.ProductDAO.Category,daiso.product.controller.ProductView" %>
+<%
+    String breadcrumbContext = request.getContextPath();
+    Object breadcrumbPath = request.getAttribute("categoryPath");
+    List<?> breadcrumbTrail = breadcrumbPath instanceof List ? (List<?>) breadcrumbPath : Collections.emptyList();
+%>
+<nav class="breadcrumbs" aria-label="현재 위치">
+    <a href="<%= ProductView.url(breadcrumbContext, "/", Map.of()) %>">홈</a>
+    <% for (Object entry : breadcrumbTrail) {
+           Category crumb = (Category) entry; %>
+        <span aria-hidden="true">›</span>
+        <a href="<%= ProductView.url(breadcrumbContext, "/list.jsp", Map.of("category", crumb.id)) %>"><%= ProductView.escape(crumb.name) %></a>
+    <% } %>
+</nav>

@@ -1,0 +1,13 @@
+<%@ page pageEncoding="UTF-8" %>
+<article class="product-card" data-product-id="<%= ProductView.escape(item.getProductId()) %>">
+    <a class="product-cover" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>">
+        <img src="<%= ProductView.image(context, item) %>" alt="<%= ProductView.escape(item.getName()) %>" loading="lazy">
+        <% if (!ProductView.available(item)) { %>
+            <span class="product-status"><%= ProductView.status(item) %></span>
+        <% } %>
+    </a>
+    <p class="product-price"><%= ProductView.money(item.getPrice()) %></p>
+    <a class="product-name" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>"><%= ProductView.escape(item.getName()) %></a>
+    <div class="product-badges"><span class="badge">택배배송</span></div>
+    <p class="product-rating">★ <%= String.format(java.util.Locale.ROOT, "%.1f", item.getRating()) %> (<%= item.getReviewCount() %>)</p>
+</article>
