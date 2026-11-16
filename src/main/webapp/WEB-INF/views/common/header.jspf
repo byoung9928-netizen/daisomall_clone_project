@@ -44,7 +44,7 @@
         </button>
     </form>
 <% } %>
-            <button type="button" title="마이페이지" data-member-route="mypage" data-unavailable>
+            <button type="button" title="마이페이지" onclick="location.href='${pageContext.request.contextPath}/app/member/mypage'">
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#user" /></svg>
                 <span class="account-label">마이페이지</span>
             </button>
