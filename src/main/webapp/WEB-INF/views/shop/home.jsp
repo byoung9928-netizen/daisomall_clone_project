@@ -9,6 +9,27 @@
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
     <%@ include file="../common/header.jspf" %>
+    <% if ("success".equals(request.getParameter("logout"))) { %>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var toast = document.getElementById("common-feature-status");
+
+    if (!toast) {
+        return;
+    }
+
+    toast.textContent = "로그아웃 되었습니다.";
+    toast.classList.add("logout-toast");
+
+    window.setTimeout(function () {
+        toast.textContent = "";
+        toast.classList.remove("logout-toast");
+    }, 3000);
+
+    window.history.replaceState(null, "", location.pathname);
+});
+</script>
+<% } %>
     <%@ include file="../common/navigation.jspf" %>
         <main id="main-content" class="container storefront" data-page="home" tabindex="-1">
         <section class="promotion-grid" aria-label="이번 주 기획전">
