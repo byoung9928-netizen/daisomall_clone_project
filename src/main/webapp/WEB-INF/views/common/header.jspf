@@ -44,15 +44,15 @@
         </button>
     </form>
 <% } %>
-            <button type="button" data-member-route="mypage" data-unavailable>
+            <button type="button" title="마이페이지" data-member-route="mypage" data-unavailable>
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#user" /></svg>
                 <span class="account-label">마이페이지</span>
             </button>
-            <button type="button" data-unavailable>
+            <button type="button" title="찜 한 상품" data-unavailable>
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#heart" /></svg>
                 <span class="account-label">찜한 상품</span>
             </button>
-            <button type="button" data-shopping-route="cart" data-unavailable>
+            <button type="button" title="장바구니" data-shopping-route="cart" data-unavailable>
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#bag" /></svg>
                 <span class="account-label">장바구니</span>
             </button>

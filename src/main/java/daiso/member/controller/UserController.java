@@ -93,6 +93,6 @@ public class UserController {
             session.invalidate();
         }
 
-        return "redirect:/member/login";
+        return "redirect:/home?logout=success";
     }
 }
