@@ -1,7 +1,7 @@
 package daiso.member.controller;
 
 import javax.servlet.http.HttpServletRequest;
-
+import javax.servlet.http.HttpSession;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
@@ -44,5 +44,55 @@ public class UserController {
     @DaisoGetMapping("/member/login")
     public String loginForm() {
         return "member/login";
+    }
+    
+    @DaisoGetMapping("/home")
+    public String home() {
+        return "shop/home";
+    }
+    
+    @DaisoPostMapping("/member/login")
+    public String login(HttpServletRequest request) {
+        try {
+            request.setCharacterEncoding("UTF-8");
+
+            String email = request.getParameter("email");
+            String password = request.getParameter("password");
+
+            MemberLoginInfo member = memberService.login(email, password);
+
+            HttpSession session = request.getSession();
+            request.changeSessionId();
+
+            session.setAttribute("member_id", member.getMemberId());
+            session.setAttribute("email", member.getEmail());
+            session.setAttribute("name", member.getName());
+            session.setAttribute("role", member.getRole());
+
+            return "redirect:/home";
+
+        } catch (IllegalArgumentException e) {
+            request.setAttribute("loginError", e.getMessage());
+            return "member/login";
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.setAttribute(
+                    "loginError",
+                    "로그인 처리 중 오류가 발생했습니다."
+            );
+            return "member/login";
+        }
+    }
+   
+    @DaisoPostMapping("/member/logout")
+    public String logout(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+
+        if (session != null) {
+            session.invalidate();
+        }
+
+        return "redirect:/member/login";
     }
 }

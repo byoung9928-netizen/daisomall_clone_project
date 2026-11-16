@@ -23,7 +23,7 @@ public class CartController {
 		        : (String) session.getAttribute("member_id");
 
 		    if (memberId == null || memberId.isBlank()) {
-		        return "redirect:/users/login";
+		        return "redirect:/member/login";
 		    }
 
 		    CartDAO dao = new CartDAO();

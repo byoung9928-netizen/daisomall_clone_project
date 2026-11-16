@@ -47,6 +47,74 @@ public class MemberService {
 
         memberDAO.insert(memberId, email, passwordHash, name, phone);
     }
+    
+    public MemberLoginInfo login(String email, String password)
+            throws Exception {
+        email = email == null
+                ? ""
+                : email.trim().toLowerCase(Locale.ROOT);
+
+        if (email.isEmpty() || password == null || password.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "이메일과 비밀번호를 입력해 주세요."
+            );
+        }
+
+        MemberLoginInfo member = memberDAO.findByEmail(email);
+
+        if (member == null
+                || !"ACTIVE".equalsIgnoreCase(member.getStatus())
+                || !verifyPassword(password, member.getPasswordHash())) {
+            throw new IllegalArgumentException(
+                    "이메일 또는 비밀번호가 올바르지 않습니다."
+            );
+        }
+
+        return member;
+    }
+
+    private boolean verifyPassword(String password, String storedPasswordHash)
+            throws GeneralSecurityException {
+        if (storedPasswordHash == null) {
+            return false;
+        }
+
+        String[] parts = storedPasswordHash.split("\\$", -1);
+
+        if (parts.length != 3) {
+            return false;
+        }
+
+        try {
+            int iterations = Integer.parseInt(parts[0]);
+            byte[] salt = Base64.getDecoder().decode(parts[1]);
+            byte[] expectedHash = Base64.getDecoder().decode(parts[2]);
+
+            if (iterations <= 0 || expectedHash.length == 0) {
+                return false;
+            }
+
+            PBEKeySpec spec = new PBEKeySpec(
+                    password.toCharArray(),
+                    salt,
+                    iterations,
+                    expectedHash.length * 8
+            );
+
+            try {
+                byte[] actualHash = SecretKeyFactory
+                        .getInstance("PBKDF2WithHmacSHA256")
+                        .generateSecret(spec)
+                        .getEncoded();
+
+                return MessageDigest.isEqual(expectedHash, actualHash);
+            } finally {
+                spec.clearPassword();
+            }
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     private String hashPassword(String password)
             throws GeneralSecurityException {
