@@ -1,5 +1,7 @@
 package daiso.cart.controller;
 import daiso.common.annotation.*;
+import javax.servlet.http.HttpSession;
+import java.sql.SQLException;
 import javax.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -13,8 +15,32 @@ public class CartController {
 	@DaisoGetMapping("/cart") //장바구니 조회 주소 연결
 	
 	public String cartList(HttpServletRequest request){
-		request.setAttribute("pageName", "cart");
-		request.setAttribute("activeNavigation","");
+		
+		  HttpSession session = request.getSession(false);
+
+		    String memberId = session == null
+		        ? null
+		        : (String) session.getAttribute("member_id");
+
+		    if (memberId == null || memberId.isBlank()) {
+		        return "redirect:/users/login";
+		    }
+
+		    CartDAO dao = new CartDAO();
+
+		    try {
+		        List<CartBean> cartList = dao.getCartList(memberId);
+		        request.setAttribute("cartList", cartList);
+
+		    } catch (SQLException e) {
+		        throw new IllegalStateException(
+		            "장바구니 조회에 실패했습니다.", e
+		        );
+		    }
+
+		    request.setAttribute("pageName", "cart");
+		    request.setAttribute("activeNavigation", "");
+
 		
 		return "shop/page";
 		
@@ -36,7 +62,7 @@ public class CartController {
 		}
 		
 		if (quantity<1||quantity>10) {
-			throw new IllegalArgumentException("수량은 1~10개여야 합니다.");
+			throw new IllegalArgumentException("수량은 1~99개여야 합니다.");
 		}
 		//나중에 로그인 회원 확인 및 DAO 호출
 		return "redirect:/cart";

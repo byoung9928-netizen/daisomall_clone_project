@@ -37,7 +37,17 @@
         });
         document.querySelectorAll("[data-shopping-route]").forEach(control => {
             control.removeAttribute("data-unavailable");
-            control.addEventListener("click", () => { location.href = app.url(control.dataset.shoppingRoute + ".jsp"); });
+            control.addEventListener("click", () => { 
+				/*location.href = app.url(control.dataset.shoppingRoute + ".jsp"); */
+				const route = control.dataset.shoppingRoute;
+				
+				if (route === "cart"){
+					location.href=app.url("app/cart");
+				} else if (route === "orders"){
+					location.href=app.url("app/order/list");
+				}
+				
+			});
         });
         window.addEventListener("mock:session", refreshHeader);
         refreshHeader();
