@@ -23,7 +23,7 @@ public class CartController {
 		        : (String) session.getAttribute("member_id");
 
 		    if (memberId == null || memberId.isBlank()) {
-		        return "redirect:/users/login";
+		        return "redirect:/member/login";
 		    }
 
 		    CartDAO dao = new CartDAO();
@@ -61,19 +61,47 @@ public class CartController {
 			throw new IllegalArgumentException("수량은 정수로 입력해야합니다.");
 		}
 		
-		if (quantity<1||quantity>10) {
+		if (quantity<1||quantity>99) {
 			throw new IllegalArgumentException("수량은 1~99개여야 합니다.");
 		}
+		
+		HttpSession session = request.getSession(false);
+	
+		String memberId = session ==null
+			? null
+			:(String) session.getAttribute("member_id");
+		if(memberId == null || memberId.isBlank()) {
+			return "redirect:/member/login";
+		}
+		CartDAO dao =new CartDAO();
+	
+		try {
+		    dao.addCart(memberId, productId, quantity);
+
+		} catch (IllegalArgumentException e) {
+
+		    request.setAttribute("cartError", e.getMessage());
+		    request.setAttribute("pageName", "cart");
+		    request.setAttribute("activeNavigation", "");
+
+		    return "shop/page";
+
+		} catch (SQLException e) {
+
+		    throw new IllegalStateException(
+		        "장바구니 추가에 실패했습니다.", e
+		    );
+		}
 		//나중에 로그인 회원 확인 및 DAO 호출
-		return "redirect:/cart";
-	}
-	public String cartUpdate(HttpServletRequest request) {
-		//나중에 장바구니 항목 번호와 변경할 수량을 받아 DAO호출
-		return "redirect:/cart";
+			return "redirect:/cart";
+		}
+		public String cartUpdate(HttpServletRequest request) {
+			//나중에 장바구니 항목 번호와 변경할 수량을 받아 DAO호출
+			return "redirect:/cart";
 	}
 	
-	public String cartDelete(HttpServletRequest request) {
+		public String cartDelete(HttpServletRequest request) {
 		//나중에 장바구니 항목번호를 받아 DAO 호출
-		return "redirect:/cart";
+			return "redirect:/cart";
 	}
 }

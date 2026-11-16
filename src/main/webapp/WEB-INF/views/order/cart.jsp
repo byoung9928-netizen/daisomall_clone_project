@@ -13,6 +13,7 @@
         <h1 class="page-title">
             장바구니
         </h1>
+        <p class="error-message" role="alert"> ${cartError}</p>
         <p class="empty-state" data-empty-cart hidden>
             장바구니가 비어 있습니다.
         </p>

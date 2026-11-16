@@ -71,9 +71,9 @@ public class CartDAO {
 	 		try {
 	 			//1. 상품판매와 상태와 재고 확인
 	 			String productSql=
-	 					"SELECT status, stock_quantity"
-	 					+"FROM products"
-	 					+"WHERE product_id = ? FOR UPDATE";
+	 					"SELECT status, stock_quantity "
+	 						+ "FROM products "
+	 						+ "WHERE product_id = ? FOR UPDATE";
 	 			int stockQuantity;
 	 			try(PreparedStatement pstmt= con.prepareStatement(productSql)){
 	 				pstmt.setString(1, productId);
