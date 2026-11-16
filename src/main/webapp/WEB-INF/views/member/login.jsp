@@ -15,9 +15,9 @@
                 로그인
             </h1>
             <p class="source-note">
-                학습용 Mock 회원 화면입니다. 실제 개인정보를 입력하지 마세요. 비밀번호는 검증·저장하지 않습니다.
+                가입한 이메일과 비밀번호를 입력해 로그인합니다.
             </p>
-            <form id="loginForm" class="member-form" method="post">
+            <form id="loginForm" class="member-form" method="post" action="${pageContext.request.contextPath}/app/member/login">
                 <label class="field">
                     이메일
                     <input name="email" type="email" required maxlength="120" autocomplete="email">
