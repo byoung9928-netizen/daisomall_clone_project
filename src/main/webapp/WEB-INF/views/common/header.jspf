@@ -5,7 +5,7 @@
             <span>새로 들어온 신상, 지금 확인하세요</span>
             <div class="store-tools">
                 <button type="button" data-unavailable>매장 위치 찾기</button>
-                <button type="button" data-unavailable>매장 상품 찾기</button>
+                <a class="store-search-link" href="${pageContext.request.contextPath}/search.jsp?collection=store">매장 상품 찾기</a>
             </div>
         </div>
     </div>
@@ -14,12 +14,14 @@
             <span class="brand-symbol" aria-hidden="true">다<br>이소</span>
             <span>다이소</span>
         </a>
-        <form class="search-form" role="search" aria-label="상품 검색 (준비 중)">
+        <form class="search-form" method="get" action="${pageContext.request.contextPath}/search.jsp" role="search" aria-label="상품 검색">
+            <% if ("store".equals(request.getParameter("collection"))) { %>
+                <input type="hidden" name="collection" value="store">
+            <% } %>
             <label class="visually-hidden" for="search-query">검색어</label>
-            <input id="search-query" type="search" name="query" maxlength="100" autocomplete="off" aria-describedby="search-help">
-            <button type="submit" aria-label="검색 (준비 중)"><span class="search-icon" aria-hidden="true"></span></button>
+            <input id="search-query" type="search" name="q" maxlength="100" autocomplete="off" value="<%= daiso.product.controller.ProductView.escape(request.getParameter("q")) %>" placeholder="상품명, 품번, 브랜드 검색">
+            <button type="submit" aria-label="검색"><span class="search-icon" aria-hidden="true"></span></button>
         </form>
-        <span id="search-help" class="visually-hidden">검색 기능은 준비 중입니다.</span>
         <button class="delivery-button" type="button" data-unavailable>배송이나 픽업 어때요? <span aria-hidden="true">⌄</span></button>
         <div class="account-tools" aria-label="회원 메뉴">
             <% if (session.getAttribute("member_id") == null) { %>

@@ -12,10 +12,7 @@
             <span class="menu-icon" aria-hidden="true"></span> <span>카테고리</span>
         </button>
         <div class="navigation-links">
-            <button class="brand-menu" type="button" data-navigation-key="brand" data-unavailable>
-                <span>브랜드</span>
-                <span class="chevron-down" aria-hidden="true"></span>
-            </button>
+            <a class="brand-menu" data-navigation-key="brand" href="${pageContext.request.contextPath}/list.jsp?collection=brand">브랜드</a>
             <button class="season-link" type="button" data-navigation-key="season" data-unavailable>겨울 시즌템</button>
             <a data-navigation-key="home" href="${pageContext.request.contextPath}/">홈</a>
             <button type="button" data-navigation-key="new" data-unavailable>신상발견</button>
@@ -33,6 +30,17 @@
             <button type="button" data-navigation-key="bulk-order" data-unavailable>대량주문</button>
         </div>
     </nav>
+    <% Object productNavigation = request.getAttribute("productCategories");
+       if (productNavigation instanceof java.util.List<?>) { %>
+        <template id="product-category-data">
+            <% for (Object entry : (java.util.List<?>) productNavigation) {
+                   daiso.product.controller.ProductDAO.Category node = (daiso.product.controller.ProductDAO.Category) entry; %>
+                <span data-id="<%= daiso.product.controller.ProductView.escape(node.id) %>"
+                      data-parent-id="<%= daiso.product.controller.ProductView.escape(node.parentId) %>"
+                      data-level="<%= node.level %>" data-display-order="<%= node.displayOrder %>"><%= daiso.product.controller.ProductView.escape(node.name) %></span>
+            <% } %>
+        </template>
+    <% } %>
     <div class="container category-anchor">
         <section id="category-panel" class="category-panel" aria-label="전체 카테고리 탐색" data-source="${pageContext.request.contextPath}/assets/mock/categories.json" hidden>
             <div class="category-heading">
