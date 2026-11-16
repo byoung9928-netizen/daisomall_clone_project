@@ -1,5 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductDAO.Category,daiso.product.controller.ProductView" %>
+<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView" %>
 <%
     String context = request.getContextPath();
     ProductDTO product = (ProductDTO) request.getAttribute("product");
@@ -20,7 +20,6 @@
             <h1 class="page-title">상품을 찾을 수 없습니다.</h1>
             <a class="button" href="<%= ProductView.url(context, "/list.jsp", Map.of()) %>">상품 목록으로</a>
         <% } else {
-               List<Category> trail = (List<Category>) request.getAttribute("categoryPath");
                List<ProductDTO> related = (List<ProductDTO>) request.getAttribute("relatedProducts"); %>
             <%@ include file="breadcrumbs.jspf" %>
             <div class="product-detail-layout" data-product-id="<%= ProductView.escape(product.getProductId()) %>" data-unit-price="<%= product.getPrice() %>">
