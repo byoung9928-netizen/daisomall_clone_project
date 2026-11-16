@@ -42,15 +42,20 @@
                         체험 매장 재고 보기
                     </summary>
                 </details>
-                <label class="field">
-                    수량
-                    <input type="number" name="quantity" min="1" value="1">
-                </label>
-                <p class="detail-total">
-                </p>
-                <button type="button" class="button primary" data-add-cart>
-                    장바구니 담기
-                </button>
+               <form id="cartAddForm" action="${pageContext.request.contextPath}/app/cart/add"	method="post">
+
+   		 	<input type="hidden" name="productId">
+
+    		<label class="field">
+       		 수량
+        	<input type="number" name="quantity"  min="1" max="99" value="1" required>
+   			 </label>
+
+    		<p class="detail-total"></p>
+
+    		<button type="submit" class="button primary" data-add-cart>장바구니 담기</button>
+
+			</form>
             </section>
         </div>
         <section class="product-description">
@@ -104,23 +109,11 @@
         quantity.addEventListener("input", () => {
             total.textContent = "합계 " + money(product.price * Math.max(0, Number(quantity.value)));
         });
+        const cartForm = info.querySelector("#cartAddForm");
+
+        cartForm.elements.productId.value = product.id;
+
         const add = info.querySelector("[data-add-cart]");
-        add.addEventListener("click", () => {
-            if (!quantity.checkValidity()) {
-                quantity.reportValidity();
-                return;
-            }
-            if (app.repository.addCart) {
-                try {
-                    app.repository.addCart(product.id, Number(quantity.value));
-                    notice("장바구니에 담았습니다.");
-                } catch (error) {
-                    notice(error.message);
-                }
-            } else {
-                notice("장바구니 기능은 다음 단계에서 연결됩니다.");
-            }
-        });
         add.disabled = status !== "구매 가능";
         const description = root.querySelector(".product-description");
         description.querySelector("[data-product-description]").textContent = product.description;

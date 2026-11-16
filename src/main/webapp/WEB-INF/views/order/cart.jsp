@@ -1,4 +1,24 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ page import="java.util.List" %>
+<%@ page import="daiso.cart.db.CartBean" %>
+
+<%
+    List<CartBean> cartList =
+        (List<CartBean>) request.getAttribute("cartList");
+
+	long subtotal = 0;
+
+	if (cartList != null) {
+    	for (CartBean cart : cartList) {
+        	subtotal += cart.getItemTotal();
+   		}	
+	}
+
+	long shippingFee =
+    	subtotal > 0 && subtotal < 30000 ? 3000 : 0;
+
+	long totalAmount = subtotal + shippingFee;
+%>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -14,14 +34,57 @@
             장바구니
         </h1>
         <p class="error-message" role="alert"> ${cartError}</p>
-        <p class="empty-state" data-empty-cart hidden>
+        <% if(cartList != null && cartList.isEmpty()){ %>
+        <p class="empty-state" data-empty-cart>
             장바구니가 비어 있습니다.
         </p>
-        <a class="button primary" data-browse hidden href="${pageContext.request.contextPath}/list.jsp">
+        <a class="button primary" data-browse href="${pageContext.request.contextPath}/list.jsp">
             상품 둘러보기
         </a>
-        <div class="checkout-layout">
-            <div class="cart-list">
+        <%} %>
+        <div class="checkout-layout"
+             <%=cartList == null || cartList.isEmpty()
+             		?"hidden":"" %>>
+			<div class="cart-list">
+			<% if(cartList !=null){ %>
+				<% for (CartBean cart:cartList){ %>
+            <article class="cart-row">
+
+                <img src="${pageContext.request.contextPath}/<%=
+                	(cart.getImageUrl() == null
+                	?"assets/images/mock-product-0.svg"
+                	: cart.getImageUrl())
+                	.replace("&","&amp;")
+                	.replace("\"","&quot;")
+                	.replace("<","&lt;")
+                	.replace(">","&gt;")
+                
+               %>"
+               alt="">
+
+                <div class="cart-product-info">
+                    <p>
+                        <%= cart.getProductName()
+                            .replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;") %>
+                    </p>
+
+                    <p><%= cart.getPrice() %>원</p>
+                </div>
+
+                <p><%= cart.getQuantity() %>개</p>
+
+                <strong>
+                    <%= cart.getItemTotal() %>원
+                </strong>
+
+                <span></span>
+
+            </article>
+
+        <% } %>
+    <% } %>
             </div>
             <%@ include file="../common/order-totals.jspf" %>
         </div>
@@ -38,6 +101,11 @@
             const layout = root.querySelector(".checkout-layout");
             const list = root.querySelector(".cart-list");
             const summary = root.querySelector(".totals-panel");
+            app.ui.updateTotals(summary,{
+            	subtotal:<%= subtotal%>,
+            	shipping:<%= shippingFee%>,
+            	total:<%=totalAmount%>
+            });
             function renderCart() {
                 const items = repository.getCart();
                 list.replaceChildren();
@@ -72,7 +140,7 @@
                 if (items.every(line => line.purchasable)) summary.append(link("주문하기", "checkout.jsp", {}, "button primary"));
                 else summary.append(element("p", "error-message", "모든 상품의 상태와 재고를 확인한 후 주문할 수 있습니다."));
             }
-            renderCart();
+            //renderCart();
         }).catch(function (error) { app.ui.error(root, error); });
     });
     </script>
