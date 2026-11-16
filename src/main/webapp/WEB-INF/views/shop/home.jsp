@@ -1,9 +1,14 @@
-<% request.setAttribute("activeNavigation", "home"); %>
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductDAO.Category,daiso.product.controller.ProductView" %>
+<%
+    String context = request.getContextPath();
+    List<Category> categories = (List<Category>) request.getAttribute("productCategories");
+%>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <%@ include file="../common/head.jspf" %>
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
 
 </head>
 <body>
@@ -106,13 +111,23 @@ document.addEventListener("DOMContentLoaded", function () {
             </a>
         </section>
         <nav class="category-shortcuts" aria-label="주요 카테고리 바로가기">
+            <% String[] icons = {"₩", "✦", "⌂", "○", "▤", "✎"};
+               int shortcutIndex = 0;
+               for (Category category : categories) {
+                   if (category.level == 1 && shortcutIndex < 10) { %>
+                <a class="category-shortcut" data-category-id="<%= ProductView.escape(category.id) %>" href="<%= ProductView.url(context, "/list.jsp", Map.of("category", category.id)) %>">
+                    <span class="shortcut-icon" aria-hidden="true"><%= icons[shortcutIndex++ % icons.length] %></span>
+                    <span data-category-name><%= ProductView.escape(category.name) %></span>
+                </a>
+            <%     }
+               } %>
         </nav>
         <div class="campaign-strip">
             <strong>
                 필요한 순간, 가까운 생활
             </strong>
             <span>
-                자체 제작 이미지와 Mock 상품으로 구성한 학습용 쇼핑몰입니다.
+                프로젝트 DB에 등록된 상품을 둘러보세요.
             </span>
         </div>
         <section class="product-section" id="featured">
@@ -123,28 +138,33 @@ document.addEventListener("DOMContentLoaded", function () {
                 오늘의 추천 상품
             </h2>
             <div class="product-grid">
+                <% for (ProductDTO item : (List<ProductDTO>) request.getAttribute("featuredProducts")) { %>
+                    <%@ include file="../product/card.jspf" %>
+                <% } %>
             </div>
+            <a class="button secondary" href="<%= ProductView.url(context, "/list.jsp", Map.of("sort", "recommended", "collection", "ranking")) %>">상품 더 보기</a>
         </section>
-        <section class="product-section">
+        <section class="product-section" id="new-products">
             <p class="section-eyebrow">
                 EVERYDAY PICKS
             </p>
             <h2 class="section-title">
-                일상에 더하는 작은 발견
+                신상발견
             </h2>
             <div class="product-grid">
+                <% for (ProductDTO item : (List<ProductDTO>) request.getAttribute("newProducts")) { %>
+                    <%@ include file="../product/card.jspf" %>
+                <% } %>
             </div>
+            <a class="button secondary" href="<%= ProductView.url(context, "/list.jsp", Map.of("sort", "newest", "collection", "new")) %>">상품 더 보기</a>
         </section>
     </main>
     <%@ include file="../common/footer.jspf" %>
     <script>
-    // 공통 defer 스크립트 실행 후, 이 페이지의 HTML에 Mock 데이터와 이벤트를 연결합니다.
     document.addEventListener("DOMContentLoaded", function () {
         "use strict";
         const app = window.Daiso;
         const root = document.getElementById("main-content");
-        const { element, link, button, productCard } = app.ui;
-        app.ready.then(function (repository) {
         const promotions = root.querySelector(".promotion-grid");
         const hero = promotions.querySelector(".hero-carousel");
         const slide = hero.querySelector(".hero-slide");
@@ -195,25 +215,6 @@ document.addEventListener("DOMContentLoaded", function () {
         window.addEventListener("pagehide", () => clearInterval(timer), { once: true });
         updatePause();
         renderSlide();
-        const shortcuts = root.querySelector(".category-shortcuts");
-        repository.getVisibleCategories().filter((category) => category.level === 1).sort((left, right) => left.displayOrder - right.displayOrder).slice(0, 10).forEach((category, index) => {
-            const shortcut = element("a", "category-shortcut");
-            const icon = element("span", "shortcut-icon");
-            const name = element("span");
-            name.dataset.categoryName = "";
-            shortcut.append(icon, name);
-            shortcut.href = app.url("list.jsp", { category: category.id });
-            shortcut.dataset.categoryId = category.id;
-            shortcut.querySelector(".shortcut-icon").textContent = ["₩", "✦", "⌂", "○", "▤", "✎"][index % 6];
-            shortcut.querySelector("[data-category-name]").textContent = category.name;
-            shortcuts.append(shortcut);
-        });
-        root.querySelectorAll(".product-section").forEach((section, index) => {
-            const grid = section.querySelector(".product-grid");
-            repository.queryProducts().slice(index * 6, index * 6 + 6).forEach((product) => grid.append(productCard(product, { details: true })));
-        });
-
-        }).catch(function (error) { app.ui.error(root, error); });
     });
     </script>
 </body>

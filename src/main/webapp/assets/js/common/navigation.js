@@ -1,8 +1,17 @@
 (() => {
     "use strict";
 
-    // Replace this provider with a Servlet endpoint while preserving the payload contract.
     async function loadCategories(url) {
+        const model = document.querySelector("#product-category-data");
+        if (model) {
+            const categories = Array.from(model.content.querySelectorAll("[data-id]"), (item) => ({
+                id: item.dataset.id, parentId: item.dataset.parentId || null,
+                name: item.textContent, level: Number(item.dataset.level),
+                displayOrder: Number(item.dataset.displayOrder),
+            }));
+            const parents = new Set(categories.map((item) => item.parentId));
+            return categories.map((item) => ({ ...item, isLeaf: !parents.has(item.id) }));
+        }
         if (window.Daiso && window.Daiso.repository) {
             return window.Daiso.repository.getVisibleCategories();
         }
@@ -244,17 +253,6 @@
         button.addEventListener("click", () => {
             if (button.hasAttribute("data-unavailable")) {
                 announceUnavailable(button.textContent);
-            }
-        });
-    });
-    document.querySelectorAll(".search-form").forEach((form) => {
-        form.addEventListener("submit", (event) => {
-            event.preventDefault();
-            if (window.Daiso && window.Daiso.features && window.Daiso.features.catalog) {
-                const input = form.querySelector('[name="query"]');
-                location.href = window.Daiso.url("search.jsp", { q: input.value.trim() });
-            } else {
-                announceUnavailable("검색");
             }
         });
     });
