@@ -48,7 +48,7 @@ public class UserController {
     
     @DaisoGetMapping("/home")
     public String home() {
-        return "shop/home";
+        return "redirect:/products/home";
     }
     
     @DaisoGetMapping("/member/mypage")
