@@ -51,14 +51,6 @@
         min-height: 32px;
         font-size: 11px;
     }
-    .brand {
-        font-size: 27px;
-        width: auto;
-    }
-    .brand-symbol {
-        width: 27px;
-        height: 29px;
-    }
     .account-tools {
         gap: 10px;
     }
@@ -127,4 +119,14 @@
     .site-footer h2 {
         margin-bottom: 16px;
     }
+}
+
+@media (min-width: 1080px) and (max-width: 1350px) {
+    .main-navigation { flex-wrap: nowrap; }
+    .delivery-links { width: auto; }
+}
+
+@media (max-width: 740px) {
+    .brand { width: 104px; }
+    .delivery-icon { width: 14px; height: 14px; }
 }

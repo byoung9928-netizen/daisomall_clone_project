@@ -26,9 +26,9 @@
             <button type="button" data-navigation-key="health" data-unavailable>건강식품</button>
         </div>
         <div class="delivery-links">
-            <button type="button" data-navigation-key="pickup" data-unavailable>매장픽업</button>
-            <button type="button" data-navigation-key="today-delivery" data-unavailable>오늘배송</button>
-            <button type="button" data-navigation-key="bulk-order" data-unavailable>대량주문</button>
+            <button type="button" data-navigation-key="pickup" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg" alt="" width="16" height="16">매장픽업</button>
+            <button type="button" data-navigation-key="today-delivery" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-today.svg" alt="" width="16" height="16">오늘배송</button>
+            <button type="button" data-navigation-key="bulk-order" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-bulk.svg" alt="" width="16" height="16">대량주문</button>
         </div>
     </nav>
     <% Object productNavigation = request.getAttribute("productCategories");

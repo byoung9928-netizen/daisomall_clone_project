@@ -11,8 +11,7 @@
     </div>
     <div class="container header-main">
         <a class="brand" href="${pageContext.request.contextPath}/" aria-label="다이소몰 클론 홈">
-            <span class="brand-symbol" aria-hidden="true">다<br>이소</span>
-            <span>다이소</span>
+            <img src="${pageContext.request.contextPath}/assets/images/home/daiso-logo.svg" alt="" width="136" height="33">
         </a>
         <form class="search-form" method="get" action="${pageContext.request.contextPath}/search.jsp" role="search" aria-label="상품 검색">
             <% if ("store".equals(request.getParameter("collection"))) { %>
@@ -22,7 +21,7 @@
             <input id="search-query" type="search" name="q" maxlength="100" autocomplete="off" value="<%= daiso.product.controller.ProductView.escape(request.getParameter("q")) %>" placeholder="상품명, 품번, 브랜드 검색">
             <button type="submit" aria-label="검색"><span class="search-icon" aria-hidden="true"></span></button>
         </form>
-        <button class="delivery-button" type="button" data-unavailable>배송이나 픽업 어때요? <span aria-hidden="true">⌄</span></button>
+        <button class="delivery-button" type="button" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg" alt="" width="16" height="16">배송이나 픽업 어때요? <span aria-hidden="true">⌄</span></button>
         <div class="account-tools" aria-label="회원 메뉴">
             <% if (session.getAttribute("member_id") == null) { %>
     <button type="button" title="로그인"

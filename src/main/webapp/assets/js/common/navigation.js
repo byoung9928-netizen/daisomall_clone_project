@@ -2,14 +2,14 @@
     "use strict";
 
     function loadCategories(url) {
-        var model = document.querySelector("#product-category-data");
+        const model = document.querySelector("#product-category-data");
         if (model) {
-            var nodes = model.content.querySelectorAll("[data-id]");
-            var categories = [];
-            var parents = Object.create(null);
-            for (var i = 0; i < nodes.length; i += 1) {
-                var node = nodes[i];
-                var parentId = node.dataset.parentId || null;
+            const nodes = model.content.querySelectorAll("[data-id]");
+            const categories = [];
+            const parents = Object.create(null);
+            for (let i = 0; i < nodes.length; i += 1) {
+                const node = nodes[i];
+                const parentId = node.dataset.parentId || null;
                 categories.push({
                     id: node.dataset.id,
                     parentId: parentId,
@@ -38,7 +38,7 @@
             if (!Array.isArray(payload.categories) || payload.categories.length === 0) {
                 throw new Error("Invalid category payload");
             }
-            var ids = Object.create(null);
+            const ids = Object.create(null);
             payload.categories.forEach(function (item) {
                 if (typeof item.id !== "string" || ids[item.id]
                         || typeof item.name !== "string" || [1, 2, 3].indexOf(item.level) === -1
@@ -48,7 +48,7 @@
                 ids[item.id] = item;
             });
             payload.categories.forEach(function (item) {
-                var parent = ids[item.parentId];
+                const parent = ids[item.parentId];
                 if (item.level === 1 ? item.parentId !== null : !parent || parent.level !== item.level - 1) {
                     throw new Error("Invalid category parent");
                 }
@@ -58,20 +58,20 @@
     }
 
     function initializeCategories() {
-        var toggle = document.querySelector("#category-toggle");
-        var panel = document.querySelector("#category-panel");
-        var lists = ["category-roots", "category-children", "category-leaves"]
+        const toggle = document.querySelector("#category-toggle");
+        const panel = document.querySelector("#category-panel");
+        const lists = ["category-roots", "category-children", "category-leaves"]
             .map(function (id) { return document.getElementById(id); });
-        var loadStatus = document.querySelector("#category-load-status");
-        var retry = document.querySelector("#category-retry");
-        var selection = document.querySelector("#common-category-selection");
-        var close = document.querySelector("#category-close");
+        const loadStatus = document.querySelector("#category-load-status");
+        const retry = document.querySelector("#category-retry");
+        const selection = document.querySelector("#common-category-selection");
+        const close = document.querySelector("#category-close");
         if (!toggle || !panel || !loadStatus || !retry || !close || lists.some(function (list) { return !list; })) {
             return;
         }
-        var selected = [null, null, null];
-        var categories = [];
-        var loading = false;
+        const selected = [null, null, null];
+        let categories = [];
+        let loading = false;
 
         function childrenOf(parentId) {
             return categories.filter(function (item) {
@@ -93,23 +93,23 @@
         }
 
         function renderLevel(level, parentId) {
-            var list = lists[level - 1];
+            const list = lists[level - 1];
             list.replaceChildren();
-            var items = childrenOf(parentId);
+            const items = childrenOf(parentId);
             items.forEach(function (item) {
-                var row = document.createElement("li");
-                var button = document.createElement("button");
+                const row = document.createElement("li");
+                const button = document.createElement("button");
                 button.type = "button";
                 button.className = "category-item";
                 button.dataset.id = item.id;
-                var label = document.createElement("span");
+                const label = document.createElement("span");
                 label.className = "category-item-label";
                 label.textContent = item.name;
                 button.append(label);
                 button.setAttribute("aria-pressed", String(selected[level - 1] === item.id));
                 if (childrenOf(item.id).length > 0) {
                     button.setAttribute("aria-controls", lists[level].id);
-                    var arrow = document.createElement("span");
+                    const arrow = document.createElement("span");
                     arrow.className = "category-item-arrow";
                     arrow.textContent = "›";
                     arrow.setAttribute("aria-hidden", "true");
@@ -135,7 +135,7 @@
 
         function showEmpty(list, message) {
             list.replaceChildren();
-            var row = document.createElement("li");
+            const row = document.createElement("li");
             row.className = "category-empty";
             row.textContent = message;
             list.append(row);
@@ -146,7 +146,7 @@
                 return;
             }
             selected[item.level - 1] = item.id;
-            for (var index = item.level; index < selected.length; index += 1) {
+            for (let index = item.level; index < selected.length; index += 1) {
                 selected[index] = null;
             }
             // Keep the activated element mounted so keyboard focus remains stable.
@@ -166,7 +166,7 @@
         }
 
         function confirmSelection(item) {
-            var path = selected.filter(Boolean).map(function (id) {
+            const path = selected.filter(Boolean).map(function (id) {
                 return findCategory(id).name;
             });
             if (selection) {
@@ -220,14 +220,14 @@
             }
         });
         panel.addEventListener("keydown", function (event) {
-            var button = event.target.closest(".category-item");
+            const button = event.target.closest(".category-item");
             if (!button) {
                 return;
             }
-            var level = lists.findIndex(function (list) { return list.contains(button); });
-            var buttons = Array.from(lists[level].querySelectorAll("button"));
-            var index = buttons.indexOf(button);
-            var target;
+            const level = lists.findIndex(function (list) { return list.contains(button); });
+            const buttons = Array.from(lists[level].querySelectorAll("button"));
+            const index = buttons.indexOf(button);
+            let target;
             if (event.key === "ArrowDown") {
                 target = buttons[(index + 1) % buttons.length];
             } else if (event.key === "ArrowUp") {
@@ -237,7 +237,7 @@
             } else if (event.key === "End") {
                 target = buttons[buttons.length - 1];
             } else if (event.key === "ArrowRight" && level < 2) {
-                var item = findCategory(button.dataset.id);
+                const item = findCategory(button.dataset.id);
                 browse(item);
                 target = lists[level + 1].querySelector("button");
             } else if (event.key === "ArrowLeft" && level > 0) {
@@ -255,7 +255,7 @@
 
     document.querySelectorAll("[data-active-navigation]").forEach(function (navigation) {
         navigation.querySelectorAll("[data-navigation-key]").forEach(function (item) {
-            var active = item.dataset.navigationKey === navigation.dataset.activeNavigation;
+            const active = item.dataset.navigationKey === navigation.dataset.activeNavigation;
             item.classList.toggle("current", active);
             if (active) {
                 item.setAttribute("aria-current", "page");
@@ -265,9 +265,9 @@
         });
     });
 
-    var noticeTimer;
+    let noticeTimer;
     function announceUnavailable(label) {
-        var featureStatus = document.querySelector("#common-feature-status");
+        const featureStatus = document.querySelector("#common-feature-status");
         if (featureStatus) {
             featureStatus.textContent = label.trim() + " 기능은 준비 중입니다. 현재는 공통 레이아웃 미리보기입니다.";
             clearTimeout(noticeTimer);
