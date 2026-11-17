@@ -1,4 +1,4 @@
-package daiso.oreder.controller;
+package daiso.order.controller;
 
 import javax.servlet.http.HttpServletRequest;
 

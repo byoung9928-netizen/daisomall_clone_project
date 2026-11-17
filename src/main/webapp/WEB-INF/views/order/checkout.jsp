@@ -138,10 +138,16 @@
         <div class="delivery-dialog-header"><h2 id="delivery-dialog-title">배송지 등록</h2><button class="delivery-close" type="button" data-close-dialog aria-label="배송지 등록 닫기">×</button></div>
         <div class="delivery-form-scroll">
           <input type="hidden" name="csrfToken" value="<%= ProductView.escape(orderCsrf) %>">
-          <div class="delivery-field"><label for="delivery-name">배송지명 <span class="order-required">*</span></label><input id="delivery-name" name="addressName" maxlength="50" placeholder="배송지명을 입력해 주세요" value="<%= ProductView.escape(delivery.get("addressName")) %>" required><p class="field-error" hidden></p></div>
-          <div class="delivery-field"><label for="delivery-recipient">수령인 이름 <span class="order-required">*</span></label><input id="delivery-recipient" name="recipient" maxlength="100" placeholder="수령인 이름을 입력해 주세요" value="<%= ProductView.escape(draftRecipient) %>" autocomplete="name" required><p class="field-error" hidden></p></div>
-          <div class="delivery-field"><label for="delivery-phone">수령인 휴대폰번호 <span class="order-required">*</span></label><input id="delivery-phone" name="phone" type="tel" maxlength="30" placeholder="휴대폰번호를 입력해 주세요" value="<%= ProductView.escape(delivery.get("phone")) %>" autocomplete="tel" required><p class="field-error" hidden></p></div>
-          <div class="delivery-field"><label for="delivery-postcode">주소 <span class="order-required">*</span></label><div class="delivery-address-search"><input id="delivery-postcode" name="postcode" maxlength="5" inputmode="numeric" pattern="[0-9]{5}" aria-label="우편번호" value="<%= ProductView.escape(delivery.get("postcode")) %>" required><button id="find-address" class="order-small-button" type="button">주소 찾기</button></div><input id="delivery-address1" class="delivery-address-line" name="address1" maxlength="255" aria-label="기본주소" value="<%= ProductView.escape(delivery.get("address1")) %>" required><input id="delivery-address2" name="address2" maxlength="255" placeholder="상세주소를 입력해 주세요" aria-label="상세주소" value="<%= ProductView.escape(delivery.get("address2")) %>"><p class="field-error" hidden></p></div>
+          <div class="delivery-field"><label for="delivery-name">배송지명 <span class="order-required">*</span></label>
+          <input id="delivery-name" name="addressName" maxlength="50" placeholder="배송지명을 입력해 주세요" value="<%= ProductView.escape(delivery.get("addressName")) %>" required><p class="field-error" hidden></p></div>
+          <div class="delivery-field"><label for="delivery-recipient">수령인 이름 <span class="order-required">*</span></label>
+          <input id="delivery-recipient" name="recipient" maxlength="100" placeholder="수령인 이름을 입력해 주세요" value="<%= ProductView.escape(draftRecipient) %>" autocomplete="name" required><p class="field-error" hidden></p></div>
+          <div class="delivery-field"><label for="delivery-phone">수령인 휴대폰번호 <span class="order-required">*</span></label>
+          <input id="delivery-phone" name="phone" type="tel" maxlength="30" placeholder="휴대폰번호를 입력해 주세요" value="<%= ProductView.escape(delivery.get("phone")) %>" autocomplete="tel" required><p class="field-error" hidden></p></div>
+          <div class="delivery-field"><label for="delivery-postcode">주소 <span class="order-required">*</span></label>
+          <div class="delivery-address-search"><input id="delivery-postcode" name="postcode" maxlength="5" inputmode="numeric" pattern="[0-9]{5}" aria-label="우편번호" value="<%= ProductView.escape(delivery.get("postcode")) %>" required>
+          <button id="find-address" class="order-small-button" type="button">주소 찾기</button></div><input id="delivery-address1" class="delivery-address-line" name="address1" maxlength="255" aria-label="기본주소" value="<%= ProductView.escape(delivery.get("address1")) %>" required>
+          <input id="delivery-address2" name="address2" maxlength="255" placeholder="상세주소를 입력해 주세요" aria-label="상세주소" value="<%= ProductView.escape(delivery.get("address2")) %>"><p class="field-error" hidden></p></div>
           <p id="delivery-feedback" class="order-feedback" role="alert"></p>
         </div>
         <div class="delivery-dialog-footer"><button class="delivery-save" type="submit">저장</button></div>
@@ -149,7 +155,8 @@
     </dialog>
     <dialog class="delivery-dialog" id="coupon-dialog" aria-labelledby="coupon-dialog-title"><div class="delivery-dialog-frame"><div class="delivery-dialog-header"><h2 id="coupon-dialog-title">쿠폰 선택</h2><button type="button" class="delivery-close" data-close-dialog aria-label="쿠폰 선택 닫기">×</button></div><div class="coupon-empty">사용 가능한 쿠폰이 없습니다.</div><div class="delivery-dialog-footer"><button class="delivery-save" type="button" data-close-dialog>확인</button></div></div></dialog>
     <%@ include file="../common/footer.jspf" %>
-    <script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" defer></script>
+    
+    <!--카카오 api  --><script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" defer></script>
     <script>
     document.addEventListener('DOMContentLoaded', function () {
         const openDelivery = document.getElementById('open-delivery');
@@ -231,10 +238,65 @@
                 openDelivery.textContent = '⌖ 변경'; addressSaved = true; dialog.close(); showNotice('배송지가 저장되었습니다.');
             } catch (error) { feedback.textContent = error.message; } finally { save.disabled = false; }
         });
-        document.getElementById('order-pay').addEventListener('click', function () {
-            if (!addressSaved) { showNotice('배송지를 등록해 주세요.'); dialog.showModal(); return; }
-            if (!document.getElementById('order-consent').checked) { showNotice('주문 및 결제 진행에 동의해 주세요.'); document.getElementById('order-consent').focus(); return; }
-            showNotice('카카오페이 모의결제 연동 준비 중입니다. 현재 결제는 진행되지 않습니다.');
+        document.getElementById('order-pay')
+        	.addEventListener('click', async function () {
+        		
+        		 const payButton = this;
+
+        	        if (payButton.disabled) return;
+
+        	        if (!addressSaved) {
+        	            showNotice("배송지를 등록해 주세요.");
+        	            dialog.showModal();
+        	            return;
+        	        }
+
+        	        const consent =
+        	            document.getElementById("order-consent");
+
+        	        if (!consent.checked) {
+        	            showNotice("주문 및 결제 진행에 동의해 주세요.");
+        	            consent.focus();
+        	            return;
+        	        }
+
+        	        // 배송 요청사항 저장이 끝난 뒤 결제 준비
+        	        await messageQueue;
+
+        	        payButton.disabled = true;
+
+        	        const data = new URLSearchParams();
+
+        	        data.set("csrfToken", form.elements.csrfToken.value);
+        	        data.set("consent", "true");
+
+        	        try {
+        	            const response = await fetch(
+        	                "${pageContext.request.contextPath}/app/payment/kakao/ready",
+        	                {
+        	                    method: "POST",
+        	                    body: data
+        	                }
+        	            );
+
+        	            if (!response.ok) {
+        	                throw new Error("결제 준비 요청에 실패했습니다.");
+        	            }
+
+        	            const result = JSON.parse(await response.text());
+
+        	            if (!result.redirectUrl) {
+        	                throw new Error(
+        	                    result.message || "결제창 주소를 받지 못했습니다."
+        	                );
+        	            }
+
+        	            window.location.assign(result.redirectUrl);
+
+        	        } catch (error) {
+        	            showNotice(error.message);
+        	            payButton.disabled = false;
+        	        }
         });
     });
     </script>

@@ -117,13 +117,88 @@ document.addEventListener('DOMContentLoaded', function () {
  const checks = Array.from(document.querySelectorAll('.cart-item-check'));
  const count = document.getElementById('cart-selected-count');
  const order = document.querySelector('a.cart-order-button');
- function syncSelection() {
-  const selected = checks.filter(function(c){return c.checked;}).length;
-  all.checked = selected === checks.length;
-  all.indeterminate = selected > 0 && selected < checks.length;
-  count.textContent = selected + '/' + checks.length + '개';
-  if (order) {order.setAttribute('aria-disabled', selected === checks.length ? 'false' : 'true'); order.style.opacity = selected === checks.length ? '1' : '.45'; order.title = selected === checks.length ? '' : '현재 주문서는 전체 상품 주문만 지원합니다.';}
- }
+ function syncSelection() {//금액 채우면 차는 빨간선
+	    const selectedItems = checks.filter(function (checkbox) {
+	        return checkbox.checked;
+	    });
+
+	    const selectedCount = selectedItems.length;
+
+	    all.checked = selectedCount === checks.length;
+	    all.indeterminate =
+	        selectedCount > 0 && selectedCount < checks.length;
+
+	    count.textContent =
+	        selectedCount + "/" + checks.length + "개";
+
+	    // 선택한 상품의 가격 × 수량 합계
+	    let selectedSubtotal = 0;
+
+	    selectedItems.forEach(function (checkbox) {
+	        const row = checkbox.closest("tr");
+
+	        selectedSubtotal += Number(row.dataset.cartAmount);
+	    });
+
+	    const selectedShipping =
+	        selectedCount > 0 && selectedSubtotal < 30000
+	            ? 3000 : 0;
+
+	    const selectedTotal = selectedSubtotal + selectedShipping;
+
+	    const money = function (amount) {
+	        return amount.toLocaleString("ko-KR") + "원";
+	    };
+
+	    // 무료배송 진행 막대
+	    const progress = document.querySelector(
+	        ".cart-shipping-progress progress"
+	    );
+
+	    progress.value = Math.min(selectedSubtotal, 30000);
+
+	    // 무료배송 안내
+	    const caption = document.querySelector(
+	        ".cart-progress-caption strong"
+	    );
+
+	    if (selectedCount === 0) {
+	        caption.textContent = "주문할 상품을 선택해 주세요.";
+	    } else if (selectedSubtotal < 30000) {
+	        caption.textContent =
+	            money(30000 - selectedSubtotal)
+	            + " 더 담으면! 무료배송";
+	    } else {
+	        caption.textContent = "무료배송 금액을 달성했어요";
+	    }
+
+	    // 오른쪽 상품 금액·배송비·기본 배송비
+	    const priceRows = document.querySelectorAll(
+	        ".cart-price-lines .cart-price-line"
+	    );
+
+	    priceRows[0].lastElementChild.textContent =
+	        money(selectedSubtotal);
+
+	    priceRows[1].lastElementChild.textContent =
+	        money(selectedShipping);
+
+	    priceRows[2].lastElementChild.textContent =
+	        money(selectedShipping);
+
+	    document.querySelector(".cart-grand-total strong")
+	        .textContent = money(selectedTotal);
+
+	    // 현재 주문서는 전체 상품 주문만 연결된 상태
+	    if (order) {
+	        const canOrder = selectedCount === checks.length;
+
+	        order.setAttribute("aria-disabled", String(!canOrder));
+	        order.style.opacity = canOrder ? "1" : ".45";
+	        order.title = canOrder
+	            ? "" : "현재 주문서는 전체 상품 주문만 지원합니다.";
+	    }
+	}
  all.addEventListener('change', function(){checks.forEach(function(c){c.checked=all.checked;});syncSelection();});
  checks.forEach(function(c){c.addEventListener('change',syncSelection);});
  if(order) order.addEventListener('click',function(e){if(order.getAttribute('aria-disabled')==='true'){e.preventDefault();alert('현재는 전체 상품을 선택한 뒤 주문할 수 있습니다.');}});
