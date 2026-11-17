@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/home.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/home-carousel.js" defer></script>
 </head>
-<body class="daiso-home">
+<body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
     <%@ include file="../common/header.jspf" %>
     <% if ("success".equals(request.getParameter("logout"))) { %>
