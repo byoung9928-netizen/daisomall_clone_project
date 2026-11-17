@@ -29,7 +29,7 @@
                 <div class="member-options">
    				 <label class="check-field">
         			<input type="checkbox" name="autoLogin" id="autoLogin">
-        		<span>자동 로그인 (30일)</span>
+        		<span>자동 로그인</span>
     			</label>
 
    				 <label class="check-field">
@@ -45,6 +45,22 @@
                     로그인
                 </button>
             </form>
+<div class="social-login">
+    <p>SNS 간편 로그인</p>
+
+    <div class="social-login-buttons">
+        <button type="button"
+                id="kakao-login-btn"
+                class="social-login-button kakao"
+                aria-label="카카오 로그인"
+                title="카카오 로그인">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M24 7C12.4 7 3 14.5 3 23.7c0 5.8 3.9 10.9 9.8 13.8l-2.4 7.2c-.2.5.4.9.9.6l8.8-5.1c1.3.2 2.6.3 3.9.3 11.6 0 21-7.5 21-16.8S35.6 7 24 7z"
+                      fill="#191919"/>
+            </svg>
+        </button>
+    </div>
+</div>            
          		<div class="member-links">
     				<a class="text-button"
        					href="${pageContext.request.contextPath}/app/member/signup">
@@ -122,6 +138,18 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
+</script>
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js"
+        crossorigin="anonymous"></script>
+
+<script>
+    Kakao.init('4283b243159f2b259f575f88bcf68632');
+
+    document.getElementById("kakao-login-btn").addEventListener("click", function () {
+        Kakao.Auth.authorize({
+            redirectUri: "http://localhost:8080/daisomall/app/member/oauth/kakao/callback"
+        });
+    });
 </script>
 </body>
 </html>
