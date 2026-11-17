@@ -620,6 +620,46 @@ input, select, textarea {
     .section-title {
         font-size: 26px;
     }
-    
+
    
+}
+    .social-login {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.social-login > p {
+    margin-bottom: 18px;
+    color: #64748b;
+}
+
+.social-login-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.social-login-button {
+    width: 56px;
+    height: 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.social-login-button.kakao {
+    background-color: #fee500;
+}
+
+.social-login-button svg {
+    width: 34px;
+    height: 34px;
+}
+
+.social-login-button:focus-visible {
+    outline: 3px solid #191919;
+    outline-offset: 3px;
 }
