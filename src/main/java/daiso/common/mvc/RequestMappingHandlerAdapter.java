@@ -3,9 +3,8 @@ package daiso.common.mvc;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServletRequest;
-
 import daiso.common.annotation.DaisoRequestParam;
 
 public class RequestMappingHandlerAdapter implements HandlerAdapter {
@@ -17,8 +16,9 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter {
 		}
 		for (Parameter parameter : method.getParameters()) {
 			Class<?> type = parameter.getType();
-			if (type == HttpServletRequest.class) {
-				continue;
+			if (type == HttpServletRequest.class
+			        || type == HttpServletResponse.class) {
+			    continue;
 			}
 			DaisoRequestParam annotation = parameter.getAnnotation(DaisoRequestParam.class);
 			if (annotation == null || annotation.value().isBlank()) {
@@ -32,17 +32,25 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter {
 	}
 
 	@Override
-	public String handle(HttpServletRequest request, HandlerMethod handler) throws IllegalAccessException, InvocationTargetException {
+	public String handle( HttpServletRequest request, HttpServletResponse response,HandlerMethod handler) throws IllegalAccessException, InvocationTargetException {
+	       
 		Method method = handler.getMethod();
 		Parameter[] parameters = method.getParameters();
 		Object[] arguments = new Object[parameters.length];
 		for (int i = 0; i < parameters.length; i++) {
 			Parameter parameter = parameters[i];
 			Class<?> type = parameter.getType();
+			
 			if (type == HttpServletRequest.class) {
 				arguments[i] = request;
 				continue;
 			}
+	
+			if (type == HttpServletResponse.class) {
+			    arguments[i] = response;
+			    continue;
+			}
+			
 			DaisoRequestParam annotation = parameter.getAnnotation(DaisoRequestParam.class);
 			String name = annotation.value();
 			String value = request.getParameter(name);
@@ -51,7 +59,7 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter {
 			}
 			if (type == String.class) {
 				arguments[i] = value;
-
+				
 			} else if (type == int.class || type == Integer.class) {
 				try {
 					arguments[i] = Integer.parseInt(value);
@@ -63,3 +71,5 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter {
 		return (String) method.invoke(handler.getController(), arguments);
 	}
 }
+	       
+	        

@@ -46,62 +46,112 @@ public class CartController {
 		
 	}
 	@DaisoPostMapping("/cart/add")
+	@DaisoResponseBody
 	public String cartAdd(HttpServletRequest request) {
-		//상품 번호와 수량을 받아 DAO 호출
-		String productId=request.getParameter("productId");
-		String quantityValue = request.getParameter("quantity");
-		if(productId==null||productId.trim().isEmpty()) {
-			throw new IllegalArgumentException("상품 번호가 필요 합니다.");
-		}
-		int quantity;
-		try {
-			quantity=Integer.parseInt(quantityValue);
-			
-		}catch (NumberFormatException e) {
-			throw new IllegalArgumentException("수량은 정수로 입력해야합니다.");
-		}
-		
-		if (quantity<1||quantity>99) {
-			throw new IllegalArgumentException("수량은 1~99개여야 합니다.");
-		}
-		
-		HttpSession session = request.getSession(false);
-	
-		String memberId = session ==null
-			? null
-			:(String) session.getAttribute("member_id");
-		if(memberId == null || memberId.isBlank()) {
-			return "redirect:/member/login";
-		}
-		CartDAO dao =new CartDAO();
-	
-		try {
-		    dao.addCart(memberId, productId, quantity);
+	    HttpSession session = request.getSession(false);
 
-		} catch (IllegalArgumentException e) {
+	    String memberId = session == null
+	        ? null : (String) session.getAttribute("member_id");
 
-		    request.setAttribute("cartError", e.getMessage());
-		    request.setAttribute("pageName", "cart");
-		    request.setAttribute("activeNavigation", "");
+	    if (memberId == null || memberId.isBlank()) {
+	        return "로그인 후 이용해 주세요.";
+	    }
 
-		    return "shop/page";
+	    String productId = request.getParameter("productId");
 
-		} catch (SQLException e) {
+	    if (productId == null || productId.isBlank()) {
+	        return "상품 번호가 필요합니다.";
+	    }
 
-		    throw new IllegalStateException(
-		        "장바구니 추가에 실패했습니다.", e
-		    );
-		}
-		//나중에 로그인 회원 확인 및 DAO 호출
-			return "redirect:/cart";
-		}
-		public String cartUpdate(HttpServletRequest request) {
-			//나중에 장바구니 항목 번호와 변경할 수량을 받아 DAO호출
-			return "redirect:/cart";
+	    try {
+	        int quantity =
+	            Integer.parseInt(request.getParameter("quantity"));
+
+	        CartDAO dao = new CartDAO();
+	        dao.addCart(memberId, productId, quantity);
+
+	        return "OK";
+
+	    } catch (NumberFormatException e) {
+	        return "수량은 정수로 입력해 주세요.";
+
+	    } catch (IllegalArgumentException e) {
+	        return e.getMessage();
+
+	    } catch (SQLException e) {
+	        e.printStackTrace();
+	        return "장바구니 저장에 실패했습니다.";
+	    }
 	}
-	
+		@DaisoPostMapping("/cart/update")
+		@DaisoResponseBody
+		public String cartUpdate(HttpServletRequest request) {
+			HttpSession session = request.getSession(false);
+			
+			String memberId = session ==null
+					? null : (String) session.getAttribute("member_id");
+			if(memberId == null || memberId.isBlank()) {
+				return	"로그인 후 이용해 주세요.";
+			}
+			try {
+				long cartItemId =
+						Long.parseLong(request.getParameter("cartItemId"));
+				int change = 
+					Integer.parseInt(request.getParameter("change"));
+				
+				CartDAO dao = new CartDAO();
+				
+				boolean updated = dao.updateCartQuantity(memberId, cartItemId, change);
+				
+				if (!updated) {
+					return "수량을 변경할 수 없습니다."
+							+"상품 상태,재고,수량을 확인해 주세요.";
+				}
+				return "OK";
+				
+			}catch (NumberFormatException e) {
+				return "장바구니 번호와 변경 수량을 확인해 주세요.";
+				
+			}catch (IllegalArgumentException e) {
+				return e.getMessage();
+			}catch (SQLException e) {
+				e.printStackTrace();
+				return "수량 변경 중 오류가 발생했습니다.";
+			}
+			
+			
+	}
+
+		@DaisoPostMapping("/cart/delete")
+		@DaisoResponseBody
 		public String cartDelete(HttpServletRequest request) {
-		//나중에 장바구니 항목번호를 받아 DAO 호출
-			return "redirect:/cart";
+			HttpSession session = request.getSession(false);
+			
+			String memberId = session == null
+					? null : (String) session.getAttribute("member_id");
+			
+			if (memberId == null || memberId.isBlank()) {
+				return "로그인 후 이용해 주세요.";
+			}
+			
+			try {
+				long cartItemId = Long.parseLong(request.getParameter("cartItemId"));
+				
+				CartDAO dao = new CartDAO();
+				boolean deleted = dao.deleteCart(memberId, cartItemId);
+				
+				if (!deleted) {
+					return "삭제할 장바구니 상품을 찾을 수 없습니다.";
+				}
+				
+				return "OK";
+						
+			}catch (NumberFormatException e) {
+				return "장바구니 번호를 확인해 주세요.";
+			}catch (SQLException e) {
+				e.printStackTrace();
+				return "장바구니 삭제중 오류가 발생했습니다";
+			}
+			
 	}
 }

@@ -1,25 +1,20 @@
 .brand {
-    display: flex;
+    display: block;
     flex-shrink: 0;
-    align-items: center;
-    gap: 5px;
-    color: var(--color-red);
-    font-size: 32px;
-    font-weight: 900;
-    letter-spacing: -2px;
     width: 136px;
 }
-.brand-symbol {
-    display: grid;
-    place-content: center;
-    width: 32px;
-    height: 33px;
-    color: #fff;
-    background: var(--color-red);
-    font-size: 10px;
-    line-height: 1.1;
-    text-align: center;
-    letter-spacing: 0;
+.brand img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.delivery-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-inline-end: 4px;
+    vertical-align: -3px;
+    object-fit: contain;
 }
 .search-form {
     display: flex;

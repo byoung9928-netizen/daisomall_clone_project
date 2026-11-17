@@ -1,0 +1,90 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.Map,daiso.product.controller.ProductCatalogView,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView" %>
+<%
+    String context = request.getContextPath();
+    String catalogError = (String) request.getAttribute("catalogError");
+    if (catalogError != null) {
+%>
+<main id="main-content" class="container shop-page" data-page="catalog" tabindex="-1">
+    <h1 class="page-title"><%= ProductView.escape(catalogError) %></h1>
+    <a class="button" href="<%= ProductView.url(context, "/list.jsp", Map.of()) %>">전체 상품 보기</a>
+</main>
+<%
+    } else {
+        ProductCatalogView catalog = (ProductCatalogView) request.getAttribute("catalog");
+%>
+<main id="main-content" class="container shop-page" data-page="catalog" tabindex="-1">
+    <%@ include file="breadcrumbs.jspf" %>
+    <h1 class="page-title"><%= ProductView.escape(catalog.title) %></h1>
+    <% if (catalog.storeSearch) { %>
+        <p class="source-note">상품명이나 품번으로 상품을 찾을 수 있습니다. 매장별 재고 정보는 제공되지 않습니다.</p>
+    <% } %>
+    <nav class="category-chips" aria-label="하위 카테고리">
+        <% for (Map.Entry<String, String> link : catalog.categoryLinks.entrySet()) { %>
+            <a class="category-chip" href="<%= link.getKey() %>"><%= ProductView.escape(link.getValue()) %></a>
+        <% } %>
+    </nav>
+    <div class="catalog-layout">
+        <form class="catalog-filter" id="catalog-filter" method="get" action="<%= catalog.filterAction %>">
+            <h2>상품 필터</h2>
+            <% for (Map.Entry<String, String> field : catalog.hiddenFilters.entrySet()) { %>
+                <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
+            <% } %>
+            <label class="field">최대 가격
+                <select name="maxPrice">
+                    <% for (ProductCatalogView.Option option : catalog.prices) { %>
+                        <option value="<%= option.value %>" <%= option.selected ? "selected" : "" %>><%= option.label %></option>
+                    <% } %>
+                </select>
+            </label>
+            <label class="field">브랜드
+                <input type="search" name="brand" maxlength="100" placeholder="브랜드명" value="<%= ProductView.escape(catalog.brand) %>">
+            </label>
+            <label class="field">판매 상태
+                <select name="status">
+                    <% for (ProductCatalogView.Option option : catalog.statuses) { %>
+                        <option value="<%= option.value %>" <%= option.selected ? "selected" : "" %>><%= option.label %></option>
+                    <% } %>
+                </select>
+            </label>
+            <label class="check-field">
+                <input type="checkbox" name="available" value="true" <%= catalog.availableOnly ? "checked" : "" %>>
+                <span>구매 가능한 상품만</span>
+            </label>
+            <button type="submit" class="button secondary">필터 적용</button>
+            <a class="text-button" href="<%= catalog.resetUrl %>">필터 초기화</a>
+        </form>
+        <section class="catalog-products">
+            <div class="catalog-toolbar">
+                <p class="result-count" role="status">전체 <%= catalog.resultCount %>개</p>
+                <label class="sort-label">정렬
+                    <select name="sort" form="catalog-filter">
+                        <% for (ProductCatalogView.Option option : catalog.sorts) { %>
+                            <option value="<%= option.value %>" <%= option.selected ? "selected" : "" %>><%= option.label %></option>
+                        <% } %>
+                    </select>
+                </label>
+            </div>
+            <div class="product-grid catalog-grid">
+                <% for (ProductDTO item : catalog.products) { %>
+                    <%@ include file="card.jspf" %>
+                <% } %>
+                <% if (catalog.products.isEmpty()) { %>
+                    <p class="empty-state">조건에 맞는 상품이 없습니다. 필터나 검색어를 바꿔 보세요.</p>
+                <% } %>
+            </div>
+            <% if (catalog.showPagination) { %>
+                <nav class="catalog-toolbar" aria-label="상품 목록 페이지">
+                    <% if (catalog.previousUrl != null) { %>
+                        <a class="button secondary" rel="prev" href="<%= catalog.previousUrl %>">이전 상품</a>
+                    <% } %>
+                    <span aria-current="page"><%= catalog.pageLabel %></span>
+                    <% if (catalog.nextUrl != null) { %>
+                        <a class="button secondary load-more" rel="next" href="<%= catalog.nextUrl %>">상품 더 보기</a>
+                    <% } %>
+                </nav>
+            <% } %>
+        </section>
+    </div>
+</main>
+<% } %>

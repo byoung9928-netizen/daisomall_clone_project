@@ -496,6 +496,33 @@ input, select, textarea {
 .order-detail {
     overflow-wrap: anywhere;
 }
+.member-links {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 22px;
+    margin-top: 32px;
+}
+
+.member-links .text-button {
+    color: #111;
+    text-decoration: none;
+}
+
+.link-divider {
+    color: #c5c9ce;
+}
+.member-options {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.member-options .check-field {
+    margin: 0;
+}
+
 @media (max-width: 1100px) {
     .catalog-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -593,4 +620,6 @@ input, select, textarea {
     .section-title {
         font-size: 26px;
     }
+    
+   
 }

@@ -1,0 +1,66 @@
+<%@ page pageEncoding="UTF-8" %>
+<section class="home-promotions" aria-label="다이소몰 기획전">
+    <h1 class="visually-hidden">다이소몰 기획전과 신상품</h1>
+    <div class="home-hero" aria-roledescription="캐러셀" aria-label="메인 기획전" data-home-carousel>
+        <div data-home-slide>
+            <a class="home-hero-slide" href="${pageContext.request.contextPath}/search.jsp?q=크리스마스">
+                <img src="${pageContext.request.contextPath}/assets/images/home/hero-gifts.jpg" alt="" width="960" height="960" fetchpriority="high">
+                <div class="home-hero-copy"><h2>작은 선물로 완성하는<br>해피 크리스마스</h2><p>#로봇 #블록 #슬라임 #인형</p></div>
+            </a>
+        </div>
+        <div data-home-slide hidden>
+            <a class="home-hero-slide" href="${pageContext.request.contextPath}/search.jsp?q=크리스마스">
+                <img src="${pageContext.request.contextPath}/assets/images/home/hero-market.jpg" alt="" width="960" height="960" loading="lazy">
+                <div class="home-hero-copy"><h2>모두가 기다려온<br>크리스마스 신상</h2><p>2026 크리스마스 마켓</p></div>
+            </a>
+        </div>
+        <div data-home-slide hidden>
+            <a class="home-hero-slide" href="${pageContext.request.contextPath}/search.jsp?q=트리">
+                <img src="${pageContext.request.contextPath}/assets/images/home/hero-home.jpg" alt="" width="960" height="960" loading="lazy">
+                <div class="home-hero-copy"><h2>크리스마스<br>집 꾸미기</h2><p>우리 집에 더하는 연말 분위기</p></div>
+            </a>
+        </div>
+        <div class="home-carousel-controls" hidden>
+            <button type="button" data-home-previous aria-label="이전 배너">‹</button>
+            <button type="button" data-home-next aria-label="다음 배너">›</button>
+            <button type="button" data-home-pause aria-label="배너 자동 재생 정지">Ⅱ</button>
+            <span data-home-counter>1 / 3</span>
+        </div>
+        <span class="visually-hidden" data-home-announcement aria-live="polite"></span>
+    </div>
+    <a class="home-tile home-tile-head" href="${pageContext.request.contextPath}/search.jsp?q=HEAD" aria-label="HEAD 상품 검색">
+        <img src="${pageContext.request.contextPath}/assets/images/home/head.jpg" alt="" width="620" height="620">
+    </a>
+    <a class="home-tile home-tile-market" href="${pageContext.request.contextPath}/search.jsp?q=크리스마스">
+        <img src="${pageContext.request.contextPath}/assets/images/home/market.jpg" alt="" width="305" height="631">
+        <div class="home-tile-copy"><h2>크리스마스 마켓</h2><p>비밀의 상점</p></div>
+    </a>
+    <a class="home-tile home-tile-pet" href="${pageContext.request.contextPath}/search.jsp?q=반려동물">
+        <img src="${pageContext.request.contextPath}/assets/images/home/pet-dress.jpg" alt="" width="620" height="620">
+        <div class="home-tile-copy"><h2>반려동물을 위한<br>2026 신상 드레스</h2><p>펫 파티에 초대합니다</p></div>
+    </a>
+    <a class="home-tile home-tile-concealer" href="${pageContext.request.contextPath}/search.jsp?q=컨실러">
+        <img src="${pageContext.request.contextPath}/assets/images/home/concealer.jpg" alt="" width="620" height="620">
+        <div class="home-tile-copy"><h2>본셉 비타씨<br>슬림팁 컨실러</h2><p>24H 멀티 커버</p></div>
+    </a>
+    <a class="home-tile home-tile-basket" href="${pageContext.request.contextPath}/search.jsp?q=바구니">
+        <img src="${pageContext.request.contextPath}/assets/images/home/basket.jpg" alt="" width="620" height="620">
+        <div class="home-tile-copy"><h2>쌓아서 정리하는<br>직사각 바구니</h2><p>효율적인 공간 활용</p></div>
+    </a>
+    <a class="home-tile home-tile-warmer" href="${pageContext.request.contextPath}/search.jsp?q=핫팩">
+        <img src="${pageContext.request.contextPath}/assets/images/home/hand-warmers.jpg" alt="" width="960" height="465">
+        <div class="home-tile-copy"><h2>추운 날씨에 필요한<br>포근한 핫팩</h2><p>따뜻함을 챙겨드려요</p></div>
+    </a>
+</section>
+<nav class="home-shortcuts" aria-label="기획전과 서비스 바로가기">
+    <a href="${pageContext.request.contextPath}/search.jsp?q=크리스마스"><img src="${pageContext.request.contextPath}/assets/images/home/quick-christmas.png" alt="" width="104" height="104">크리스마스 마켓</a>
+    <a href="${pageContext.request.contextPath}/search.jsp?q=겨울"><img src="${pageContext.request.contextPath}/assets/images/home/quick-winter.png" alt="" width="104" height="104">겨울 시즌템</a>
+    <a href="${pageContext.request.contextPath}/list.jsp?collection=open-run"><img src="${pageContext.request.contextPath}/assets/images/home/quick-open-run.png" alt="" width="104" height="104">오픈런</a>
+    <a href="${pageContext.request.contextPath}/search.jsp?q=디즈니"><img src="${pageContext.request.contextPath}/assets/images/home/quick-disney.png" alt="" width="104" height="104">디즈니</a>
+    <a href="${pageContext.request.contextPath}/list.jsp?collection=new"><img src="${pageContext.request.contextPath}/assets/images/home/quick-new-club.png" alt="" width="104" height="104">신상클럽</a>
+    <a href="${pageContext.request.contextPath}/search.jsp?collection=store"><img src="${pageContext.request.contextPath}/assets/images/home/quick-inventory.png" alt="" width="104" height="104">매장 상품 찾기</a>
+    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-delivery.png" alt="" width="104" height="104">다이소배송</button>
+    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-event.png" alt="" width="104" height="104">이벤트</button>
+    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-card.png" alt="" width="104" height="104">제휴카드</button>
+    <a href="${pageContext.request.contextPath}/list.jsp?collection=ranking"><img src="${pageContext.request.contextPath}/assets/images/home/quick-sns.png" alt="" width="104" height="104">SNS핫템</a>
+</nav>
