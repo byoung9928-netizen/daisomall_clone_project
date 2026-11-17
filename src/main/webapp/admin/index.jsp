@@ -8,6 +8,10 @@
         response.sendError(404);
         return;
     }
+    if ("products".equals(adminSection)) {
+        request.getRequestDispatcher("/app/admin/products").forward(request, response);
+        return;
+    }
     request.setAttribute("adminSection", adminSection);
 %>
 <jsp:forward page="/WEB-INF/views/admin/layout.jsp" />

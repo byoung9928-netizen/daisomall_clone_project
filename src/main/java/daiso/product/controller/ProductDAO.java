@@ -6,7 +6,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ProductDAO {
     private static final String COLUMNS = "p.product_id, p.name, p.price, p.stock_quantity, "
@@ -23,6 +25,83 @@ public class ProductDAO {
             ", selected_categories AS (SELECT category_id FROM visible_categories WHERE category_id = ? "
             + "UNION ALL SELECT v.category_id FROM visible_categories v "
             + "JOIN selected_categories s ON v.parent_id = s.category_id)";
+
+    CatalogPage findAdminProducts(Connection conn, String keyword, int limit, int offset) throws SQLException {
+        String scope = " FROM products p WHERE LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
+                + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0";
+        List<String> terms = List.of(keyword, keyword, keyword, keyword);
+        int total;
+        try (PreparedStatement query = conn.prepareStatement("SELECT COUNT(*)" + scope)) {
+            bind(query, terms);
+            try (ResultSet rows = query.executeQuery()) {
+                rows.next();
+                total = rows.getInt(1);
+            }
+        }
+        try (PreparedStatement query = conn.prepareStatement("SELECT " + COLUMNS + scope
+                + " ORDER BY p.created_at DESC, p.product_id LIMIT ? OFFSET ?")) {
+            bind(query, terms);
+            query.setInt(5, limit);
+            query.setInt(6, offset);
+            return new CatalogPage(readProducts(query), total);
+        }
+    }
+
+    Map<String, String> findAdminCategories(Connection conn) throws SQLException {
+        String sql = "SELECT c.category_id, CONCAT_WS(' › ', g.name, p.name, c.name) AS path "
+                + "FROM categories c LEFT JOIN categories p ON c.parent_id = p.category_id "
+                + "LEFT JOIN categories g ON p.parent_id = g.category_id "
+                + "WHERE c.is_leaf = 1 ORDER BY path, c.category_id";
+        Map<String, String> categories = new LinkedHashMap<>();
+        try (PreparedStatement query = conn.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
+            while (rows.next()) {
+                categories.put(rows.getString("category_id"), rows.getString("path"));
+            }
+        }
+        return categories;
+    }
+
+    boolean adminProductCodeExists(Connection conn, String code, String excludedId) throws SQLException {
+        String sql = "SELECT 1 FROM products WHERE product_code = ? AND product_id <> ?";
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            query.setString(1, code);
+            query.setString(2, excludedId);
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next();
+            }
+        }
+    }
+
+    boolean saveAdminProduct(Connection conn, ProductDTO product, boolean create) throws SQLException {
+        String sql = create
+                ? "INSERT INTO products (product_code, name, brand, price, stock_quantity, status, image_url, "
+                        + "description, category_id, product_id) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? "
+                        + "FROM categories WHERE category_id = ? AND is_leaf = 1"
+                : "UPDATE products SET product_code = ?, name = ?, brand = ?, price = ?, stock_quantity = ?, "
+                        + "status = ?, image_url = ?, description = ?, category_id = ? WHERE product_id = ? "
+                        + "AND EXISTS (SELECT 1 FROM categories WHERE category_id = ? AND is_leaf = 1)";
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            query.setString(1, product.getProductCode());
+            query.setString(2, product.getName());
+            query.setString(3, product.getBrand());
+            query.setInt(4, product.getPrice());
+            query.setInt(5, product.getStockQuantity());
+            query.setString(6, product.getStatus());
+            query.setString(7, product.getImage());
+            query.setString(8, product.getDescription());
+            query.setString(9, product.getCategoryId());
+            query.setString(10, product.getProductId());
+            query.setString(11, product.getCategoryId());
+            return query.executeUpdate() == 1;
+        }
+    }
+
+    boolean deleteAdminProduct(Connection conn, String id) throws SQLException {
+        try (PreparedStatement query = conn.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
+            query.setString(1, id);
+            return query.executeUpdate() == 1;
+        }
+    }
 
     public List<ProductDTO> findAll(Connection conn) throws SQLException {
         try (PreparedStatement query = conn.prepareStatement("SELECT " + COLUMNS + " FROM products p")) {
@@ -150,7 +229,7 @@ public class ProductDAO {
         }
     }
 
-    private static void bind(PreparedStatement query, List<Object> parameters) throws SQLException {
+    private static void bind(PreparedStatement query, List<?> parameters) throws SQLException {
         for (int index = 0; index < parameters.size(); index++) {
             query.setObject(index + 1, parameters.get(index));
         }
