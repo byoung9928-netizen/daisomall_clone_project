@@ -2,8 +2,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <%@ include file="../common/head.jspf" %>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin.css">
+    <%@ include file="../common/admin-head.jspf" %>
 <script src="${pageContext.request.contextPath}/assets/js/common/admin-ui.js" defer></script>
 <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory.js" defer></script>
 </head>
