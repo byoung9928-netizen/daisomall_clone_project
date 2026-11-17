@@ -7,13 +7,88 @@ import daiso.common.annotation.DaisoGetMapping;
 
 @DaisoController
 public class OrderController {
-		//주문서 화면
-		@DaisoGetMapping("/order/form")
-		public String orderForm(HttpServletRequest request) {
-			request.setAttribute("pageName","checkout");
-			request.setAttribute("activeNavigation","");
-			return "shop/page";
-		}
+    // 기존 orderForm()을 이 메서드로 교체합니다.
+    @DaisoGetMapping("/order/form")
+    public String orderForm(HttpServletRequest request) throws java.sql.SQLException {
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        String memberId = session == null ? null : (String) session.getAttribute("member_id");
+        if (memberId == null || memberId.isBlank()) return "redirect:/member/login";
+
+        java.util.List<daiso.cart.db.CartBean> items = new daiso.cart.db.CartDAO().getCartList(memberId);
+        long subtotal = 0;
+        boolean purchasable = true;
+        for (daiso.cart.db.CartBean item : items) {
+            subtotal += item.getItemTotal();
+            if (!item.isPurchasable()) purchasable = false;
+        }
+        long shipping = subtotal > 0 && subtotal < 30000 ? 3000L : 0L;
+        if (session.getAttribute("orderCsrf") == null) {
+            session.setAttribute("orderCsrf", java.util.UUID.randomUUID().toString());
+        }
+        request.setAttribute("orderItems", items);
+        request.setAttribute("orderSubtotal", subtotal);
+        request.setAttribute("orderShipping", shipping);
+        request.setAttribute("deliveryAddress", session.getAttribute("orderDeliveryAddress"));
+        request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
+        request.setAttribute("deliveryMessage", session.getAttribute("orderDeliveryMessage"));
+        if (!purchasable) request.setAttribute("orderError", "상품 상태 또는 재고를 확인해 주세요. 장바구니에서 수량을 변경하거나 상품을 삭제할 수 있습니다.");
+        request.setAttribute("pageName", "checkout");
+        request.setAttribute("activeNavigation", "");
+        return "shop/page";
+    }
+
+    @daiso.common.annotation.DaisoPostMapping("/order/address")
+    @daiso.common.annotation.DaisoResponseBody
+    public String saveDeliveryAddress(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+        request.setCharacterEncoding("UTF-8");
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        if (session == null || !(session.getAttribute("member_id") instanceof String)
+                || ((String) session.getAttribute("member_id")).isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+        Object csrf = session.getAttribute("orderCsrf");
+        if (!(csrf instanceof String) || !csrf.equals(request.getParameter("csrfToken"))) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
+        }
+        java.util.Map<String, String> address = new java.util.LinkedHashMap<>();
+        String[] fields = {"addressName", "recipient", "phone", "postcode", "address1", "address2"};
+        int[] limits = {50, 100, 30, 5, 255, 255};
+        for (int i = 0; i < fields.length; i++) {
+            String value = request.getParameter(fields[i]);
+            value = value == null ? "" : value.strip();
+            if ((!"address2".equals(fields[i]) && value.isEmpty()) || value.length() > limits[i]) {
+                return "배송지의 필수 항목과 입력 길이를 확인해 주세요.";
+            }
+            address.put(fields[i], value);
+        }
+        if (!address.get("postcode").matches("[0-9]{5}")) return "우편번호는 5자리 숫자로 입력해 주세요.";
+        String phone = address.get("phone").replaceAll("[\\s-]", "");
+        if (!phone.matches("01[016789][0-9]{7,8}")) return "휴대폰번호를 확인해 주세요.";
+        session.setAttribute("orderDeliveryAddress", address);
+        return "OK";
+    }
+
+    @daiso.common.annotation.DaisoPostMapping("/order/delivery-message")
+    @daiso.common.annotation.DaisoResponseBody
+    public String saveDeliveryMessage(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+        request.setCharacterEncoding("UTF-8");
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        if (session == null || !(session.getAttribute("member_id") instanceof String)
+                || ((String) session.getAttribute("member_id")).isBlank()) return "로그인 후 이용해 주세요.";
+        Object csrf = session.getAttribute("orderCsrf");
+        if (!(csrf instanceof String) || !csrf.equals(request.getParameter("csrfToken"))) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
+        }
+        String message = request.getParameter("deliveryMessage");
+        message = message == null ? "" : message.strip();
+        if (message.length() > 500) return "배송 요청사항은 500자 이내로 입력해 주세요.";
+        session.setAttribute("orderDeliveryMessage", message);
+        return "OK";
+    }
+
+
 		//주문 생성
 		public String orderCreate(HttpServletRequest request) {
 			//배송정보 확인 후 주문 저장

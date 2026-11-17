@@ -260,4 +260,48 @@
 	 	
 	 	
  	 			}
+ 	 			public int deleteSelectedCart(
+ 	 					String memberId, long[] cartItemIds)
+ 	 					throws SQLException{
+ 	 					
+ 	 				if (cartItemIds == null || cartItemIds.length==0) {
+ 	 					throw new IllegalArgumentException(
+ 	 							"삭제할 상품을 선택해 주세요."
+ 	 							);
+ 	 				}
+ 	 				String sql=
+ 	 						"DELETE FROM cart_items "
+ 	 						+"WHERE cart_item_id = ? "
+ 	 						+"AND member_id = ?";
+ 	 				
+ 	 				try (Connection con = ds.getConnection()){
+ 	 					boolean originalAutoCommit = con.getAutoCommit();
+ 	 					
+ 	 					con.setReadOnly(false);
+ 	 					con.setAutoCommit(false);
+ 	 					
+ 	 					try {
+ 	 						int deletedCount = 0;
+ 	 						
+ 	 						try(PreparedStatement pstmt = con.prepareStatement(sql)){
+ 	 							
+ 	 							for (long cartItemId : cartItemIds) {
+ 	 								pstmt.setLong(1, cartItemId);
+ 	 								pstmt.setString(2,memberId);
+ 	 								
+ 	 								deletedCount += pstmt.executeUpdate();
+ 	 							}
+ 	 						}
+ 	 						
+ 	 						con.commit();
+ 	 						return deletedCount;
+ 	 					}catch(SQLException | RuntimeException e) {
+ 	 						con.rollback();
+ 	 						throw e;
+ 	 					} finally {
+ 	 						con.setAutoCommit(originalAutoCommit);
+ 	 					}
+ 	 					
+ 	 				}
+ 	 			}
 }//cartdao끝

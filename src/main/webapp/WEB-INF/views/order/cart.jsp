@@ -63,7 +63,7 @@
 <progress max="30000" value="<%= Math.min(subtotal, 30000) %>" aria-label="무료배송 기준 달성 금액"></progress>
 <div class="cart-progress-caption"><strong><%= subtotal < 30000 ? cartMoney.format(30000 - subtotal) + "원 더 담으면! 무료배송" : "무료배송 금액을 달성했어요" %></strong><span>30,000원</span></div>
 </div>
-<div class="cart-selection-toolbar"><label><input id="cart-select-all" type="checkbox" checked> 전체 선택 <span id="cart-selected-count"><%= cartList.size() %>/<%= cartList.size() %>개</span></label><button type="button" disabled title="선택 삭제 기능은 준비 중입니다">선택삭제</button></div>
+<div class="cart-selection-toolbar"><label><input id="cart-select-all" type="checkbox" checked> 전체 선택 <span id="cart-selected-count"><%= cartList.size() %>/<%= cartList.size() %>개</span></label><button id="cart-delete-selected" type="button">선택삭제</button></div>
 <div class="cart-table-wrap">
 <table class="cart-product-table">
 <colgroup><col class="cart-col-check"><col><col class="cart-col-price"><col class="cart-col-quantity"><col class="cart-col-total"><col class="cart-col-delete"></colgroup>
@@ -76,7 +76,7 @@ String cartImageSrc = cartImage.startsWith("https://") ? cartImage : cartContext
 String cartProductName = cart.getProductName() == null ? "상품" : cart.getProductName();
 %>
 <tr data-cart-amount="<%= cart.getItemTotal() %>">
-<td class="cart-check-cell"><input class="cart-item-check" type="checkbox" checked aria-label="<%= daiso.product.controller.ProductView.escape(cartProductName) %> 선택"></td>
+<td class="cart-check-cell"><input class="cart-item-check" type="checkbox" value="<%=cart.getCartItemId() %>" checked aria-label="상품 선택"></td>
 <td><a class="cart-table-product" href="<%= cartContext %>/product.jsp?id=<%= java.net.URLEncoder.encode(cart.getProductId(), "UTF-8") %>"><img src="<%= daiso.product.controller.ProductView.escape(cartImageSrc) %>" alt=""><span><%= daiso.product.controller.ProductView.escape(cartProductName) %></span></a></td>
 <td class="cart-table-money"><%= cartMoney.format(cart.getPrice()) %>원</td>
 <td><div class="cart-stepper" data-cart-item-id="<%=cart.getCartItemId() %>">
@@ -208,6 +208,70 @@ document.addEventListener("DOMContentLoaded", function () {
                 deleting = false;
             });
         });
+});
+//선택삭제
+document.addEventListener("DOMContentLoaded", function () {
+    const deleteButton =
+        document.getElementById("cart-delete-selected");
+
+    if (!deleteButton) return;
+
+    let deleting = false;
+
+    deleteButton.addEventListener("click", async function () {
+        if (deleting) return;
+
+        const selected = document.querySelectorAll(
+            ".cart-item-check:checked"
+        );
+
+        if (selected.length === 0) {
+            window.Daiso.ui.notice("삭제할 상품을 선택해 주세요.");
+            return;
+        }
+
+        if (!confirm(
+            "선택한 상품 " + selected.length + "개를 삭제할까요?"
+        )) return;
+
+        deleting = true;
+        deleteButton.disabled = true;
+
+        const data = new URLSearchParams();
+
+        selected.forEach(function (checkbox) {
+            data.append("cartItemId", checkbox.value);
+        });
+
+        try {
+            const response = await fetch(
+                "${pageContext.request.contextPath}/app/cart/delete-selected",
+                {
+                    method: "POST",
+                    body: data
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("선택삭제 요청에 실패했습니다.");
+            }
+
+            const result = (await response.text()).trim();
+
+            if (result === "OK") {
+                location.reload();
+                return;
+            }
+
+            window.Daiso.ui.notice(result);
+
+        } catch (error) {
+            window.Daiso.ui.notice(error.message);
+        }
+
+        deleting = false;
+        deleteButton.disabled = false;
+    });
 });
 </script>
 
