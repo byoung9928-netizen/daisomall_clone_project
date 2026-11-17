@@ -55,6 +55,23 @@
                     <summary>상품 정보 및 반품 안내</summary>
                     <p>제조·인증·반품 정책은 이 학습용 상품 데이터에 포함되어 있지 않습니다.</p>
                 </details>
+<<<<<<< HEAD
+               <form id="cartAddForm" action="${pageContext.request.contextPath}/app/cart/add"	method="post">
+
+   		 	<input type="hidden" name="productId">
+
+    		<label class="field">
+       		 수량
+        	<input type="number" name="quantity"  min="1" max="99" value="1" required>
+   			 </label>
+
+    		<p class="detail-total"></p>
+
+    		<button type="submit" class="button primary" data-add-cart>장바구니 담기</button>
+
+			</form>
+=======
+>>>>>>> branch 'product' of https://github.com/byoung9928-netizen/daisomall_clone_project.git
             </section>
             <% if (!related.isEmpty()) { %>
                 <section class="product-section" id="related-products">
@@ -69,6 +86,54 @@
            } %>
     </main>
     <%@ include file="../common/footer.jspf" %>
+<<<<<<< HEAD
+    <script>
+    // 공통 defer 스크립트 실행 후, 이 페이지의 HTML에 Mock 데이터와 이벤트를 연결합니다.
+    document.addEventListener("DOMContentLoaded", function () {
+        "use strict";
+        const app = window.Daiso;
+        const root = document.getElementById("main-content");
+        const { element, link, button, money, empty, notice } = app.ui;
+        app.ready.then(function (repository) {
+
+        const product = repository.getProduct(new URLSearchParams(location.search).get("id"));
+        if (!product) {
+            root.replaceChildren();
+            empty(root, "상품을 찾을 수 없습니다.");
+            root.append(link("상품 목록으로", "list.jsp", {}, "button"));
+            return;
+        }
+        root.querySelector(".breadcrumbs").replaceWith(app.ui.breadcrumbs(repository.getCategories(), product.categoryId));
+        const layout = root.querySelector(".product-detail-layout");
+        const image = layout.querySelector(".detail-image");
+        image.src = app.url(product.image);
+        image.alt = product.name + " 자체 제작 Mock 이미지";
+        const info = layout.querySelector(".detail-info");
+        const status = product.status === "SCHEDULED" ? "판매 예정" : product.status === "SOLD_OUT" || !product.onlineStock ? "품절" : "구매 가능";
+        const values = { brand: product.brand, name: product.name, price: money(product.price), rating: "★ " + product.rating + " · 리뷰 " + product.reviewCount + " (Mock)", source: product.source.note, id: "품번 " + product.id, stock: status + " · 온라인 Mock 재고 " + product.onlineStock + "개" };
+        Object.entries(values).forEach(([key, value]) => { info.querySelector('[data-product="' + key + '"]').textContent = value; });
+        const stores = info.querySelector(".store-stock");
+        repository.getStores().forEach(store => stores.append(element("p", "", store.name + " · " + (product.storeStocks[store.id] || 0) + "개 (Mock)")));
+        const quantity = info.querySelector('[name="quantity"]');
+        quantity.max = String(Math.min(99, product.onlineStock));
+        const total = info.querySelector(".detail-total");
+        total.textContent = "합계 " + money(product.price);
+        quantity.addEventListener("input", () => {
+            total.textContent = "합계 " + money(product.price * Math.max(0, Number(quantity.value)));
+        });
+        const cartForm = info.querySelector("#cartAddForm");
+
+        cartForm.elements.productId.value = product.id;
+
+        const add = info.querySelector("[data-add-cart]");
+        add.disabled = status !== "구매 가능";
+        const description = root.querySelector(".product-description");
+        description.querySelector("[data-product-description]").textContent = product.description;
+
+        }).catch(function (error) { app.ui.error(root, error); });
+    });
+    </script>
+=======
     <% if (product != null) { %>
         <script>
         document.addEventListener("DOMContentLoaded", () => {
@@ -93,5 +158,6 @@
         });
         </script>
     <% } %>
+>>>>>>> branch 'product' of https://github.com/byoung9928-netizen/daisomall_clone_project.git
 </body>
 </html>
