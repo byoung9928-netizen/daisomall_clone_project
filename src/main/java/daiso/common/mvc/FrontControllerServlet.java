@@ -54,8 +54,8 @@ public class FrontControllerServlet extends HttpServlet {
 		}
 
 		try {
-			String result = handlerAdapter.handle(request, handler);
-
+			String result = handlerAdapter.handle(request, response, handler);
+			
 			if (handler.getMethod().isAnnotationPresent(DaisoResponseBody.class)) {
 				response.setContentType("text/plain; charset=UTF-8");
 				response.getWriter().write(result == null ? "" : result);

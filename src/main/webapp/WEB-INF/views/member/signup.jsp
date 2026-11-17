@@ -23,7 +23,7 @@
                     <input name="email" type="email" required maxlength="120" autocomplete="email">
                 </label>
                 <label class="field">
-                    임의 비밀번호 (4자 이상)
+                    비밀번호 (4자 이상)
                     <input name="password" type="password" required minlength="4" maxlength="120" autocomplete="new-password">
                 </label>
                 <label class="field">

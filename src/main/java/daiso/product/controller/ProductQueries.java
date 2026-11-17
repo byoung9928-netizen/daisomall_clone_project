@@ -19,7 +19,6 @@ final class ProductQueries {
         DataSource source = InitialContext.doLookup("java:comp/env/jdbc/mysqlDB");
         Connection conn = source.getConnection();
         try {
-            conn.setReadOnly(true);
             conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             conn.setAutoCommit(false);
             return conn;
