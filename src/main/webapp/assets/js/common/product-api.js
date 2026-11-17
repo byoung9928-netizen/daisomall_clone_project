@@ -1,11 +1,11 @@
 (function () {
     "use strict";
 
-    var app = window.Daiso;
-    var filter = document.querySelector("#catalog-filter");
+    const app = window.Daiso;
+    const filter = document.querySelector("#catalog-filter");
     if (filter) {
         ["sort", "maxPrice", "status", "available"].forEach(function (name) {
-            var field = filter.elements.namedItem(name);
+            const field = filter.elements.namedItem(name);
             if (field) {
                 field.addEventListener("change", function () {
                     filter.requestSubmit();
@@ -14,10 +14,10 @@
         });
     }
 
-    var catalog = document.querySelector(".catalog-products");
+    const catalog = document.querySelector(".catalog-products");
     if (catalog) {
         catalog.addEventListener("click", function (event) {
-            var next = event.target.closest(".load-more[rel=next]");
+            const next = event.target.closest(".load-more[rel=next]");
             if (!next || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
                 return;
             }
@@ -33,13 +33,13 @@
                 }
                 return response.text();
             }).then(function (page) {
-                var documentPage = new DOMParser().parseFromString(page, "text/html");
-                var nextGrid = documentPage.querySelector(".catalog-grid");
-                var pagination = documentPage.querySelector("nav[aria-label='상품 목록 페이지']");
+                const documentPage = new DOMParser().parseFromString(page, "text/html");
+                const nextGrid = documentPage.querySelector(".catalog-grid");
+                const pagination = documentPage.querySelector("nav[aria-label='상품 목록 페이지']");
                 if (!nextGrid || !pagination) {
                     throw new Error("상품 목록을 찾을 수 없습니다.");
                 }
-                var grid = catalog.querySelector(".catalog-grid");
+                const grid = catalog.querySelector(".catalog-grid");
                 while (nextGrid.firstElementChild) {
                     grid.appendChild(nextGrid.firstElementChild);
                 }
@@ -50,16 +50,16 @@
         });
     }
 
-    var input = document.querySelector("#search-query");
+    const input = document.querySelector("#search-query");
     if (!input) {
         return;
     }
-    var suggestions = document.createElement("datalist");
+    const suggestions = document.createElement("datalist");
     suggestions.id = "product-suggestions";
     input.setAttribute("list", suggestions.id);
     input.after(suggestions);
-    var request;
-    var timer;
+    let request;
+    let timer;
 
     input.addEventListener("input", function () {
         clearTimeout(timer);
@@ -68,13 +68,13 @@
         }
         suggestions.replaceChildren();
 
-        var query = input.value.trim();
+        const query = input.value.trim();
         if (query.length < 2) {
             return;
         }
         timer = setTimeout(function () {
             request = new AbortController();
-            var signal = request.signal;
+            const signal = request.signal;
 
             fetch(app.url("api/products", { q: query, limit: 6 }), { signal: signal })
                 .then(function (response) {
@@ -83,11 +83,11 @@
                     if (!data || signal.aborted) {
                         return;
                     }
-                    var names = Object.create(null);
+                    const names = Object.create(null);
                     data.items.forEach(function (item) {
                         if (!names[item.name]) {
                             names[item.name] = true;
-                            var option = document.createElement("option");
+                            const option = document.createElement("option");
                             option.value = item.name;
                             suggestions.appendChild(option);
                         }
