@@ -1,194 +1,181 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ page import="java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView" %>
+<%
+    request.setAttribute("adminSection", "products");
+    String blocked = (String) request.getAttribute("adminProductBlocked");
+    String csrf = (String) request.getAttribute("adminProductCsrf");
+    Map<String, String> productForm = (Map<String, String>) request.getAttribute("productForm");
+    Map<String, String> categories = (Map<String, String>) request.getAttribute("productCategories");
+    Map<String, String> statuses = (Map<String, String>) request.getAttribute("productStatuses");
+    Map<ProductDTO, Map<String, String>> productRows =
+            (Map<ProductDTO, Map<String, String>>) request.getAttribute("productRows");
+    ProductDTO deletion = (ProductDTO) request.getAttribute("deleteProduct");
+    Map<Integer, String> pageLinks = (Map<Integer, String>) request.getAttribute("adminProductPageLinks");
+    Integer currentPage = (Integer) request.getAttribute("adminProductPage");
+%>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <%@ include file="../common/head.jspf" %>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin.css">
-<script src="${pageContext.request.contextPath}/assets/js/common/admin-ui.js" defer></script>
+    <%@ include file="../common/admin-head.jspf" %>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js" defer></script>
 </head>
 <body class="admin-body">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
-    <%@ include file="../common/admin-navigation.jspf" %>
+        <%@ include file="../common/admin-navigation.jspf" %>
         <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1">
-        <p class="admin-eyebrow">
-            MOCK COMMERCE OPERATIONS
-        </p>
-        <h1 class="page-title">
-            상품 관리
-        </h1>
-        <form class="admin-search">
-            <label class="field">
-                <span>
-                    이름 또는 ID 검색
-                </span>
-                <input name="query" type="text" maxlength="120" autocomplete="off">
-            </label>
-            <button class="button" type="submit">
-                검색
-            </button>
-        </form>
-        <button type="button" class="button primary" data-create-product>
-            상품 등록
-        </button>
-        <section class="admin-panel" id="product-editor" hidden>
-            <h2 hidden>
-            </h2>
-            <form class="admin-editor-form" hidden>
-                <label class="field">
-                    상품 설명
-                    <textarea name="description" maxlength="2000" rows="4">
-                    </textarea>
-                </label>
-                <label class="field">
-                    상품명
-                    <input name="name" type="text" required maxlength="50" autocomplete="name">
-                </label>
-                <label class="field">
-                    브랜드
-                    <input name="brand" type="text" required maxlength="120" autocomplete="off">
-                </label>
-                <label class="field">
-                    카테고리 (최하위)
-                    <select name="categoryId">
-                    </select>
-                </label>
-                <label class="field">
-                    가격 (원)
-                    <input name="price" type="number" required maxlength="120" autocomplete="off">
-                </label>
-                <label class="field">
-                    온라인 재고
-                    <input name="onlineStock" type="number" required maxlength="120" autocomplete="off">
-                </label>
-                <label class="field">
-                    판매 상태
-                    <select name="status">
-                    </select>
-                </label>
-                <label class="field">
-                    Mock 이미지
-                    <select name="image">
-                    </select>
-                </label>
-                <p class="error-message" role="alert">
-                </p>
-                <p class="form-status" role="status">
-                </p>
-                <button type="submit" class="button primary">
-                    상품 저장
-                </button>
-            </form>
-        </section>
-        <p class="admin-count" data-count>
-        </p>
-        <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
-            <table class="admin-table">
-                <caption class="visually-hidden">
-                    상품 관리
-                </caption>
-                <thead>
-                    <tr>
-                        <th scope="col">
-                            상품 ID
-                        </th>
-                        <th scope="col">
-                            상품명
-                        </th>
-                        <th scope="col">
-                            가격
-                        </th>
-                        <th scope="col">
-                            상태
-                        </th>
-                        <th scope="col">
-                            온라인 재고
-                        </th>
-                        <th scope="col">
-                            관리
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
-        <button type="button" class="button secondary" data-more>
-            상품 더 보기
-        </button>
-    </main>
+            <h1 class="page-title">상품 관리</h1>
+            <% if (blocked != null) { %>
+                <p class="error-message" role="alert"><%= ProductView.escape(blocked) %></p>
+                <% if (response.getStatus() == 403) { %>
+                    <a class="button secondary" href="${pageContext.request.contextPath}/app/member/login">로그인 화면</a>
+                <% } %>
+            <% } else { %>
+                <% if (request.getAttribute("adminProductError") != null) { %>
+                    <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
+                <% } %>
+                <% if (request.getAttribute("adminProductNotice") != null) { %>
+                    <p class="form-status" role="status"><%= ProductView.escape(request.getAttribute("adminProductNotice")) %></p>
+                <% } %>
+                <div class="admin-product-toolbar">
+                    <form class="admin-search" method="get" action="${pageContext.request.contextPath}/app/admin/products">
+                        <label class="field">상품명, 품번, 브랜드 또는 ID 검색
+                            <input name="query" type="search" maxlength="120" value="<%= ProductView.escape(request.getAttribute("adminQuery")) %>">
+                        </label>
+                        <button class="button secondary" type="submit">검색</button>
+                    </form>
+                    <a class="button primary" href="<%= request.getAttribute("adminProductNew") %>#product-editor">상품 등록</a>
+                </div>
+
+                <% if (productForm != null) { %>
+                    <section class="admin-panel" id="product-editor">
+                        <h2><%= productForm.getOrDefault("id", "").isEmpty() ? "상품 등록" : "상품 수정" %></h2>
+                        <form class="admin-editor-form" method="post" action="${pageContext.request.contextPath}/app/admin/products/save"
+                              data-code-check="${pageContext.request.contextPath}/app/admin/products/check-code">
+                            <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
+                            <input type="hidden" name="id" value="<%= ProductView.escape(productForm.get("id")) %>">
+                            <label class="field">상품명
+                                <input name="name" required maxlength="255" value="<%= ProductView.escape(productForm.get("name")) %>">
+                            </label>
+                            <label class="field">품번
+                                <input name="code" required maxlength="100" aria-describedby="product-code-feedback"
+                                       value="<%= ProductView.escape(productForm.get("code")) %>">
+                            </label>
+                            <p class="product-field-feedback" id="product-code-feedback" role="status"></p>
+                            <label class="field">브랜드
+                                <input name="brand" maxlength="100" value="<%= ProductView.escape(productForm.get("brand")) %>">
+                            </label>
+                            <label class="field">카테고리 (최하위)
+                                <select name="category" required>
+                                    <option value="">카테고리를 선택해 주세요</option>
+                                    <% for (Map.Entry<String, String> category : categories.entrySet()) { %>
+                                        <option value="<%= ProductView.escape(category.getKey()) %>" <%= category.getKey().equals(productForm.get("category")) ? "selected" : "" %>><%= ProductView.escape(category.getValue()) %></option>
+                                    <% } %>
+                                </select>
+                            </label>
+                            <label class="field">가격 (원)
+                                <input name="price" type="number" min="${adminMinPrice}" max="${adminMaxPrice}" step="1" required
+                                       aria-describedby="product-price-feedback" value="<%= ProductView.escape(productForm.get("price")) %>">
+                            </label>
+                            <p class="product-field-feedback" id="product-price-feedback" role="status">${adminPriceRange}</p>
+                            <label class="field">온라인 재고
+                                <input name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>">
+                            </label>
+                            <label class="field">판매 상태
+                                <select name="status" required>
+                                    <% for (String status : java.util.List.of("AVAILABLE", "SOLD_OUT", "SCHEDULED")) { %>
+                                        <option value="<%= status %>" <%= status.equals(productForm.get("status")) ? "selected" : "" %>><%= statuses.get(status) %></option>
+                                    <% } %>
+                                </select>
+                            </label>
+                            <label class="field">대표 이미지 경로 또는 HTTPS URL
+                                <input name="image" maxlength="1000" placeholder="assets/images/…" value="<%= ProductView.escape(productForm.get("image")) %>">
+                            </label>
+                            <label class="field">상품 설명
+                                <textarea name="description" maxlength="2000" rows="4"><%= ProductView.escape(productForm.get("description")) %></textarea>
+                            </label>
+                            <button type="submit" class="button primary">상품 저장</button>
+                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                        </form>
+                    </section>
+                <% } %>
+
+                <% if (deletion != null) { %>
+                    <section class="admin-panel" id="delete-product">
+                        <h2>상품 삭제</h2>
+                        <p>‘<%= ProductView.escape(deletion.getName()) %>’ 상품을 삭제할까요?</p>
+                        <form method="post" action="${pageContext.request.contextPath}/app/admin/products/delete">
+                            <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
+                            <input type="hidden" name="id" value="<%= ProductView.escape(deletion.getProductId()) %>">
+                            <button class="button primary" type="submit">삭제 확인</button>
+                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                        </form>
+                    </section>
+                <% } %>
+
+                <p class="admin-count" role="status"><%= request.getAttribute("adminProductCount") %>개 상품</p>
+                <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
+                    <table class="admin-table">
+                        <caption class="visually-hidden">상품 관리</caption>
+                        <thead><tr>
+                            <th scope="col">상품 ID</th><th scope="col">품번</th><th scope="col">상품명</th>
+                            <th scope="col">가격</th><th scope="col">판매 상태</th><th scope="col">온라인 재고</th><th scope="col">관리</th>
+                        </tr></thead>
+                        <tbody>
+                            <% for (Map.Entry<ProductDTO, Map<String, String>> row : productRows.entrySet()) {
+                                   ProductDTO item = row.getKey(); %>
+                                <tr>
+                                    <td><%= ProductView.escape(item.getProductId()) %></td>
+                                    <td><%= ProductView.escape(item.getProductCode()) %></td>
+                                    <td><%= ProductView.escape(item.getName()) %></td>
+                                    <td><%= ProductView.money(item.getPrice()) %></td>
+                                    <td><%= ProductView.escape(statuses.getOrDefault(item.getStatus(), item.getStatus())) %></td>
+                                    <td><%= item.getStockQuantity() %></td>
+                                    <td>
+                                        <a class="text-button" href="<%= row.getValue().get("edit") %>#product-editor" aria-label="<%= ProductView.escape(item.getName()) %> 수정">수정</a>
+                                        <a class="text-button" href="<%= row.getValue().get("delete") %>#delete-product"
+                                           data-delete-id="<%= ProductView.escape(item.getProductId()) %>"
+                                           data-delete-name="<%= ProductView.escape(item.getName()) %>"
+                                           aria-label="<%= ProductView.escape(item.getName()) %> 삭제">삭제</a>
+                                    </td>
+                                </tr>
+                            <% } %>
+                            <% if (productRows.isEmpty()) { %><tr><td colspan="7">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <nav class="admin-product-pagination" aria-label="상품 관리 페이지">
+                    <% if (request.getAttribute("adminProductPrev") != null) { %>
+                        <a class="button secondary" rel="prev" href="<%= request.getAttribute("adminProductPrev") %>">이전 페이지</a>
+                    <% } %>
+                    <div class="admin-product-page-numbers">
+                        <% for (Map.Entry<Integer, String> link : pageLinks.entrySet()) { %>
+                            <% if (link.getKey().equals(currentPage)) { %>
+                                <span class="admin-product-page-number" aria-current="page"><%= link.getKey() %></span>
+                            <% } else { %>
+                                <a class="admin-product-page-number" href="<%= link.getValue() %>"
+                                   aria-label="<%= link.getKey() %>페이지"><%= link.getKey() %></a>
+                            <% } %>
+                        <% } %>
+                    </div>
+                    <% if (request.getAttribute("adminProductNext") != null) { %>
+                        <a class="button secondary" rel="next" href="<%= request.getAttribute("adminProductNext") %>">다음 페이지</a>
+                    <% } %>
+                </nav>
+                <dialog class="product-delete-dialog" id="product-delete-dialog" aria-labelledby="product-delete-title"
+                        aria-describedby="product-delete-message">
+                    <h2 id="product-delete-title">상품을 삭제할까요?</h2>
+                    <p id="product-delete-message"><strong data-delete-product-name></strong> 상품을 삭제하면 되돌릴 수 없습니다.</p>
+                    <form method="post" action="${pageContext.request.contextPath}/app/admin/products/delete">
+                        <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
+                        <input type="hidden" name="id">
+                        <button class="button secondary" type="button" data-delete-cancel autofocus>취소</button>
+                        <button class="button primary" type="submit">삭제하기</button>
+                    </form>
+                </dialog>
+            <% } %>
+        </main>
     </div>
-    <script>
-    // 공통 defer 스크립트 실행 후, 이 페이지의 HTML에 Mock 데이터와 이벤트를 연결합니다.
-    document.addEventListener("DOMContentLoaded", function () {
-        "use strict";
-        const app = window.Daiso;
-        const root = document.getElementById("admin-content");
-        const { link, button, money } = app.ui;
-        const { field, selectField, formFeedback, addRow, openEditor } = app.admin;
-        app.ready.then(function (repository) {
-            if (!app.admin.requireAdmin(root, repository)) return;
-            const section = "products";
-
-        const editor = root.querySelector(".admin-panel");
-        editor.id = "product-editor";
-        const count = root.querySelector("[data-count]");
-        const { form, input } = app.admin.searchBox(root);
-        const productTable = app.admin.table(root);
-        let limit = 30;
-        const more = root.querySelector("[data-more]");
-        more.addEventListener("click", () => {
-            limit += 30;
-            render();
-        });
-        function edit(product) {
-            const editForm = openEditor(editor, product ? "상품 수정 · " + product.id : "상품 등록");
-            field(editForm, "상품명", "name", "text", product ? product.name : "");
-            field(editForm, "브랜드", "brand", "text", product ? product.brand : "샘플 생활연구소");
-            const categories = repository.getCategories();
-            const options = categories.filter((category) => category.isLeaf).map((category) => {
-                const parent = categories.find((node) => node.id === category.parentId);
-                const grandparent = parent && categories.find((node) => node.id === parent.parentId);
-                return [category.id, [grandparent && grandparent.name, parent && parent.name, category.name].filter(Boolean).join(" › ")];
-            });
-            selectField(editForm, "카테고리 (최하위)", "categoryId", options, product ? product.categoryId : undefined);
-            const price = field(editForm, "가격 (원)", "price", "number", product ? product.price : 1000);
-            price.min = 1;
-            price.max = 10000000;
-            const stock = field(editForm, "온라인 재고", "onlineStock", "number", product ? product.onlineStock : 10);
-            stock.min = 0;
-            stock.max = 999999;
-            selectField(editForm, "판매 상태", "status", [["AVAILABLE", "판매 중"], ["SOLD_OUT", "품절"], ["SCHEDULED", "판매 예정"]], product ? product.status : "AVAILABLE");
-            selectField(editForm, "Mock 이미지", "image", Array.from({ length: 6 }, (_, index) => ["assets/images/mock-product-" + index + ".svg", "샘플 이미지 " + (index + 1)]), product ? product.image : undefined);
-            const description = editForm.elements.description;
-            description.rows = 4;
-            description.value = product ? product.description : "관리자에서 만든 체험용 상품입니다.";
-            formFeedback(editForm, (values) => {
-                const saved = repository.saveProduct(product ? product.id : null, values);
-                product = saved;
-                render();
-            }, "상품 저장");
-            editor.scrollIntoView({ block: "start" });
-        }
-        function render() {
-            const query = input.value.trim().toLowerCase();
-            const products = repository.getProducts().filter((product) => (product.name + " " + product.id).toLowerCase().includes(query));
-            count.textContent = products.length + "개 상품";
-            productTable.body.replaceChildren();
-            products.slice(0, limit).forEach((product) => addRow(productTable.body, [product.id, product.name, money(product.price), product.status, product.onlineStock, button("수정", () => edit(product), "text-button")]));
-            more.hidden = products.length <= limit;
-        }
-        form.addEventListener("submit", (event) => {
-            event.preventDefault();
-            limit = 30;
-            render();
-        });
-        root.querySelector("[data-create-product]").addEventListener("click", () => edit(null));
-        render();
-
-        }).catch(function (error) { app.ui.error(root, error); });
-    });
-    </script>
 </body>
 </html>

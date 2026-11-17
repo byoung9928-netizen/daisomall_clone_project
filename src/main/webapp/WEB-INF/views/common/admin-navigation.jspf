@@ -1,10 +1,12 @@
 <%@ page pageEncoding="UTF-8" %>
+<%
+    String[][] adminMenu = {
+        {"dashboard", "대시보드"}, {"categories", "카테고리 관리"}, {"products", "상품 관리"},
+        {"inventory", "온라인 재고"}, {"stores", "매장별 재고"}, {"orders", "주문 관리"}, {"users", "사용자 관리"}
+    };
+%>
 <nav class="admin-sidebar" aria-label="관리 메뉴">
-                <a href="${pageContext.request.contextPath}/admin/?view=dashboard" data-admin-link="dashboard">대시보드</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=categories" data-admin-link="categories">카테고리 관리</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=products" data-admin-link="products">상품 관리</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=inventory" data-admin-link="inventory">온라인 재고</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=stores" data-admin-link="stores">매장별 재고</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=orders" data-admin-link="orders">주문 관리</a>
-                <a href="${pageContext.request.contextPath}/admin/?view=users" data-admin-link="users">사용자 관리</a>
-            </nav>
+    <% for (String[] entry : adminMenu) { %>
+        <a href="${pageContext.request.contextPath}/admin/?view=<%= entry[0] %>" data-admin-link="<%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("adminSection"))) { %> aria-current="page"<% } %>><%= entry[1] %></a>
+    <% } %>
+</nav>

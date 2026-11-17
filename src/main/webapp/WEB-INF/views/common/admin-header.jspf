@@ -1,6 +1,9 @@
 <%@ page pageEncoding="UTF-8" %>
 <header class="admin-header">
-            <a href="${pageContext.request.contextPath}/admin/" class="admin-brand">DAISO <span>MANAGER</span></a>
-            <span>체험용 관리자 · 실제 운영 시스템이 아닙니다</span>
-            <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
-        </header>
+    <a href="${pageContext.request.contextPath}/admin/" class="admin-brand" aria-label="다이소 관리자 홈">
+        <img src="${pageContext.request.contextPath}/assets/images/home/daiso-logo.svg" alt="" width="136" height="33">
+        <span>관리자</span>
+    </a>
+    <span>체험용 관리자 · 실제 운영 시스템이 아닙니다</span>
+    <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
+</header>
