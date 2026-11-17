@@ -128,26 +128,16 @@ public class ProductController {
                     filter.offset = (page - 1) * PAGE_SIZE;
                     result = dao.findCatalog(conn, filter);
                 }
-                Map<String, String> params = new LinkedHashMap<>();
-                params.put("q", filter.keyword);
-                params.put("category", filter.category);
-                params.put("collection", collection);
-                params.put("brand", filter.brand);
-                params.put("status", filter.status);
-                params.put("sort", filter.sort);
-                params.put("maxPrice", filter.maxPrice == null ? "" : filter.maxPrice.toString());
-                params.put("available", filter.available ? "true" : "");
-
+                if (title == null) {
+                    title = path.isEmpty() ? "전체 상품" : path.get(path.size() - 1).name;
+                    if (!filter.keyword.isEmpty()) {
+                        title = "‘" + filter.keyword + "’ 검색 결과";
+                    }
+                }
                 request.setAttribute("activeNavigation", collection);
-                request.setAttribute("catalogTitle", title != null ? title : !filter.keyword.isEmpty()
-                        ? "‘" + filter.keyword + "’ 검색 결과" : path.isEmpty() ? "전체 상품" : path.get(path.size() - 1).name);
-                request.setAttribute("catalogRoute", "/" + view + ".jsp");
-                request.setAttribute("catalogParams", params);
                 request.setAttribute("categoryPath", path);
-                request.setAttribute("products", result.products);
-                request.setAttribute("productCount", result.total);
-                request.setAttribute("catalogPage", page);
-                request.setAttribute("catalogPages", pages);
+                request.setAttribute("catalog", new ProductCatalogView(request.getContextPath(), "/" + view + ".jsp",
+                        title, collection, filter, categories, result, page, pages));
             }
             conn.commit();
         }
