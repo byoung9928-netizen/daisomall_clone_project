@@ -106,6 +106,77 @@ public class UserController {
         }
     }
     
+    @DaisoGetMapping("/member/oauth/kakao/callback")
+    public String kakaoCallback(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        String error = request.getParameter("error");
+
+        if (error != null) {
+            request.setAttribute(
+                    "loginError",
+                    "카카오 로그인이 취소되었거나 실패했습니다."
+            );
+            return "member/login";
+        }
+
+        String code = request.getParameter("code");
+
+        if (code == null || code.trim().isEmpty()) {
+            request.setAttribute(
+                    "loginError",
+                    "카카오 인증 코드를 받지 못했습니다."
+            );
+            return "member/login";
+        }
+
+        try {
+            KakaoOAuthClient.KakaoProfile profile =
+                    new KakaoOAuthClient().getProfile(code);
+
+            MemberLoginInfo member = memberService.loginWithKakao(
+                    profile.getId(),
+                    profile.getNickname(),
+                    profile.getEmail()
+            );
+            
+            String oldToken = findCookieValue(request, REMEMBER_COOKIE);
+
+            if (oldToken != null) {
+                try {
+                    memberService.deleteRememberToken(oldToken);
+                   
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }		
+
+            expireRememberCookie(request, response);
+
+            HttpSession session = request.getSession();
+            request.changeSessionId();
+
+            session.setAttribute("member_id", member.getMemberId());
+            session.setAttribute("email", member.getEmail());
+            session.setAttribute("name", member.getName());
+            session.setAttribute("role", member.getRole());
+
+            return "redirect:/home";
+            
+        } catch (IllegalArgumentException e) {
+            request.setAttribute("loginError", e.getMessage());
+            return "member/login"; 
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.setAttribute(
+                    "loginError",
+                    "카카오 로그인 처리 중 오류가 발생했습니다."
+            );
+            return "member/login";
+        }
+    }
+    
     @DaisoGetMapping("/member/find-id")
     public String findIdForm() {
         return "member/find-id";

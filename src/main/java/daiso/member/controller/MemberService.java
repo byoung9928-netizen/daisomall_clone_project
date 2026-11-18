@@ -74,6 +74,105 @@ public class MemberService {
         return member;
     }
     
+    public MemberLoginInfo loginWithKakao(
+            String kakaoId, String nickname, String kakaoEmail)
+            throws Exception {
+
+        if (kakaoId == null || kakaoId.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "카카오 회원 번호를 받지 못했습니다."
+            );
+        }
+
+        String email = kakaoEmail == null
+                ? ""
+                : kakaoEmail.trim().toLowerCase(Locale.ROOT);
+
+        if (email.isEmpty()
+                || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new IllegalArgumentException(
+                    "카카오 이메일 제공 동의가 필요합니다. 카카오 동의항목에서 이메일을 허용해 주세요."
+            );
+        }
+
+        MemberLoginInfo kakaoMember =
+                memberDAO.findBySocialAccount("KAKAO", kakaoId);
+
+        MemberLoginInfo emailOwner = memberDAO.findByEmail(email);
+
+        if (kakaoMember != null) {
+            if (emailOwner != null
+                    && !emailOwner.getMemberId().equals(kakaoMember.getMemberId())) {
+
+                if (!"ACTIVE".equalsIgnoreCase(emailOwner.getStatus())) {
+                    throw new IllegalArgumentException(
+                            "사용할 수 없는 회원 계정의 이메일입니다."
+                    );
+                }
+
+                memberDAO.updateKakaoMemberLink(
+                        kakaoId,
+                        emailOwner.getMemberId()
+                );
+
+                return emailOwner;
+            }
+
+            if (!email.equalsIgnoreCase(kakaoMember.getEmail())) {
+                memberDAO.updateEmailByMemberId(
+                        kakaoMember.getMemberId(),
+                        email
+                );
+            }
+
+            return new MemberLoginInfo(
+                    kakaoMember.getMemberId(),
+                    email,
+                    kakaoMember.getPasswordHash(),
+                    kakaoMember.getName(),
+                    kakaoMember.getRole(),
+                    kakaoMember.getStatus()
+            );
+        }
+
+        if (emailOwner != null) {
+            if (!"ACTIVE".equalsIgnoreCase(emailOwner.getStatus())) {
+                throw new IllegalArgumentException(
+                        "사용할 수 없는 회원 계정의 이메일입니다."
+                );
+            }
+
+            memberDAO.insertKakaoMemberLink(
+                    kakaoId,
+                    emailOwner.getMemberId()
+            );
+
+            return emailOwner;
+        }
+
+
+        String name = nickname == null || nickname.trim().isEmpty()
+                ? "카카오 회원"
+                : nickname.trim();
+
+        if (name.length() > 100) {
+            name = name.substring(0, 100);
+        }
+
+        String memberId = UUID.randomUUID().toString();
+        String temporaryPassword =
+                UUID.randomUUID().toString() + UUID.randomUUID().toString();
+        String passwordHash = hashPassword(temporaryPassword);
+
+        return memberDAO.createKakaoMember(
+                memberId,
+                kakaoId,
+                email,
+                passwordHash,
+                name
+        );
+    }
+    
     public String findEmail(String name, String phone) throws Exception {
         name = name == null ? "" : name.trim();
         phone = phone == null ? "" : phone.trim();

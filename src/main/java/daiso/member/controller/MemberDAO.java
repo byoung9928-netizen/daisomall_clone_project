@@ -87,6 +87,156 @@ public class MemberDAO {
             }
         }
     }
+    
+    public void updateEmailByMemberId(String memberId, String email)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE members SET email = ? " +
+                "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, email);
+            statement.setString(2, memberId);
+
+            if (statement.executeUpdate() == 0) {
+                throw new SQLException("회원 이메일을 변경하지 못했습니다.");
+            }
+        }
+    }
+    
+    public MemberLoginInfo findBySocialAccount(
+            String provider, String providerUserId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT m.member_id, m.email, m.password_hash, " +
+                "m.name, m.role, m.status " +
+                "FROM members m " +
+                "JOIN member_social_accounts s " +
+                "ON m.member_id = s.member_id " +
+                "WHERE s.provider = ? " +
+                "AND s.provider_user_id = ? " +
+                "AND m.status = 'ACTIVE' " +
+                "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement =
+                     connection.prepareStatement(sql)) {
+
+            statement.setString(1, provider);
+            statement.setString(2, providerUserId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new MemberLoginInfo(
+                        result.getString("member_id"),
+                        result.getString("email"),
+                        result.getString("password_hash"),
+                        result.getString("name"),
+                        result.getString("role"),
+                        result.getString("status")
+                );
+            }
+        }
+    }
+    
+    public void updateKakaoMemberLink(String kakaoId, String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE member_social_accounts SET member_id = ? " +
+                "WHERE provider = 'KAKAO' AND provider_user_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+            statement.setString(2, kakaoId);
+
+            if (statement.executeUpdate() == 0) {
+                throw new SQLException("기존 카카오 연결을 변경하지 못했습니다.");
+            }
+        }
+    }
+
+    public void insertKakaoMemberLink(String kakaoId, String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "INSERT INTO member_social_accounts " +
+                "(provider, provider_user_id, member_id) " +
+                "VALUES ('KAKAO', ?, ?)";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, kakaoId);
+            statement.setString(2, memberId);
+            statement.executeUpdate();
+        }
+    }
+
+    public MemberLoginInfo createKakaoMember(
+            String memberId,
+            String kakaoId,
+            String email,
+            String passwordHash,
+            String name)
+            throws NamingException, SQLException {
+
+        String memberSql =
+                "INSERT INTO members " +
+                "(member_id, email, password_hash, name, phone) " +
+                "VALUES (?, ?, ?, ?, NULL)";
+
+        String socialSql =
+                "INSERT INTO member_social_accounts " +
+                "(provider, provider_user_id, member_id) " +
+                "VALUES ('KAKAO', ?, ?)";
+
+        try (Connection connection = getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement memberStatement =
+                             connection.prepareStatement(memberSql)) {
+                    memberStatement.setString(1, memberId);
+                    memberStatement.setString(2, email);
+                    memberStatement.setString(3, passwordHash);
+                    memberStatement.setString(4, name);
+                    memberStatement.executeUpdate();
+                }
+
+                try (PreparedStatement socialStatement =
+                             connection.prepareStatement(socialSql)) {
+                    socialStatement.setString(1, kakaoId);
+                    socialStatement.setString(2, memberId);
+                    socialStatement.executeUpdate();
+                }
+
+                connection.commit();
+
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+
+        return new MemberLoginInfo(
+                memberId,
+                email,
+                passwordHash,
+                name,
+                "MEMBER",
+                "ACTIVE"
+        );
+    }
 
     public boolean updatePasswordByVerifiedInfo(
             String email, String name, String phone, String passwordHash)

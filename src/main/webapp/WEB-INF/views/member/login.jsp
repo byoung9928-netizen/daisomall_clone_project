@@ -44,23 +44,7 @@
                 <button type="submit" class="button primary">
                     로그인
                 </button>
-            </form>
-<div class="social-login">
-    <p>SNS 간편 로그인</p>
-
-    <div class="social-login-buttons">
-        <button type="button"
-                id="kakao-login-btn"
-                class="social-login-button kakao"
-                aria-label="카카오 로그인"
-                title="카카오 로그인">
-            <svg viewBox="0 0 48 48" aria-hidden="true">
-                <path d="M24 7C12.4 7 3 14.5 3 23.7c0 5.8 3.9 10.9 9.8 13.8l-2.4 7.2c-.2.5.4.9.9.6l8.8-5.1c1.3.2 2.6.3 3.9.3 11.6 0 21-7.5 21-16.8S35.6 7 24 7z"
-                      fill="#191919"/>
-            </svg>
-        </button>
-    </div>
-</div>            
+            </form>            
          		<div class="member-links">
     				<a class="text-button"
        					href="${pageContext.request.contextPath}/app/member/signup">
@@ -80,6 +64,22 @@
     			비밀번호 찾기
 				</a>
 				</div>
+				<div class="social-login">
+    <p>SNS 간편 로그인</p>
+
+    <div class="social-login-buttons">
+        <button type="button"
+                id="kakao-login-btn"
+                class="social-login-button kakao"
+                aria-label="카카오 로그인"
+                title="카카오 로그인">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M24 7C12.4 7 3 14.5 3 23.7c0 5.8 3.9 10.9 9.8 13.8l-2.4 7.2c-.2.5.4.9.9.6l8.8-5.1c1.3.2 2.6.3 3.9.3 11.6 0 21-7.5 21-16.8S35.6 7 24 7z"
+                      fill="#191919"/>
+            </svg>
+        </button>
+    </div>
+</div>
 				<button type="button" id="adminDemoLogin"
         class="button secondary"
         style="width: 100%; margin-top: 20px;">
@@ -146,9 +146,10 @@ document.addEventListener("DOMContentLoaded", function () {
     Kakao.init('4283b243159f2b259f575f88bcf68632');
 
     document.getElementById("kakao-login-btn").addEventListener("click", function () {
-        Kakao.Auth.authorize({
-            redirectUri: "http://localhost:8080/daisomall/app/member/oauth/kakao/callback"
-        });
+    	Kakao.Auth.authorize({
+    	    redirectUri: "http://localhost:8080/daisomall/app/member/oauth/kakao/callback",
+    	    scope: "account_email"
+    	});
     });
 </script>
 </body>
