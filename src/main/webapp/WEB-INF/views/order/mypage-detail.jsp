@@ -1889,16 +1889,54 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					</h1>
 					<span class="my-order-number">주문번호 <%=ProductView.escape(myOrder.get("orderNo"))%></span>
 				</div>
-				<section class="my-status-panel" aria-label="주문 처리 상태">
-					<h2>결제완료</h2>
-					<ol class="my-status-steps">
-						<li aria-current="step">결제완료</li>
-						<li>상품준비중</li>
-						<li>배송준비중</li>
-						<li>배송중</li>
-						<li>배송완료</li>
-					</ol>
-				</section>
+				<%
+					    // DB에서 조회한 주문 상태
+					    String myStatus = String.valueOf(myOrder.get("status"));
+					    String myStatusLabel =
+					        String.valueOf(myOrder.get("statusLabel"));
+					
+					    // 현재 주문 단계. 결제 대기·취소·실패는 진행 단계가 없음
+					    int myCurrentStep = -1;
+					
+					    if ("PAID".equals(myStatus)) {
+					        myCurrentStep = 0;
+					    } else if ("PREPARING".equals(myStatus)) {
+					        myCurrentStep = 1;
+					    } else if ("SHIPPED".equals(myStatus)) {
+					        myCurrentStep = 3;
+					    } else if ("DELIVERED".equals(myStatus)) {
+					        myCurrentStep = 4;
+					    }
+					%>
+					
+					<section class="my-status-panel" aria-label="주문 처리 상태">
+					    <h2><%= ProductView.escape(myStatusLabel) %></h2>
+					
+					    <% if (myCurrentStep >= 0) { %>
+					        <ol class="my-status-steps">
+					            <li <%= myCurrentStep == 0
+					                ? "aria-current=\"step\"" : "" %>>
+					                결제완료
+					            </li>
+					            <li <%= myCurrentStep == 1
+					                ? "aria-current=\"step\"" : "" %>>
+					                상품준비중
+					            </li>
+					            <li <%= myCurrentStep == 2
+					                ? "aria-current=\"step\"" : "" %>>
+					                배송준비중
+					            </li>
+					            <li <%= myCurrentStep == 3
+					                ? "aria-current=\"step\"" : "" %>>
+					                배송중
+					            </li>
+					            <li <%= myCurrentStep == 4
+					                ? "aria-current=\"step\"" : "" %>>
+					                배송완료
+					            </li>
+					        </ol>
+					    <% } %>
+					</section>
 				<%
 				for (CartBean item : myItems) {
 					String myImage = item.getImageUrl();
@@ -1923,8 +1961,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				}
 				%>
 				<div class="my-order-actions">
-					<button class="my-outline-button" type="button" disabled
-						title="주문 취소 API 연결이 필요합니다">주문취소</button>
+					<a class="my-outline-button" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;" href="<%= myContext %>/app/order/cancel/form?orderNo=<%= java.net.URLEncoder.encode((String) myOrder.get("orderNo"), "UTF-8") %>">주문취소</a>
 					<button class="my-outline-button" type="button" data-my-unavailable>문의하기</button>
 				</div>
 				<section class="my-section" aria-labelledby="my-delivery-title">
@@ -1989,7 +2026,42 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 								<td class="money"><%=myMoney.format(myOrder.get("shipping"))%>원</td>
 							</tr>
 							<tr class="tinted">
-								<th scope="row">카카오페이<span class="my-payment-label">결제완료</span></th>
+								<%
+								    // DB의 결제 상태를 화면에 표시할 문구로 변환
+								    String myPaymentStatus =
+								        String.valueOf(myOrder.get("paymentStatus"));
+								
+								    String myPaymentLabel;
+								
+								    switch (myPaymentStatus) {
+								        case "APPROVED":
+								            myPaymentLabel = "결제완료";
+								            break;
+								
+								        case "PENDING":
+								            myPaymentLabel = "결제대기";
+								            break;
+								
+								        case "CANCELLED":
+								            myPaymentLabel = "취소완료";
+								            break;
+								
+								        case "FAILED":
+								            myPaymentLabel = "결제실패";
+								            break;
+								
+								        default:
+								            myPaymentLabel = "결제 상태 확인 필요";
+								            break;
+								    }
+								%>
+								
+								<th scope="row">
+								    카카오페이
+								    <span class="my-payment-label">
+								        <%= ProductView.escape(myPaymentLabel) %>
+								    </span>
+								</th>
 								<td class="money"><%=myMoney.format(myOrder.get("total"))%>원</td>
 							</tr>
 							<tr>

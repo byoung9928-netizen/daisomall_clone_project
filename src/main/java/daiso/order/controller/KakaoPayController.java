@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
@@ -20,6 +22,8 @@ import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.common.annotation.DaisoResponseBody;
 import daiso.order.payment.kakaoPayClient;
+import daiso.order.db.OrderBean;
+import daiso.order.db.OrderDAO;
 
 @DaisoController
 public class KakaoPayController {
@@ -128,7 +132,39 @@ public class KakaoPayController {
                 "http://localhost:8080"
                 + request.getContextPath()
                 + "/app/payment/kakao";
+            
+         // 세션에 저장된 배송지 가져오기
+            Map<String, String> address = new HashMap<>(
+                (Map<String, String>)
+                session.getAttribute("orderDeliveryAddress")
+            );
 
+            // DAO에 전달할 주문정보 구성
+            OrderBean order = new OrderBean();
+
+            order.setOrderNo(orderNo);
+            order.setMemberId(memberId);
+            order.setCheckoutToken(orderNo);
+
+            order.setRecipient(address.get("recipient"));
+            order.setPhone(address.get("phone"));
+            order.setPostcode(address.get("postcode"));
+            order.setAddress1(address.get("address1"));
+            order.setAddress2(address.get("address2"));
+
+            order.setDeliveryMessage(
+                (String) session.getAttribute("orderDeliveryMessage")
+            );
+
+            order.setSubtotalAmount(Math.toIntExact(subtotal));
+            order.setShippingFee(Math.toIntExact(shipping));
+            order.setTotalAmount(totalAmount);
+            order.setItems(items);
+
+            // orders·order_items에 결제 대기 상태로 저장
+            OrderDAO orderDAO = new OrderDAO();
+            long orderId = orderDAO.createOrder(order);
+            
             kakaoPayClient client = new kakaoPayClient();
 
             JsonObject result = client.ready(
@@ -141,9 +177,12 @@ public class KakaoPayController {
                 baseUrl + "/cancel?orderNo=" + orderNo,
                 baseUrl + "/fail?orderNo=" + orderNo
             );
+            //카카오 페이 결제번호와 결제 대기정보를 db에 저장
+            orderDAO.savePaymentReady(orderId,result.get("tid").getAsString(), totalAmount);
 
             // 승인 단계에서 다시 사용할 정보를 서버에 보관
             Map<String, Object> pending = new HashMap<>();
+            pending.put("orderId", orderId);
 
             pending.put("orderNo", orderNo);
             pending.put("memberId", memberId);
@@ -277,7 +316,26 @@ public class KakaoPayController {
                 && ((Integer) pending.get("totalAmount")).intValue()
                     == result.getAsJsonObject("amount")
                         .get("total").getAsInt();
-
+            //카카오 승인 응답과 주문정보가 일치할 때만 db 반영
+            if(matches) {
+            	Object savedOrderId = pending.get("orderId");
+            	
+            	if(!(savedOrderId instanceof Number)) {
+            		throw new IllegalStateException(
+            				"DB 주문번호가 없습니다."
+            				);
+            	}
+            	long orderId = ((Number) savedOrderId).longValue();
+            	int approvedAmount = result.getAsJsonObject("amount").get("total").getAsInt();
+            	
+            	Timestamp approvedAt=Timestamp.valueOf(
+            			LocalDateTime.parse(result.get("approved_at").getAsString()
+            					)
+            			);
+            	OrderDAO orderDAO= new OrderDAO();
+            	
+            	orderDAO.approvePayment(memberId,orderId,tid,approvedAmount,approvedAt);
+            }
             synchronized (pending) {
                 pending.put("status",
                     matches ? "APPROVED" : "CHECK_REQUIRED");
