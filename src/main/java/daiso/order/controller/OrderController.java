@@ -112,6 +112,46 @@ public class OrderController {
         session.setAttribute("orderDeliveryAddress", address);
         return "OK";
     }
+    
+    @daiso.common.annotation.DaisoPostMapping("/order/pickup-store")
+    @daiso.common.annotation.DaisoResponseBody
+    public String savePickupStore(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+
+        request.setCharacterEncoding("UTF-8");
+
+        javax.servlet.http.HttpSession session =
+                request.getSession(false);
+
+        if (session == null
+                || !(session.getAttribute("member_id") instanceof String)
+                || ((String) session.getAttribute("member_id")).isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+
+        Object csrf = session.getAttribute("orderCsrf");
+        if (!(csrf instanceof String)
+                || !csrf.equals(request.getParameter("csrfToken"))) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
+        }
+
+        String storeId = request.getParameter("storeId");
+        if (!"sindaebang".equals(storeId)) {
+            return "픽업매장을 선택해 주세요.";
+        }
+
+        java.util.Map<String, String> pickupStore =
+                new java.util.LinkedHashMap<>();
+        pickupStore.put("storeId", "sindaebang");
+        pickupStore.put("storeName", "신대방점");
+        pickupStore.put(
+                "address",
+                "서울특별시 동작구 여의대방로 122 (신대방동)"
+        );
+
+        session.setAttribute("orderPickupStore", pickupStore);
+        return "OK";
+    }
 
     @daiso.common.annotation.DaisoPostMapping("/order/delivery-message")
     @daiso.common.annotation.DaisoResponseBody
