@@ -174,7 +174,7 @@ public class KakaoPayController {
             request.setAttribute("paymentMessage",
                 "결제 승인 정보를 확인할 수 없습니다.");
 
-            return "order/payment-result";
+            return paymentResult(request);
         }
 
         Object value =
@@ -184,7 +184,7 @@ public class KakaoPayController {
             request.setAttribute("paymentMessage",
                 "결제 준비 정보를 찾을 수 없습니다.");
 
-            return "order/payment-result";
+            return paymentResult(request);
         }
 
         Map<String, Object> pending = (Map<String, Object>) value;
@@ -194,7 +194,7 @@ public class KakaoPayController {
                 request.setAttribute("paymentMessage",
                     "본인의 결제만 처리할 수 있습니다.");
 
-                return "order/payment-result";
+                return paymentResult(request);
             }
 
             // 새로고침 등으로 같은 승인을 다시 요청하지 않도록 확인
@@ -204,7 +204,7 @@ public class KakaoPayController {
                         ? "이미 모의결제 승인이 완료된 건입니다."
                         : "이미 처리 중이거나 결과 확인이 필요한 결제입니다.");
 
-                return "order/payment-result";
+                return paymentResult(request);
             }
 
             pending.put("status", "APPROVING");
@@ -272,7 +272,7 @@ public class KakaoPayController {
                 + "같은 결제를 다시 진행하지 마세요.");
         }
 
-        return "order/payment-result";
+        return paymentResult(request);
     }
     @DaisoGetMapping("/payment/kakao/cancel")
     public String cancel(HttpServletRequest request) {
@@ -307,7 +307,7 @@ public class KakaoPayController {
                 "결제 준비 정보를 찾을 수 없습니다."
             );
 
-            return "order/payment-result";
+            return paymentResult(request);
         }
 
         Map<String, Object> pending = (Map<String, Object>) value;
@@ -338,6 +338,57 @@ public class KakaoPayController {
             }
         }
 
+        return paymentResult(request);
+    }
+    // 결과 화면에 표시할 값만 준비합니다. 결제 승인이나 DB 저장을 다시 실행하지 않습니다.
+    private String paymentResult(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        String orderNo = request.getParameter("orderNo");
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+        Object stored = session == null || orderNo == null ? null
+            : session.getAttribute("kakaoPending:" + orderNo);
+
+        if (stored instanceof Map && memberId instanceof String) {
+            Map<String, Object> pending = (Map<String, Object>) stored;
+            synchronized (pending) {
+                if (memberId.equals(pending.get("memberId"))
+                        && "APPROVED".equals(pending.get("status"))) {
+                    try {
+                        JsonObject approval = com.google.gson.JsonParser.parseString(
+                            (String) pending.get("approvalResult")
+                        ).getAsJsonObject();
+                        List<CartBean> items = (List<CartBean>) pending.get("items");
+                        long subtotal = 0;
+                        for (CartBean item : items) subtotal += item.getItemTotal();
+                        long total = ((Number) pending.get("totalAmount")).longValue();
+                        Map<String, Object> completed = new HashMap<>();
+                        completed.put("orderNo", pending.get("orderNo"));
+                        completed.put("items", items);
+                        completed.put("address", pending.get("deliveryAddress"));
+                        completed.put("message", pending.get("deliveryMessage"));
+                        completed.put("subtotal", subtotal);
+                        completed.put("shipping", total - subtotal);
+                        completed.put("total", total);
+                        completed.put("paymentMethod", "카카오페이");
+                        String paidAt = approval.has("approved_at")
+                            ? approval.get("approved_at").getAsString() : "";
+                        try {
+                            paidAt = java.time.LocalDateTime.parse(paidAt).format(
+                                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                            );
+                        } catch (java.time.format.DateTimeParseException ignored) {
+                            // 원본 승인 시각을 표시합니다.
+                        }
+                        completed.put("paidAt", paidAt);
+                        request.setAttribute("completedOrder", completed);
+                    } catch (RuntimeException e) {
+                        request.setAttribute("paymentMessage",
+                            "모의결제는 승인되었지만 상세 정보를 표시하지 못했습니다. 같은 결제를 다시 진행하지 마세요.");
+                    }
+                }
+            }
+        }
         return "order/payment-result";
     }
+
 }
