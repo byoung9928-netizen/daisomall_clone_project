@@ -135,6 +135,63 @@ public class MemberDAO {
         }
     }
     
+    public MemberProfileInfo findProfileByMemberId(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT login_id, email, name, phone, birth_date, gender " +
+                "FROM members " +
+                "WHERE member_id = ? AND status = 'ACTIVE' " +
+                "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new MemberProfileInfo(
+                        result.getString("login_id"),
+                        result.getString("email"),
+                        result.getString("name"),
+                        result.getString("phone"),
+                        result.getDate("birth_date"),
+                        result.getString("gender")
+                );
+            }
+        }
+    }
+    
+    public boolean updateBasicProfileByMemberId(
+            String memberId,
+            String name,
+            String phone,
+            java.sql.Date birthDate,
+            String gender)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE members " +
+                "SET name = ?, phone = ?, birth_date = ?, gender = ? " +
+                "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, name);
+            statement.setString(2, phone);
+            statement.setDate(3, birthDate);
+            statement.setString(4, gender);
+            statement.setString(5, memberId);
+
+            return statement.executeUpdate() == 1;
+        }
+    }
+    
     public void updateEmailByMemberId(String memberId, String email)
             throws NamingException, SQLException {
 
