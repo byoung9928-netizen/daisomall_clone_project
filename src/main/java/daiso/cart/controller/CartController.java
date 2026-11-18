@@ -53,37 +53,44 @@ public class CartController {
 	@DaisoPostMapping("/cart/add")
 	@DaisoResponseBody
 	public String cartAdd(HttpServletRequest request) {
+		//로그인한 회원 확인
 	    HttpSession session = request.getSession(false);
 
 	    String memberId = session == null
 	        ? null : (String) session.getAttribute("member_id");
-
+	    //회원번호가 없으면 저장없이 안내 반환
 	    if (memberId == null || memberId.isBlank()) {
 	        return "로그인 후 이용해 주세요.";
 	    }
-
+	    //폼에서 name="productId"로 보낸 상품 번호를 문자열로 꺼냄
 	    String productId = request.getParameter("productId");
-
+	    //상품 번호가 없거나 공백이면 저장하지않고 안내를 반환
 	    if (productId == null || productId.isBlank()) {
 	        return "상품 번호가 필요합니다.";
 	    }
 
 	    try {
+	    	//name-"quantity"로 받은 문자열을 정수로 변환
 	        int quantity =
 	            Integer.parseInt(request.getParameter("quantity"));
-
+	        //db작업을 담당하는 db객체 생성
 	        CartDAO dao = new CartDAO();
+	        //로그인 회원번호 상품번호 수량을 전달해 db저장 요청
+	        //판매상태 재고 수량제한은 dao에서 확인
 	        dao.addCart(memberId, productId, quantity);
-
+	        
+	        
 	        return "OK";
 
 	    } catch (NumberFormatException e) {
 	        return "수량은 정수로 입력해 주세요.";
 
 	    } catch (IllegalArgumentException e) {
+	    	//dao에서 수량 재고 판매 상태등 장바구니에 담을수 없는 문제가 발생했을 때
 	        return e.getMessage();
 
 	    } catch (SQLException e) {
+	    	//db작업 중 오류가 발생했을 때 서버 콘솔에 원인 출력
 	        e.printStackTrace();
 	        return "장바구니 저장에 실패했습니다.";
 	    }

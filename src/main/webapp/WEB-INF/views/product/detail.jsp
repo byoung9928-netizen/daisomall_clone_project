@@ -47,7 +47,8 @@
                         <input type="hidden" name="productId" value="<%= ProductView.escape(product.getProductId()) %>">
                     <label class="field">
                         수량
-                        <input type="number" name="quantity" min="1" max="<%= Math.max(1, Math.min(99, product.getStockQuantity())) %>" value="1" <%= ProductView.available(product) ? "" : "disabled" %>>
+                        <input type="number" name="quantity" min="1" max="<%= Math.max(1, Math.min(99, product.getStockQuantity())) %>" 
+                        		value="1" <%= ProductView.available(product) ? "" : "disabled" %>>
                     </label>
                     <p class="detail-total">합계 <%= ProductView.money(product.getPrice()) %></p>
                     <!-- 담기 버튼을 누르면 submit 이벤트가 발생 -->
@@ -92,6 +93,7 @@
         });
         const cartForm = document.getElementById("cartAddForm");
         const cartButton = cartForm.querySelector('[type="submit"]');
+        //장바구니 담기 버튼을 눌렀을때 submit을 아래 javaScript가 받음
         cartForm.addEventListener("submit", async function (event) {
             event.preventDefault();
             if (cartButton.disabled) return;
