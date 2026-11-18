@@ -56,22 +56,26 @@
  		 	}
  		 	return cartList;
  	 }
+ 	 //2. CartController cartAdd에서 addCart로 넘어옴
  	 public boolean addCart(String memberId,String productId, int quantity) throws SQLException{
- 		 	
+ 		 	//수량이 1~99개 범위를 벗어나면 저장 중단
  		 	if(quantity <1 || quantity >99) {
  		 		throw new IllegalArgumentException(
  		 				"수량은 1~99개여야 합니다."
  		 				);
  		 	}
- 		 	
+ 		 	//db 연결을 가져옴
+ 		 	//try가 끝나면 연결은 자동으로 닫힘
  		 	try(Connection con =ds.getConnection()){
- 		 		
+ 		 		//db연결의 자동저장설정을 기억해두는 코드
  		 		boolean originalAutoCommit = con.getAutoCommit();
+ 		 		//db데이터를 변경할 수 있도록 읽기 전용으로 해제
  		 		con.setReadOnly(false);
+ 		 		//sql마다 바로 확정하지않고, 나중에 commit()또는 rollback()으로 처리하도록 설정
  		 		con.setAutoCommit(false);
  		 		
  		 		try {
- 		 			//1. 상품판매와 상태와 재고 확인
+ 		 			//- 상품판매와 상태와 재고 확인
  		 			String productSql=
  		 					"SELECT status, stock_quantity "
  		 						+ "FROM products "
@@ -97,7 +101,7 @@
  		 				
  		 				}
  		 			}
- 		 			//2. 이미 장바구니에 담긴 수량 확인
+ 		 			//- 이미 장바구니에 담긴 수량 확인
  		 			String cartSql = 
  		 					"SELECT quantity FROM cart_items "
  		 					+"WHERE member_id = ? "
@@ -117,7 +121,7 @@
  		 					}
  		 				}
  		 			}
- 		 		// 3. 합산할 수량 확인
+ 		 		// - 합산할 수량 확인
  		            long totalQuantity =
  		                (long) currentQuantity + quantity;
 
@@ -133,7 +137,7 @@
  		                );
  		            }
 
- 		            // 4. 새 항목 추가 또는 기존 수량 합산
+ 		            // - 새 항목 추가 또는 기존 수량 합산
  		            String sql =
  		                "INSERT INTO cart_items "
  		                + "(member_id, product_id, quantity) "
