@@ -36,6 +36,21 @@ public class MemberDAO {
         }
     }
     
+    public boolean existsByLoginId(String loginId)
+            throws NamingException, SQLException {
+        String sql = "SELECT 1 FROM members WHERE login_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, loginId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
+    }
+    
     public String findEmailByNameAndPhone(String name, String phone)
             throws NamingException, SQLException {
         String sql =
@@ -70,6 +85,38 @@ public class MemberDAO {
                      connection.prepareStatement(sql)) {
 
             statement.setString(1, email);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new MemberLoginInfo(
+                        result.getString("member_id"),
+                        result.getString("email"),
+                        result.getString("password_hash"),
+                        result.getString("name"),
+                        result.getString("role"),
+                        result.getString("status")
+                );
+            }
+        }
+    }
+    
+    public MemberLoginInfo findByLoginIdOrEmail(String value)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT member_id, email, password_hash, name, role, status " +
+                "FROM members " +
+                "WHERE login_id = ? OR email = ? " +
+                "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, value);
+            statement.setString(2, value);
 
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
@@ -190,10 +237,13 @@ public class MemberDAO {
             String name)
             throws NamingException, SQLException {
 
+        String kakaoLoginId =
+                "kakao_" + memberId.replace("-", "");
+
         String memberSql =
                 "INSERT INTO members " +
-                "(member_id, email, password_hash, name, phone) " +
-                "VALUES (?, ?, ?, ?, NULL)";
+                "(member_id, login_id, email, password_hash, name, phone) " +
+                "VALUES (?, ?, ?, ?, ?, NULL)";
 
         String socialSql =
                 "INSERT INTO member_social_accounts " +
@@ -207,9 +257,10 @@ public class MemberDAO {
                 try (PreparedStatement memberStatement =
                              connection.prepareStatement(memberSql)) {
                     memberStatement.setString(1, memberId);
-                    memberStatement.setString(2, email);
-                    memberStatement.setString(3, passwordHash);
-                    memberStatement.setString(4, name);
+                    memberStatement.setString(2, kakaoLoginId);
+                    memberStatement.setString(3, email);
+                    memberStatement.setString(4, passwordHash);
+                    memberStatement.setString(5, name);
                     memberStatement.executeUpdate();
                 }
 
@@ -237,7 +288,6 @@ public class MemberDAO {
                 "ACTIVE"
         );
     }
-
     public boolean updatePasswordByVerifiedInfo(
             String email, String name, String phone, String passwordHash)
             throws NamingException, SQLException {
@@ -338,6 +388,44 @@ public class MemberDAO {
              PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setString(1, memberId);
+            statement.executeUpdate();
+        }
+    }
+    
+    public void insertWithProfile(
+            String memberId,
+            String loginId,
+            String email,
+            String passwordHash,
+            String name,
+            String phone,
+            java.sql.Date birthDate,
+            String gender)
+            throws NamingException, SQLException {
+
+        String sql =
+                "INSERT INTO members " +
+                "(member_id, login_id, email, password_hash, name, " +
+                "phone, birth_date, gender) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+            statement.setString(2, loginId);
+            statement.setString(3, email);
+            statement.setString(4, passwordHash);
+            statement.setString(5, name);
+            statement.setString(6, phone);
+            statement.setDate(7, birthDate);
+
+            if (gender == null || gender.isEmpty()) {
+                statement.setNull(8, java.sql.Types.VARCHAR);
+            } else {
+                statement.setString(8, gender);
+            }
+
             statement.executeUpdate();
         }
     }

@@ -25,12 +25,25 @@ public class UserController {
         try {
             request.setCharacterEncoding("UTF-8");
 
+            String loginId = request.getParameter("loginId");
             String email = request.getParameter("email");
             String password = request.getParameter("password");
+            String confirmPassword = request.getParameter("confirmPassword");
             String name = request.getParameter("name");
             String phone = request.getParameter("phone");
+            String birthDate = request.getParameter("birthDate");
+            String gender = request.getParameter("gender");
 
-            memberService.register(email, password, name, phone);
+            memberService.register(
+                    loginId,
+                    email,
+                    password,
+                    confirmPassword,
+                    name,
+                    phone,
+                    birthDate,
+                    gender
+            );
 
             return "redirect:/member/login?signup=success";
 
@@ -62,10 +75,11 @@ public class UserController {
         try {
             request.setCharacterEncoding("UTF-8");
 
-            String email = request.getParameter("email");
+            String loginIdOrEmail = request.getParameter("loginId");
             String password = request.getParameter("password");
 
-            MemberLoginInfo member = memberService.login(email, password);
+            MemberLoginInfo member =
+                    memberService.login(loginIdOrEmail, password);
 
             HttpSession session = request.getSession();
             request.changeSessionId();

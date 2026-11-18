@@ -17,31 +17,69 @@
             <p class="source-note">
                 학습용 회원가입 화면입니다. 입력한 정보는 프로젝트 데이터베이스에 저장됩니다.
             </p>
-            <form id="signupForm" class="member-form" method="post" action="${pageContext.request.contextPath}/app/member/signup">
-                <label class="field">
-                    이메일
-                    <input name="email" type="email" required maxlength="120" autocomplete="email">
-                </label>
-                <label class="field">
-                    비밀번호 (4자 이상)
-                    <input name="password" type="password" required minlength="4" maxlength="120" autocomplete="new-password">
-                </label>
-                <label class="field">
-                    이름
-                    <input name="name" type="text" required maxlength="50" autocomplete="name">
-                </label>
-                <label class="field">
-                    전화번호 (예: 010-0000-0000)
-                    <input name="phone" type="tel" required maxlength="120" autocomplete="tel">
-                </label>
-                <p class="error-message" role="alert">${signupError}
-                </p>
-                <p class="form-status" role="status">
-                </p>
-                <button type="submit" class="button primary">
-                    회원가입
-                </button>
-            </form>
+            <form id="signupForm" class="member-form" method="post"
+      action="${pageContext.request.contextPath}/app/member/signup">
+
+    <label class="field">
+    <span>이름 <span class="required-mark">*</span></span>
+    <input name="name" type="text" required maxlength="100">
+</label>
+
+    <label class="field">
+      <span>  휴대폰 <span class="required-mark">*</span></span>
+        <input name="phone" type="tel" required maxlength="30"
+               autocomplete="tel" placeholder="휴대폰 번호를 입력해 주세요">
+    </label>
+
+    <label class="field">
+      <span>생년월일 <span class="required-mark">*</span></span>
+        <input name="birthDate" type="text"
+       required minlength="8" maxlength="8"
+       inputmode="numeric" pattern="[0-9]{8}"
+       placeholder="생년월일 8자리 (예: 19970318)"
+       autocomplete="bday">
+    </label>
+
+    <label class="field">
+        성별 (선택)
+        <select name="gender">
+            <option value="">선택 안 함</option>
+            <option value="MALE">남자</option>
+            <option value="FEMALE">여자</option>
+        </select>
+    </label>
+
+    <label class="field">
+     <span>   아이디 <span class="required-mark">*</span></span>
+        <input name="loginId" type="text" required minlength="4"
+               maxlength="50" autocomplete="username"
+               placeholder="아이디를 입력해 주세요">
+    </label>
+
+    <label class="field">
+       <span> 비밀번호 (8~16자) <span class="required-mark">*</span></span>
+        <input name="password" type="password" required minlength="8"
+               maxlength="16" autocomplete="new-password">
+    </label>
+
+    <label class="field">
+      <span>  비밀번호 확인 <span class="required-mark">*</span></span>
+        <input name="confirmPassword" type="password" required minlength="8"
+               maxlength="16" autocomplete="new-password">
+    </label>
+
+    <label class="field">
+       <span> 이메일 <span class="required-mark">*</span></span>
+        <input name="email" type="email" required maxlength="120"
+               autocomplete="email" placeholder="이메일을 입력해 주세요">
+    </label>
+
+    <p class="error-message" role="alert">${signupError}</p>
+
+    <button type="submit" class="button primary">
+        회원가입
+    </button>
+</form>
         </section>
     </main>
     <%@ include file="../common/footer.jspf" %>

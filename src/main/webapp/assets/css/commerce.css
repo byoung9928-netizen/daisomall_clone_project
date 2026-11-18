@@ -663,4 +663,8 @@ input, select, textarea {
     outline: 3px solid #191919;
     outline-offset: 3px;
 }
-
+.required-mark {
+    color: #e60012;
+    font-weight: 700;
+    margin-left: 2px;
+}

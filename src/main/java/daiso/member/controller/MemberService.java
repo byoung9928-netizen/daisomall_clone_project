@@ -4,11 +4,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
+
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
@@ -20,23 +23,84 @@ public class MemberService {
 
     private final MemberDAO memberDAO = new MemberDAO();
 
-    public void register(String email, String password,
-                        String name, String phone) throws Exception {
+    public void register(
+            String loginId,
+            String email,
+            String password,
+            String confirmPassword,
+            String name,
+            String phone,
+            String birthDateText,
+            String gender) throws Exception {
+
+        loginId = loginId == null ? "" : loginId.trim().toLowerCase(Locale.ROOT);
         email = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
         name = name == null ? "" : name.trim();
         phone = phone == null ? "" : phone.trim();
+        birthDateText = birthDateText == null ? "" : birthDateText.trim();
+        gender = gender == null ? "" : gender.trim();
 
-        if (email.isEmpty() || password == null || password.isEmpty()
-                || name.isEmpty() || phone.isEmpty()) {
-            throw new IllegalArgumentException("모든 항목을 입력해 주세요.");
+        if (loginId.isEmpty() || email.isEmpty() || password == null
+                || name.isEmpty() || phone.isEmpty() || birthDateText.isEmpty()) {
+            throw new IllegalArgumentException("필수 항목을 모두 입력해 주세요.");
+        }
+
+        if (!loginId.matches("^[a-z0-9._-]{4,50}$")) {
+            throw new IllegalArgumentException(
+                    "아이디는 영문 소문자, 숫자, 점, 밑줄, 하이픈으로 4~50자 입력해 주세요."
+            );
         }
 
         if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
             throw new IllegalArgumentException("이메일 형식을 확인해 주세요.");
         }
 
-        if (password.length() < 4) {
-            throw new IllegalArgumentException("비밀번호는 4자 이상 입력해 주세요.");
+        if (password.length() < 8 || password.length() > 16
+                || !password.matches("(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*")) {
+            throw new IllegalArgumentException(
+                    "비밀번호는 영문, 숫자, 특수문자를 포함해 8~16자로 입력해 주세요."
+            );
+        }
+
+        if (!password.equals(confirmPassword)) {
+            throw new IllegalArgumentException(
+                    "비밀번호와 비밀번호 확인이 일치하지 않습니다."
+            );
+        }
+
+        String phoneDigits = phone.replaceAll("\\D", "");
+        if (phoneDigits.length() < 10 || phoneDigits.length() > 11) {
+            throw new IllegalArgumentException("휴대폰 번호를 확인해 주세요.");
+        }
+
+        LocalDate birthDate;
+        try {
+            if (!birthDateText.matches("\\d{8}")) {
+                throw new IllegalArgumentException(
+                        "생년월일을 숫자 8자리로 입력해 주세요. 예: 19970318"
+                );
+            }
+
+            birthDate = LocalDate.parse(
+                    birthDateText,
+                    DateTimeFormatter.BASIC_ISO_DATE
+            );
+        } catch (java.time.DateTimeException e) {
+            throw new IllegalArgumentException("올바른 생년월일을 입력해 주세요.");
+        }
+
+        if (birthDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("생년월일을 확인해 주세요.");
+        }
+
+        if (!gender.isEmpty()
+                && !gender.equals("MALE")
+                && !gender.equals("FEMALE")) {
+            throw new IllegalArgumentException("성별 선택값을 확인해 주세요.");
+        }
+
+        if (memberDAO.existsByLoginId(loginId)) {
+            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         }
 
         if (memberDAO.existsByEmail(email)) {
@@ -46,28 +110,39 @@ public class MemberService {
         String passwordHash = hashPassword(password);
         String memberId = UUID.randomUUID().toString();
 
-        memberDAO.insert(memberId, email, passwordHash, name, phone);
+        memberDAO.insertWithProfile(
+                memberId,
+                loginId,
+                email,
+                passwordHash,
+                name,
+                phone,
+                java.sql.Date.valueOf(birthDate),
+                gender
+        );
     }
     
-    public MemberLoginInfo login(String email, String password)
+    public MemberLoginInfo login(String loginIdOrEmail, String password)
             throws Exception {
-        email = email == null
-                ? ""
-                : email.trim().toLowerCase(Locale.ROOT);
 
-        if (email.isEmpty() || password == null || password.isEmpty()) {
+        loginIdOrEmail = loginIdOrEmail == null
+                ? ""
+                : loginIdOrEmail.trim().toLowerCase(Locale.ROOT);
+
+        if (loginIdOrEmail.isEmpty() || password == null || password.isEmpty()) {
             throw new IllegalArgumentException(
-                    "이메일과 비밀번호를 입력해 주세요."
+                    "아이디와 비밀번호를 입력해 주세요."
             );
         }
 
-        MemberLoginInfo member = memberDAO.findByEmail(email);
+        MemberLoginInfo member =
+                memberDAO.findByLoginIdOrEmail(loginIdOrEmail);
 
         if (member == null
                 || !"ACTIVE".equalsIgnoreCase(member.getStatus())
                 || !verifyPassword(password, member.getPasswordHash())) {
             throw new IllegalArgumentException(
-                    "이메일 또는 비밀번호가 올바르지 않습니다."
+                    "아이디(또는 이메일) 또는 비밀번호가 올바르지 않습니다."
             );
         }
 
