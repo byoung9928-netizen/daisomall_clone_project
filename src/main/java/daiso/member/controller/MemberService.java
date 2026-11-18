@@ -173,6 +173,70 @@ public class MemberService {
         return member;
     }
     
+    public MemberProfileInfo findProfileByMemberId(String memberId)
+            throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("회원 정보를 확인할 수 없습니다.");
+        }
+
+        return memberDAO.findProfileByMemberId(memberId.trim());
+    }
+    
+    public void updateBasicProfile(
+            String memberId,
+            String name,
+            String phone,
+            String birthDateText,
+            String gender) throws Exception {
+
+        memberId = memberId == null ? "" : memberId.trim();
+        name = name == null ? "" : name.trim();
+        phone = phone == null ? "" : phone.replaceAll("\\D", "");
+        birthDateText = birthDateText == null ? "" : birthDateText.trim();
+        gender = gender == null ? "" : gender.trim();
+
+        if (memberId.isEmpty()) {
+            throw new IllegalArgumentException("로그인 정보를 확인해 주세요.");
+        }
+        if (name.isEmpty() || name.length() > 100) {
+            throw new IllegalArgumentException("이름을 확인해 주세요.");
+        }
+        if (!phone.matches("01[016789][0-9]{7,8}")) {
+            throw new IllegalArgumentException("휴대폰 번호를 확인해 주세요.");
+        }
+        if (!gender.isEmpty()
+                && !gender.equals("MALE")
+                && !gender.equals("FEMALE")) {
+            throw new IllegalArgumentException("성별 선택값을 확인해 주세요.");
+        }
+
+        java.sql.Date birthDate = null;
+        if (!birthDateText.isEmpty()) {
+            try {
+                LocalDate parsedDate = LocalDate.parse(birthDateText);
+                if (parsedDate.isAfter(LocalDate.now())) {
+                    throw new IllegalArgumentException("생년월일을 확인해 주세요.");
+                }
+                birthDate = java.sql.Date.valueOf(parsedDate);
+            } catch (java.time.DateTimeException e) {
+                throw new IllegalArgumentException("생년월일을 확인해 주세요.");
+            }
+        }
+
+        boolean updated = memberDAO.updateBasicProfileByMemberId(
+                memberId,
+                name,
+                phone,
+                birthDate,
+                gender
+        );
+
+        if (!updated) {
+            throw new IllegalArgumentException("회원정보를 변경하지 못했습니다.");
+        }
+    }
+    
     public MemberLoginInfo loginWithKakao(
             String kakaoId, String nickname, String kakaoEmail)
             throws Exception {

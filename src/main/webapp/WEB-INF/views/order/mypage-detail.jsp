@@ -1,4 +1,6 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+
+<%@ page import="daiso.member.controller.MemberProfileInfo"%>
 <%@ page
 	import="java.util.Map,java.util.List,java.util.Collections,daiso.cart.db.CartBean,daiso.product.controller.ProductView"%>
 <%
@@ -10,6 +12,43 @@ if (myOrders == null)
 Map<String, String> myAddress = myOrder != null && myOrder.get("address") instanceof Map
 		? (Map<String, String>) myOrder.get("address")
 		: Collections.emptyMap();
+Object profileAddressValue = request.getAttribute("profileDeliveryAddress");
+Map<String, String> profileDeliveryAddress = profileAddressValue instanceof Map
+		? (Map<String, String>) profileAddressValue
+		: Collections.emptyMap();
+
+Object pickupStoreValue = request.getAttribute("profilePickupStore");
+Map<String, String> profilePickupStore = pickupStoreValue instanceof Map
+		? (Map<String, String>) pickupStoreValue
+		: Collections.emptyMap();
+
+String orderCsrfToken = String.valueOf(request.getAttribute("orderCsrf"));
+
+String deliveryName = profileDeliveryAddress.getOrDefault("recipient", "");
+String maskedDeliveryName = deliveryName;
+if (deliveryName.length() == 2) {
+	maskedDeliveryName = deliveryName.substring(0, 1) + "*";
+} else if (deliveryName.length() > 2) {
+	maskedDeliveryName = deliveryName.substring(0, 1) + "*".repeat(deliveryName.length() - 2)
+	+ deliveryName.substring(deliveryName.length() - 1);
+}
+
+String deliveryPhone = profileDeliveryAddress.getOrDefault("phone", "");
+String deliveryPhoneDigits = deliveryPhone.replaceAll("\\D", "");
+String maskedDeliveryPhone = "****";
+if (deliveryPhoneDigits.length() == 11) {
+	maskedDeliveryPhone = deliveryPhoneDigits.substring(0, 3) + "-" + deliveryPhoneDigits.substring(3, 7) + "-****";
+} else if (deliveryPhoneDigits.length() == 10) {
+	maskedDeliveryPhone = deliveryPhoneDigits.substring(0, 3) + "-***-****";
+}
+
+String deliveryPostcode = profileDeliveryAddress.getOrDefault("postcode", "");
+if (deliveryPostcode.length() == 5) {
+	deliveryPostcode = deliveryPostcode.substring(0, 3) + "**";
+}
+
+String deliveryAddress1 = profileDeliveryAddress.getOrDefault("address1", "").replaceAll("\\d", "*");
+String deliveryAddress2 = profileDeliveryAddress.getOrDefault("address2", "").isEmpty() ? "" : "상세주소 비공개";
 List<CartBean> myItems = myOrder != null ? (List<CartBean>) myOrder.get("items") : Collections.emptyList();
 java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.util.Locale.KOREA);
 %>
@@ -101,7 +140,9 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 .my-member-name {
 	font-size: 20px;
 	font-weight: 800;
-	line-height: 1.5
+	line-height: 1.5;
+	color: inherit;
+	text-decoration: none;
 }
 
 .my-account-right {
@@ -476,6 +517,37 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	color: #6c7e93
 }
 
+.my-profile-action {
+	display: block;
+	width: calc(100% - 195px);
+	min-height: 42px;
+	margin: 24px 0 48px 195px;
+	border: 0;
+	background: #17212a;
+	color: #fff;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+#profileVerifyDialog {
+	width: min(420px, calc(100% - 32px));
+	border: 0;
+	padding: 28px;
+}
+
+#profileVerifyDialog::backdrop {
+	background: rgba(0, 0, 0, .7);
+}
+
+#profileVerifyDialog input:not([type="button"]) {
+	display: block;
+	width: 100%;
+	height: 42px;
+	margin: 10px 0 18px;
+	border: 1px solid #ccd1d8;
+	padding: 0 10px;
+}
+
 .my-data-table {
 	width: 100%;
 	border-collapse: collapse;
@@ -843,131 +915,450 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 		justify-content: flex-start
 	}
 }
+
 .my-home-shortcuts {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    margin-bottom: 12px;
-    padding: 14px 6px;
-    border: 1px solid #dfe4eb;
-    background: #fff;
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	margin-bottom: 12px;
+	padding: 14px 6px;
+	border: 1px solid #dfe4eb;
+	background: #fff;
 }
 
-.my-home-shortcuts a,
-.my-home-shortcuts button {
-    display: grid;
-    justify-items: center;
-    gap: 7px;
-    padding: 4px;
-    border: 0;
-    border-right: 1px solid #edf0f2;
-    background: #fff;
-    color: #52677f;
-    font: inherit;
-    font-size: 12px;
-    text-decoration: none;
-    cursor: pointer;
+.my-home-shortcuts a, .my-home-shortcuts button {
+	display: grid;
+	justify-items: center;
+	gap: 7px;
+	padding: 4px;
+	border: 0;
+	border-right: 1px solid #edf0f2;
+	background: #fff;
+	color: #52677f;
+	font: inherit;
+	font-size: 12px;
+	text-decoration: none;
+	cursor: pointer;
 }
 
-.my-home-shortcuts a:last-child,
-.my-home-shortcuts button:last-child {
-    border-right: 0;
+.my-home-shortcuts a:last-child, .my-home-shortcuts button:last-child {
+	border-right: 0;
 }
 
 .my-home-shortcuts span {
-    color: #17212a;
-    font-size: 21px;
-    line-height: 1;
+	color: #17212a;
+	font-size: 21px;
+	line-height: 1;
 }
 
 .my-home-shortcuts button:disabled {
-    color: #52677f;
-    cursor: default;
+	color: #52677f;
+	cursor: default;
 }
 
 .my-home-notice {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 34px;
-    padding: 12px 16px;
-    border: 1px solid #dfe4eb;
-    color: #667b94;
-    font-size: 12px;
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 34px;
+	padding: 12px 16px;
+	border: 1px solid #dfe4eb;
+	color: #667b94;
+	font-size: 12px;
 }
 
 .my-home-notice strong {
-    color: #17212a;
+	color: #17212a;
 }
 
 .my-home-notice b {
-    color: #17212a;
-    font-size: 20px;
+	color: #17212a;
+	font-size: 20px;
 }
 
 .my-home-products {
-    margin-top: 38px;
+	margin-top: 38px;
 }
 
 .my-home-product-grid {
-    display: grid;
-    gap: 12px;
+	display: grid;
+	gap: 12px;
 }
 
 .my-home-wish-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .my-home-recent-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .my-home-product {
-    min-width: 0;
-    font-size: 12px;
+	min-width: 0;
+	font-size: 12px;
 }
 
 .my-home-product-image {
-    position: relative;
-    aspect-ratio: 1 / 1.15;
-    overflow: hidden;
-    margin-bottom: 7px;
-    background: #f1f2f4;
+	position: relative;
+	aspect-ratio: 1/1.15;
+	overflow: hidden;
+	margin-bottom: 7px;
+	background: #f1f2f4;
 }
 
 .my-home-product-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 
 .my-home-product-image span {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    color: #e60023;
-    font-size: 20px;
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	color: #e60023;
+	font-size: 20px;
 }
 
-.my-home-product strong,
+.my-home-product strong, .my-home-product small {
+	display: block;
+	margin-top: 5px;
+}
+
 .my-home-product small {
-    display: block;
-    margin-top: 5px;
+	color: #7a889b;
 }
 
-.my-home-product small {
-    color: #7a889b;
+@media ( max-width : 700px) {
+	.my-home-shortcuts {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		row-gap: 12px;
+	}
+	.my-home-recent-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
 }
 
-@media (max-width: 700px) {
-    .my-home-shortcuts {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        row-gap: 12px;
-    }
+.delivery-pickup-dialog {
+	width: min(496px, calc(100vw - 32px));
+	height: min(750px, calc(100vh - 40px));
+	max-width: none;
+	max-height: none;
+	margin: auto;
+	padding: 0;
+	border: 0;
+	color: #111;
+	box-sizing: border-box;
+	overflow-y: auto;
+}
 
-    .my-home-recent-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+.delivery-pickup-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.76);
+}
+
+.delivery-pickup-header {
+	height: 72px;
+	padding: 0 24px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.delivery-pickup-header h2 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 700;
+}
+
+#closeDeliveryPickupDialog {
+	border: 0;
+	padding: 0;
+	background: transparent;
+	color: #17212a;
+	font-size: 30px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.delivery-pickup-tabs {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	height: 44px;
+	border-bottom: 1px solid #e2e5e9;
+}
+
+.delivery-pickup-tab {
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: #fff;
+	color: #65758a;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+.delivery-pickup-tab.is-active {
+	border-bottom-color: #17212a;
+	color: #111;
+	font-weight: 700;
+}
+
+#deliveryManagementPanel, #pickupManagementPanel {
+	padding: 24px;
+}
+
+#deliveryManagementPanel>p:first-of-type {
+	margin: 0;
+	padding: 18px 20px 10px;
+	border: 1px solid #e2e5e9;
+	font-size: 16px;
+}
+
+#deliveryManagementPanel>p:nth-of-type(2) {
+	margin: 0;
+	padding: 8px 20px 18px;
+	border: 1px solid #e2e5e9;
+	border-top: 0;
+	line-height: 1.6;
+}
+
+#deliveryManagementPanel>button, #deliveryAddressForm button,
+	#pickupStoreForm button {
+	min-height: 42px;
+	border: 1px solid #e2e5e9;
+	background: #fff;
+	color: #17212a;
+	cursor: pointer;
+}
+
+#deliveryManagementPanel>button {
+	width: 100%;
+	margin-bottom: 22px;
+	font-weight: 700;
+}
+
+#deliveryAddressForm {
+	margin-top: 20px;
+}
+
+#deliveryAddressForm label {
+	display: block;
+	margin: 14px 0;
+	color: #65758a;
+	font-size: 13px;
+}
+
+#deliveryAddressForm input {
+	display: block;
+	width: 100%;
+	height: 40px;
+	margin-top: 6px;
+	padding: 0 10px;
+	border: 1px solid #d8dde4;
+	box-sizing: border-box;
+}
+
+#pickupStoreForm label {
+	display: block;
+	padding: 20px;
+	border: 1px solid #e2e5e9;
+	line-height: 1.7;
+}
+
+#pickupStoreForm small {
+	display: block;
+	color: #65758a;
+}
+
+#deliveryManagementPanel>.delivery-count {
+	margin: 0 0 26px;
+	padding: 0;
+	border: 0;
+	font-size: 14px;
+}
+
+.delivery-address-card {
+	position: relative;
+	margin-bottom: 16px;
+	padding: 20px;
+	border: 1px solid #e2e5e9;
+}
+
+.delivery-address-card h3 {
+	margin: 0 32px 12px 0;
+	font-size: 16px;
+}
+
+.delivery-address-delete {
+	position: absolute;
+	top: 14px;
+	right: 16px;
+	color: #17212a;
+	font-size: 24px;
+}
+
+.delivery-address-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.delivery-address-badges span {
+	padding: 4px 7px;
+	background: #f0f1f3;
+	font-size: 11px;
+}
+
+.delivery-address-card .delivery-address-text, .delivery-address-card .delivery-address-person,
+	.delivery-address-card .delivery-address-request {
+	margin: 8px 0;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.delivery-address-person, .delivery-address-request {
+	color: #65758a;
+}
+
+.delivery-address-edit {
+	min-height: 26px !important;
+	margin-top: 6px;
+	padding: 2px 8px;
+	font-size: 12px;
+}
+
+.delivery-address-notice {
+	padding: 12px 16px;
+	background: #f5f6f7;
+	color: #65758a;
+	font-size: 12px;
+}
+
+.delivery-address-notice p {
+	margin: 3px 0;
+}
+
+.delivery-empty-message {
+	padding: 20px 0;
+}
+
+.member-login-title {
+	margin-top: 42px;
+}
+
+.member-login-info {
+	border-top: 1px solid #e2e5e9;
+}
+
+.member-login-row {
+	display: grid;
+	grid-template-columns: 218px minmax(0, 1fr);
+	align-items: center;
+	min-height: 54px;
+	padding: 12px 0;
+}
+
+.member-login-label {
+	color: #667b94;
+}
+
+.member-login-value {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.member-login-eye {
+	border: 0;
+	padding: 0;
+	background: transparent;
+	font-size: 20px;
+	cursor: pointer;
+}
+
+.member-login-password {
+	width: 197px;
+	min-height: 30px;
+	border: 1px solid #e2e5e9;
+	background: #fff;
+	cursor: pointer;
+}
+
+.member-social-row {
+	align-items: start;
+	padding-top: 24px;
+}
+
+.member-kakao-link {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+}
+
+.member-kakao-link button {
+	border: 0;
+	padding: 0;
+	background: transparent;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.member-kakao-icon {
+	display: inline-grid;
+	width: 20px;
+	height: 20px;
+	place-items: center;
+	border-radius: 50%;
+	background: #fee500;
+	color: #111;
+	font-size: 10px;
+}
+
+.member-other-social {
+	display: block;
+	width: 100%;
+	margin-top: 10px;
+	padding: 16px 0;
+	border: 0;
+	border-top: 1px solid #e2e5e9;
+	background: #fff;
+	text-align: left;
+	cursor: pointer;
+}
+
+.member-social-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.member-social-buttons button {
+	width: 240px;
+	min-height: 40px;
+	cursor: pointer;
+}
+
+.member-naver-button {
+	border: 0;
+	background: #03c75a;
+	color: #fff;
+	font-weight: 700;
+}
+
+.member-apple-button {
+	border: 1px solid #111;
+	background: #fff;
+	color: #111;
+	font-weight: 700;
+}
+
+@media ( max-width : 700px) {
+	.member-login-row {
+		grid-template-columns: 95px minmax(0, 1fr);
+	}
+	.member-social-buttons button {
+		width: 50%;
+	}
 }
 </style>
 </head>
@@ -986,8 +1377,10 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						<path d="M7 43v-5a17 17 0 0 1 34 0v5z" /></svg>
 					<span>0</span>
 				</div>
-				<span class="my-member-tag">개인</span><strong class="my-member-name"><%=ProductView.escape(request.getAttribute("memberName"))%>님
-					›</strong>
+				<span class="my-member-tag">개인</span><a class="my-member-name"
+					href="<%=myContext%>/app/member/profile"> <%=ProductView.escape(request.getAttribute("memberName"))%>님
+					›
+				</a>
 			</div>
 			<div class="my-account-right">
 				<div class="my-usage">
@@ -1057,7 +1450,9 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 정보</h2>
-					<button type="button" data-my-unavailable>회원정보</button>
+					<a
+						class="<%="profile".equals(request.getAttribute("myPageSection")) ? "my-current" : ""%>"
+						href="<%=myContext%>/app/member/profile"> 회원정보 </a>
 					<button type="button" data-my-unavailable>프로필</button>
 					<button type="button" data-my-unavailable>배송지/픽업매장</button>
 					<button type="button" data-my-unavailable>환불계좌</button>
@@ -1076,6 +1471,361 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				</section>
 			</aside>
 			<div class="my-content">
+				<%
+				if ("profile".equals(request.getAttribute("myPageSection"))) {
+					MemberProfileInfo profile = (MemberProfileInfo) request.getAttribute("profile");
+
+					String genderText = "선택 안 함";
+					if (profile != null && "MALE".equals(profile.getGender())) {
+						genderText = "남자";
+					} else if (profile != null && "FEMALE".equals(profile.getGender())) {
+						genderText = "여자";
+					}
+					String profileName = profile == null || profile.getName() == null ? "" : profile.getName().trim();
+
+					String maskedName = profileName;
+					if (profileName.length() == 1) {
+						maskedName = "*";
+					} else if (profileName.length() == 2) {
+						maskedName = profileName.substring(0, 1) + "*";
+					} else if (profileName.length() > 2) {
+						maskedName = profileName.substring(0, 1) + "*".repeat(profileName.length() - 2)
+						+ profileName.substring(profileName.length() - 1);
+					}
+
+					String phoneDigits = profile == null || profile.getPhone() == null ? "" : profile.getPhone().replaceAll("\\D", "");
+
+					String maskedPhone = "미입력";
+					if (phoneDigits.length() == 11) {
+						maskedPhone = phoneDigits.substring(0, 3) + "-" + phoneDigits.substring(3, 7) + "-****";
+					} else if (phoneDigits.length() == 10) {
+						maskedPhone = phoneDigits.substring(0, 3) + "-***-****";
+					}
+
+					String maskedBirthDate = profile != null && profile.getBirthDate() != null ? "****년 **월 **일" : "미입력";
+				%>
+
+				<section class="my-section">
+					<div class="my-section-heading">
+						<h2>회원정보</h2>
+					</div>
+
+					<%
+					if (request.getAttribute("profileError") != null) {
+					%>
+					<p class="error-message" role="alert">
+						<%=ProductView.escape(request.getAttribute("profileError"))%>
+					</p>
+					<%
+					} else if (profile != null) {
+					%>
+					<h3>기본 정보</h3>
+
+					<%
+					if (Boolean.TRUE.equals(request.getAttribute("profileEditMode"))) {
+					%>
+					<form id="basicProfileForm">
+						<table class="my-data-table">
+							<tbody>
+								<tr>
+									<th scope="row"><label for="profile-name">이름</label></th>
+									<td><input id="profile-name" name="name" maxlength="100"
+										value="<%=ProductView.escape(profile.getName())%>" required>
+									</td>
+								</tr>
+								<tr>
+									<th scope="row"><label for="profile-phone">휴대폰</label></th>
+									<td><input id="profile-phone" name="phone" type="tel"
+										maxlength="30"
+										value="<%=ProductView.escape(profile.getPhone())%>" required>
+									</td>
+								</tr>
+								<tr>
+									<th scope="row"><label for="profile-birth-date">생년월일</label></th>
+									<td><input id="profile-birth-date" name="birthDate"
+										type="date"
+										value="<%=profile.getBirthDate() == null ? "" : profile.getBirthDate().toString()%>">
+									</td>
+								</tr>
+								<tr>
+									<th scope="row">성별</th>
+									<td><label> <input type="radio" name="gender"
+											value="MALE"
+											<%="MALE".equals(profile.getGender()) ? "checked" : ""%>>
+											남자
+									</label> <label> <input type="radio" name="gender"
+											value="FEMALE"
+											<%="FEMALE".equals(profile.getGender()) ? "checked" : ""%>>
+											여자
+									</label></td>
+								</tr>
+							</tbody>
+						</table>
+
+						<p id="profileUpdateMessage" role="status"></p>
+						<button type="submit" class="my-profile-action">저장</button>
+					</form>
+
+					<%
+					} else {
+					%>
+					<table class="my-data-table">
+						<tbody>
+							<tr>
+								<th scope="row">이름</th>
+								<td><%=ProductView.escape(maskedName)%></td>
+							</tr>
+							<tr>
+								<th scope="row">휴대폰</th>
+								<td><%=ProductView.escape(maskedPhone)%></td>
+							</tr>
+							<tr>
+								<th scope="row">생년월일</th>
+								<td><%=ProductView.escape(maskedBirthDate)%></td>
+							</tr>
+							<tr>
+								<th scope="row">성별(선택)</th>
+								<td><%=ProductView.escape(genderText)%></td>
+							</tr>
+						</tbody>
+					</table>
+
+					<button type="button" id="openProfileVerification"
+						class="my-profile-action">기본정보 확인 및 변경</button>
+
+					<dialog id="profileVerifyDialog"
+						aria-labelledby="profileVerifyTitle">
+					<h2 id="profileVerifyTitle">본인인증</h2>
+					<p>
+						시연용 인증번호 <strong>123456</strong>을 입력해 주세요.
+					</p>
+					<label for="profileVerifyCode">인증번호</label> <input
+						id="profileVerifyCode" inputmode="numeric" maxlength="6"
+						autocomplete="one-time-code">
+					<p id="profileVerifyMessage" role="alert"></p>
+					<button type="button" id="closeProfileVerify">취소</button>
+					<button type="button" id="submitProfileVerify">인증 확인</button>
+					</dialog>
+					<%
+					}
+					%>
+					<h3>배송/픽업 정보</h3>
+
+					<table class="my-data-table">
+						<tbody>
+							<tr>
+								<th scope="row">배송지</th>
+								<td>
+									<%
+									if (!profileDeliveryAddress.isEmpty()) {
+									%> <strong> <%=ProductView.escape(profileDeliveryAddress.get("addressName"))%>
+										(<%=ProductView.escape(maskedDeliveryName)%>)
+								</strong><br> [<%=ProductView.escape(deliveryPostcode)%>] <%=ProductView.escape(deliveryAddress1)%>
+									<%=ProductView.escape(deliveryAddress2)%><br> <%=ProductView.escape(maskedDeliveryPhone)%>
+									<%
+									} else {
+									%> 등록된 배송지가 없습니다. <%
+									}
+									%>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row">픽업매장</th>
+								<td>
+									<%
+									if (!profilePickupStore.isEmpty()) {
+									%> <strong> <%=ProductView.escape(profilePickupStore.get("storeName"))%>
+								</strong><br> <%=ProductView.escape(profilePickupStore.get("address"))%>
+									<%
+ } else {
+ %> 선택된 픽업매장이 없습니다. <%
+ }
+ %>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<button type="button" id="openDeliveryPickupManager"
+						class="my-profile-action">배송지/픽업매장 관리</button>
+
+					<dialog id="deliveryPickupDialog" class="delivery-pickup-dialog">
+					<div class="delivery-pickup-header">
+						<h2>배송지/픽업매장 관리</h2>
+						<button type="button" id="closeDeliveryPickupDialog"
+							aria-label="닫기">×</button>
+					</div>
+
+					<div class="delivery-pickup-tabs" role="tablist">
+						<button type="button" class="delivery-pickup-tab is-active"
+							data-delivery-tab="delivery" aria-selected="true">배송지 관리
+						</button>
+						<button type="button" class="delivery-pickup-tab"
+							data-delivery-tab="pickup" aria-selected="false">픽업매장 관리
+						</button>
+					</div>
+
+					<section id="deliveryManagementPanel">
+						<button type="button" class="delivery-add-button"
+							data-toggle-delivery-form>
+							<span aria-hidden="true">⊕</span> 새 배송지 추가
+						</button>
+
+						<p class="delivery-count">
+							전체
+							<%=profileDeliveryAddress.isEmpty() ? 0 : 1%>개
+						</p>
+
+						<%
+						if (!profileDeliveryAddress.isEmpty()) {
+						%>
+						<article class="delivery-address-card">
+							<span class="delivery-address-delete" aria-hidden="true">×</span>
+
+							<h3>
+								[<%=ProductView.escape(profileDeliveryAddress.get("addressName"))%>]
+							</h3>
+
+							<div class="delivery-address-badges">
+								<span>택배배송가능</span> <span>오늘배송가능</span> <span>대량주문가능</span>
+							</div>
+
+							<p class="delivery-address-text">
+								(<%=ProductView.escape(profileDeliveryAddress.get("postcode"))%>)
+								<%=ProductView.escape(profileDeliveryAddress.get("address1"))%>
+								<%=ProductView.escape(profileDeliveryAddress.get("address2"))%>
+							</p>
+
+							<p class="delivery-address-person">
+								<%=ProductView.escape(profileDeliveryAddress.get("recipient"))%>
+								&nbsp;
+								<%=ProductView.escape(profileDeliveryAddress.get("phone"))%>
+							</p>
+
+							<p class="delivery-address-request">[요청사항] 요청사항 없음</p>
+
+							<button type="button" class="delivery-address-edit"
+								data-toggle-delivery-form>수정</button>
+						</article>
+						<%
+						} else {
+						%>
+						<p class="delivery-empty-message">등록된 배송지가 없습니다.</p>
+						<%
+						}
+						%>
+
+						<div class="delivery-address-notice">
+							<p>• 배송지에 따라 배송 유형이 달라질 수 있습니다.</p>
+							<p>• 배송지는 현재 세션에 1개만 저장됩니다.</p>
+						</div>
+
+						<form id="deliveryAddressForm" hidden>
+							<input type="hidden" name="csrfToken"
+								value="<%=ProductView.escape(orderCsrfToken)%>"> <label>배송지명
+								<input name="addressName" maxlength="50"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("addressName"))%>"
+								required>
+							</label> <label>받는 분 <input name="recipient" maxlength="100"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("recipient"))%>"
+								required>
+							</label> <label>휴대폰 <input name="phone" maxlength="30"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("phone"))%>"
+								required>
+							</label> <label>우편번호 <input name="postcode" maxlength="5"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("postcode"))%>"
+								required>
+							</label> <label>기본 주소 <input name="address1" maxlength="255"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("address1"))%>"
+								required>
+							</label> <label>상세 주소 <input name="address2" maxlength="255"
+								value="<%=ProductView.escape(profileDeliveryAddress.get("address2"))%>">
+							</label>
+
+							<p id="deliveryAddressMessage" role="alert"></p>
+							<button type="submit">저장</button>
+						</form>
+					</section>
+
+					<section id="pickupManagementPanel" hidden>
+						<p>픽업매장을 선택해 주세요.</p>
+						<form id="pickupStoreForm">
+							<input type="hidden" name="csrfToken"
+								value="<%=ProductView.escape(orderCsrfToken)%>"> <label>
+								<input type="radio" name="storeId" value="sindaebang"
+								<%="sindaebang".equals(profilePickupStore.get("storeId")) ? "checked" : ""%>>
+								신대방점 <small>서울특별시 동작구 여의대방로 122 (신대방동)</small>
+							</label>
+
+							<p id="pickupStoreMessage" role="alert"></p>
+							<button type="submit">픽업매장 선택</button>
+						</form>
+					</section>
+					</dialog>
+					<%
+					String profileLoginId = profile.getLoginId() == null ? "" : profile.getLoginId();
+
+					String maskedProfileLoginId = profileLoginId.length() > 3
+							? profileLoginId.substring(0, 3) + "*".repeat(profileLoginId.length() - 3)
+							: profileLoginId;
+					%>
+
+					<h3 class="member-login-title">로그인 정보</h3>
+
+					<div class="member-login-info">
+						<div class="member-login-row">
+							<div class="member-login-label">아이디</div>
+							<div class="member-login-value">
+								<span id="profileLoginIdText"
+									data-masked="<%=ProductView.escape(maskedProfileLoginId)%>"
+									data-full="<%=ProductView.escape(profileLoginId)%>"> <%=ProductView.escape(maskedProfileLoginId)%>
+								</span>
+								<button type="button" id="toggleProfileLoginId"
+									class="member-login-eye" aria-label="아이디 보기">◎</button>
+							</div>
+						</div>
+
+						<div class="member-login-row">
+							<div class="member-login-label">비밀번호</div>
+							<div class="member-login-value">
+								<button type="button" class="member-login-password"
+									data-my-unavailable>비밀번호 변경</button>
+							</div>
+						</div>
+
+						<div class="member-login-row member-social-row">
+							<div class="member-login-label">간편 로그인 연결</div>
+							<div class="member-login-social">
+								<div class="member-kakao-link">
+									<span class="member-kakao-icon" aria-hidden="true">●</span> <strong>카카오
+										계정 연동</strong>
+									<button type="button" data-my-unavailable>해제</button>
+								</div>
+
+								<button type="button" id="toggleOtherSocial"
+									class="member-other-social" aria-expanded="true">
+									다른 SNS로 연동하기 <span aria-hidden="true">⌃</span>
+								</button>
+
+								<div id="otherSocialButtons" class="member-social-buttons">
+									<button type="button" class="member-naver-button"
+										data-my-unavailable>N 네이버 계정</button>
+									<button type="button" class="member-apple-button"
+										data-my-unavailable> 애플 계정</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<%
+					}
+					%>
+
+
+				</section>
+
+				<%
+				} else {
+				%>
 				<nav class="my-home-shortcuts" aria-label="마이페이지 바로가기">
 					<a href="<%=myContext%>/app/order/mypage"><span>▤</span>주문내역</a>
 					<button type="button" data-my-unavailable>
@@ -1317,8 +2067,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						%>
 						<article class="my-home-product">
 							<div class="my-home-product-image">
-								<img
-									src="<%=myContext%>/assets/images/mock-product-<%=i%>.svg"
+								<img src="<%=myContext%>/assets/images/mock-product-<%=i%>.svg"
 									alt="샘플 상품 이미지"> <span aria-hidden="true">♡</span>
 							</div>
 							<strong>샘플 상품</strong> <small>찜 목록 연결 준비 중</small>
@@ -1351,9 +2100,12 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						%>
 					</div>
 				</section>
+				<%
+				}
+				%>
 			</div>
 		</div>
-		
+
 	</main>
 	<%@ include file="../common/footer.jspf"%>
 	<script>
@@ -1365,7 +2117,196 @@ document.addEventListener('DOMContentLoaded',function(){
  const open=document.getElementById('open-my-receipt');
  if(open){const dialog=document.getElementById('my-receipt');open.addEventListener('click',function(){dialog.showModal();});document.getElementById('close-my-receipt').addEventListener('click',function(){dialog.close();});}
  document.querySelectorAll('[data-my-add]').forEach(function(button){button.addEventListener('click',async function(){if(button.disabled)return;button.disabled=true;try{const data=new URLSearchParams();data.set('productId',button.dataset.myAdd);data.set('quantity','1');const response=await fetch('<%=myContext%>/app/cart/add',{method:'POST',body:data});if(!response.ok)throw new Error('장바구니 담기에 실패했습니다.');const result=(await response.text()).trim();notice(result==='OK'?'장바구니에 1개 담았습니다.':result);}catch(error){notice(error.message);}finally{button.disabled=false;}});});
+ const verifyDialog = document.getElementById('profileVerifyDialog');
+ const openVerifyButton = document.getElementById('openProfileVerification');
+ const closeVerifyButton = document.getElementById('closeProfileVerify');
+ const verifyButton = document.getElementById('submitProfileVerify');
+ const verifyCode = document.getElementById('profileVerifyCode');
+ const verifyMessage = document.getElementById('profileVerifyMessage');
+ const profileForm = document.getElementById('basicProfileForm');
+ 
+
+ if (openVerifyButton && verifyDialog) {
+   openVerifyButton.addEventListener('click', function () {
+     verifyMessage.textContent = '';
+     verifyCode.value = '';
+     verifyDialog.showModal();
+     verifyCode.focus();
+   });
+
+   closeVerifyButton.addEventListener('click', function () {
+     verifyDialog.close();
+   });
+
+   verifyButton.addEventListener('click', async function () {
+     const data = new URLSearchParams();
+     data.set('code', verifyCode.value.trim());
+
+     try {
+       const response = await fetch(
+         '<%=myContext%>/app/member/profile/verify-demo',
+         { method: 'POST', body: data }
+       );
+       const result = (await response.text()).trim();
+
+       if (result === 'OK') {
+         location.reload();
+       } else if (result === 'INVALID_CODE') {
+         verifyMessage.textContent = '인증번호가 올바르지 않습니다.';
+       } else {
+         verifyMessage.textContent = '로그인 상태를 확인해 주세요.';
+       }
+     } catch (error) {
+       verifyMessage.textContent = '인증 요청 중 오류가 발생했습니다.';
+     }
+   });
+ }
+
+ if (profileForm) {
+   profileForm.addEventListener('submit', async function (event) {
+     event.preventDefault();
+
+     const data = new URLSearchParams(new FormData(profileForm));
+
+     try {
+       const response = await fetch(
+         '<%=myContext%>/app/member/profile/update',
+         { method: 'POST', body: data }
+       );
+       const result = (await response.text()).trim();
+
+       if (result === 'OK') {
+         location.reload();
+       } else {
+         document.getElementById('profileUpdateMessage').textContent = result;
+       }
+     } catch (error) {
+       document.getElementById('profileUpdateMessage').textContent =
+         '회원정보 저장 중 오류가 발생했습니다.';
+     }
+   });
+ }
+ const loginIdText = document.getElementById('profileLoginIdText');
+ const toggleLoginId = document.getElementById('toggleProfileLoginId');
+
+ if (loginIdText && toggleLoginId) {
+   toggleLoginId.addEventListener('click', function () {
+     const isMasked =
+       loginIdText.textContent.trim() === loginIdText.dataset.masked;
+
+     loginIdText.textContent = isMasked
+       ? loginIdText.dataset.full
+       : loginIdText.dataset.masked;
+
+     toggleLoginId.setAttribute(
+       'aria-label',
+       isMasked ? '아이디 숨기기' : '아이디 보기'
+     );
+   });
+ }
+
+ const toggleOtherSocial = document.getElementById('toggleOtherSocial');
+ const otherSocialButtons = document.getElementById('otherSocialButtons');
+
+ if (toggleOtherSocial && otherSocialButtons) {
+   toggleOtherSocial.addEventListener('click', function () {
+     const isOpen = toggleOtherSocial.getAttribute('aria-expanded') === 'true';
+
+     toggleOtherSocial.setAttribute('aria-expanded', String(!isOpen));
+     otherSocialButtons.hidden = isOpen;
+   });
+ }
 });
+const manager = document.getElementById('deliveryPickupDialog');
+const openManager = document.getElementById('openDeliveryPickupManager');
+const closeManager = document.getElementById('closeDeliveryPickupDialog');
+const deliveryPanel = document.getElementById('deliveryManagementPanel');
+const pickupPanel = document.getElementById('pickupManagementPanel');
+const deliveryForm = document.getElementById('deliveryAddressForm');
+const pickupForm = document.getElementById('pickupStoreForm');
+
+if (manager && openManager) {
+  openManager.addEventListener('click', function () {
+    manager.showModal();
+  });
+
+  closeManager.addEventListener('click', function () {
+    manager.close();
+  });
+}
+
+document.querySelectorAll('[data-delivery-tab]').forEach(function (tab) {
+	  tab.addEventListener('click', function () {
+	    const showDelivery = tab.dataset.deliveryTab === 'delivery';
+
+	    deliveryPanel.hidden = !showDelivery;
+	    pickupPanel.hidden = showDelivery;
+
+	    document.querySelectorAll('[data-delivery-tab]').forEach(function (item) {
+	      const isActive = item === tab;
+	      item.classList.toggle('is-active', isActive);
+	      item.setAttribute('aria-selected', String(isActive));
+	    });
+	  });
+	});
+
+document.querySelectorAll('[data-toggle-delivery-form]').forEach(function (button) {
+	  button.addEventListener('click', function () {
+	    if (deliveryForm) {
+	      deliveryForm.hidden = !deliveryForm.hidden;
+	    }
+	  });
+	});
+
+if (deliveryForm) {
+  deliveryForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+
+    const data = new URLSearchParams(new FormData(deliveryForm));
+
+    try {
+      const response = await fetch(
+        '<%=myContext%>/app/order/address',
+        { method: 'POST', body: data }
+      );
+      const result = (await response.text()).trim();
+
+      if (result === 'OK') {
+        location.reload();
+      } else {
+        document.getElementById('deliveryAddressMessage').textContent = result;
+      }
+    } catch (error) {
+      document.getElementById('deliveryAddressMessage').textContent =
+        '배송지 저장 중 오류가 발생했습니다.';
+    }
+  });
+}
+
+if (pickupForm) {
+  pickupForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+
+    const data = new URLSearchParams(new FormData(pickupForm));
+
+    try {
+      const response = await fetch(
+        '<%=myContext%>/app/order/pickup-store',
+        { method: 'POST', body: data }
+      );
+      const result = (await response.text()).trim();
+
+      if (result === 'OK') {
+        location.reload();
+      } else {
+        document.getElementById('pickupStoreMessage').textContent = result;
+      }
+    } catch (error) {
+      document.getElementById('pickupStoreMessage').textContent =
+        '픽업매장 저장 중 오류가 발생했습니다.';
+    }
+  });
+}
 </script>
 </body>
 </html>

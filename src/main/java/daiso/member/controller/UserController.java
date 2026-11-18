@@ -317,6 +317,104 @@ public class UserController {
         return "member/mypage";
     }
     
+    @DaisoGetMapping("/member/profile")
+    public String memberProfile() {
+        return "redirect:/order/mypage?section=profile";
+    }
+    
+    @DaisoPostMapping("/member/profile/verify-demo")
+    @DaisoResponseBody
+    public String verifyBasicProfileDemo(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return "LOGIN_REQUIRED";
+        }
+
+        Object memberIdValue = session.getAttribute("member_id");
+        if (!(memberIdValue instanceof String)
+                || ((String) memberIdValue).isBlank()) {
+            return "LOGIN_REQUIRED";
+        }
+
+        String code = request.getParameter("code");
+        if (!"123456".equals(code)) {
+            return "INVALID_CODE";
+        }
+
+        session.setAttribute(
+                "profileVerificationMemberId",
+                memberIdValue
+        );
+        session.setAttribute(
+                "profileVerificationExpiresAt",
+                System.currentTimeMillis() + 10 * 60 * 1000L
+        );
+
+        return "OK";
+    }
+
+    @DaisoPostMapping("/member/profile/update")
+    @DaisoResponseBody
+    public String updateBasicProfile(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return "LOGIN_REQUIRED";
+        }
+
+        Object memberIdValue = session.getAttribute("member_id");
+        if (!(memberIdValue instanceof String)) {
+            return "LOGIN_REQUIRED";
+        }
+
+        String memberId = (String) memberIdValue;
+        Object verifiedMemberId =
+                session.getAttribute("profileVerificationMemberId");
+        Object expiresAtValue =
+                session.getAttribute("profileVerificationExpiresAt");
+
+        if (!memberId.equals(verifiedMemberId)
+                || !(expiresAtValue instanceof Long)
+                || ((Long) expiresAtValue) < System.currentTimeMillis()) {
+            return "VERIFY_REQUIRED";
+        }
+
+        try {
+            String name = request.getParameter("name");
+            String phone = request.getParameter("phone");
+            String birthDate = request.getParameter("birthDate");
+            String gender = request.getParameter("gender");
+
+            memberService.updateBasicProfile(
+                    memberId,
+                    name,
+                    phone,
+                    birthDate,
+                    gender
+            );
+
+            session.setAttribute("name", name.trim());
+            session.removeAttribute("profileVerificationMemberId");
+            session.removeAttribute("profileVerificationExpiresAt");
+
+            return "OK";
+
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+
+        } catch (Exception e) {
+            request.getServletContext().log("기본정보 변경 실패", e);
+            return "회원정보 변경 중 오류가 발생했습니다.";
+        }
+    }
+    
     @DaisoGetMapping("/member/find-password")
     public String findPasswordForm() {
         return "member/find-password";
