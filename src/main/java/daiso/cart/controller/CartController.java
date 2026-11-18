@@ -50,6 +50,7 @@ public class CartController {
 		return "shop/page";
 		
 	}
+	//1. 시작
 	@DaisoPostMapping("/cart/add")
 	@DaisoResponseBody
 	public String cartAdd(HttpServletRequest request) {
@@ -73,6 +74,7 @@ public class CartController {
 	    	//name-"quantity"로 받은 문자열을 정수로 변환
 	        int quantity =
 	            Integer.parseInt(request.getParameter("quantity"));
+	        
 	        //db작업을 담당하는 db객체 생성
 	        CartDAO dao = new CartDAO();
 	        //로그인 회원번호 상품번호 수량을 전달해 db저장 요청
