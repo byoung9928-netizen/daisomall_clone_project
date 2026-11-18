@@ -92,7 +92,8 @@ String cartProductName = cart.getProductName() == null ? "상품" : cart.getProd
 <% } %>
 </section>
 <aside class="cart-payment" aria-label="배송지 및 결제 예상 금액">
-<div class="cart-address-title"><h2>배송지</h2><a class="cart-address-link" href="<%= cartContext %>/app/order/form">⌖ 등록</a></div>
+<div class="cart-address-title"><h2>배송지</h2>
+<button class="cart-address-link" id="cart-delivery-open" type="button">⌖ 등록</button></div>
 <p class="cart-address-message">배송지를 등록해 주세요.</p>
 <div class="cart-price-lines">
 <div class="cart-price-line"><span>총 상품 금액</span><span><%= cartMoney.format(subtotal) %>원</span></div>
@@ -117,6 +118,26 @@ document.addEventListener('DOMContentLoaded', function () {
  const checks = Array.from(document.querySelectorAll('.cart-item-check'));
  const count = document.getElementById('cart-selected-count');
  const order = document.querySelector('a.cart-order-button');
+ try {
+	    const saved = sessionStorage.getItem(
+	        "cartSelectedBeforeQuantity"
+	    );
+
+	    if (saved !== null) {
+	        sessionStorage.removeItem("cartSelectedBeforeQuantity");
+
+	        const selectedIds = JSON.parse(saved);
+
+	        if (Array.isArray(selectedIds)) {
+	            checks.forEach(function (checkbox) {
+	                checkbox.checked =
+	                    selectedIds.includes(checkbox.value);
+	            });
+	        }
+	    }
+	} catch (error) {
+	    sessionStorage.removeItem("cartSelectedBeforeQuantity");
+	}
  function syncSelection() {//금액 채우면 차는 빨간선
 	    const selectedItems = checks.filter(function (checkbox) {
 	        return checkbox.checked;
@@ -191,17 +212,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
 	    // 현재 주문서는 전체 상품 주문만 연결된 상태
 	    if (order) {
-	        const canOrder = selectedCount === checks.length;
+	        const canOrder = selectedCount >0;
 
 	        order.setAttribute("aria-disabled", String(!canOrder));
 	        order.style.opacity = canOrder ? "1" : ".45";
-	        order.title = canOrder
-	            ? "" : "현재 주문서는 전체 상품 주문만 지원합니다.";
+	        order.title = canOrder ? "" : "주문할 상품을 선택해 주세요.";
+	        
+	        const url = new URL(
+	        		"${pageContext.request.contextPath}/app/order/form",
+	        		location.origin
+	        		);
+	        selectedItems.forEach(function (checkbox){url.searchParams.append("cartItemId",checkbox.value);
+	        });
+	        
+	        order.href = url.href;
+	        
 	    }
 	}
- all.addEventListener('change', function(){checks.forEach(function(c){c.checked=all.checked;});syncSelection();});
+ all.addEventListener('change', function(){checks.forEach(function(c)
+		 {c.checked=all.checked;});
+ 
+ 		syncSelection();
+ });
  checks.forEach(function(c){c.addEventListener('change',syncSelection);});
- if(order) order.addEventListener('click',function(e){if(order.getAttribute('aria-disabled')==='true'){e.preventDefault();alert('현재는 전체 상품을 선택한 뒤 주문할 수 있습니다.');}});
+ if(order){
+	 order.addEventListener("click",function(event){
+		 if(order.getAttribute("aria-disabled")==="true"){
+			 event.preventDefault();
+			 window.Daiso.ui.notice("주문할 상품을 선택해 주세요.");
+		 }
+	 });
+ }
  syncSelection();
 });
 //상품 +- 수정
@@ -227,10 +268,25 @@ document.addEventListener("DOMContentLoaded", function(){
 						 throw new Error("수량 변경 요청에 실패했습니다.");
 					 }
 					 const result = (await response.text()).trim();
-					 if(result === "OK"){
-						 location.reload();
-						 return;
-					 }
+					 if (result === "OK") {
+						    const selectedIds = Array.from(
+						        document.querySelectorAll(".cart-item-check:checked")
+						    ).map(function (checkbox) {
+						        return checkbox.value;
+						    });
+
+						    try {
+						        sessionStorage.setItem(
+						            "cartSelectedBeforeQuantity",
+						            JSON.stringify(selectedIds)
+						        );
+						    } catch (error) {
+						        // 저장이 제한된 브라우저에서도 새로고침은 진행
+						    }
+
+						    location.reload();
+						    return;
+						}
 					 window.Daiso.ui.notice(result);
 				 }catch (error){
 					 window.Daiso.ui.notice(error.message);
@@ -349,6 +405,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 });
 </script>
-
+<%@ include file="cart-delivery.jspf" %>
 </body>
 </html>

@@ -37,7 +37,12 @@ public class CartController {
 		            "장바구니 조회에 실패했습니다.", e
 		        );
 		    }
-
+		    if(session.getAttribute("orderCsrf")== null) {
+		    	session.setAttribute("orderCsrf", java.util.UUID.randomUUID().toString());
+		    }
+		    
+		    request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
+		    request.setAttribute("deliveryAddress", session.getAttribute("orderDeliveryAddress"));
 		    request.setAttribute("pageName", "cart");
 		    request.setAttribute("activeNavigation", "");
 

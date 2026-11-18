@@ -1,8 +1,11 @@
 package daiso.order.controller;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.servlet.http.HttpServletRequest;
@@ -12,7 +15,10 @@ import com.google.gson.JsonObject;
 
 import daiso.cart.db.CartBean;
 import daiso.cart.db.CartDAO;
-import daiso.common.annotation.*;
+import daiso.common.annotation.DaisoController;
+import daiso.common.annotation.DaisoGetMapping;
+import daiso.common.annotation.DaisoPostMapping;
+import daiso.common.annotation.DaisoResponseBody;
 import daiso.order.payment.kakaoPayClient;
 
 @DaisoController
@@ -47,12 +53,47 @@ public class KakaoPayController {
         }
 
         try {
-            CartDAO dao = new CartDAO();
-            List<CartBean> items = dao.getCartList(memberId);
+        	String[] selectedValues =
+        		    request.getParameterValues("cartItemId");
 
-            if (items.isEmpty()) {
-                return error("주문할 상품이 없습니다.");
-            }
+        		if (selectedValues == null || selectedValues.length == 0) {
+        		    return error("주문할 상품을 선택해 주세요.");
+        		}
+
+        		Set<Long> selectedIds = new HashSet<>();
+
+        		try {
+        		    for (String value : selectedValues) {
+        		        long id = Long.parseLong(value);
+
+        		        if (id <= 0) {
+        		            return error("장바구니 번호를 확인해 주세요.");
+        		        }
+
+        		        selectedIds.add(id);
+        		    }
+        		} catch (NumberFormatException e) {
+        		    return error("장바구니 번호를 확인해 주세요.");
+        		}
+
+        		// 본인의 현재 DB 장바구니 조회
+        		CartDAO dao = new CartDAO();
+        		List<CartBean> cartItems = dao.getCartList(memberId);
+
+        		// 전달받은 선택 상품만 결제 대상으로 구성
+        		List<CartBean> items = new ArrayList<>();
+
+        		for (CartBean item : cartItems) {
+        		    if (selectedIds.contains(item.getCartItemId())) {
+        		        items.add(item);
+        		    }
+        		}
+
+        		if (items.size() != selectedIds.size()) {
+        		    return error(
+        		        "선택한 상품이 변경되었습니다. 장바구니에서 다시 선택해 주세요."
+        		    );
+        		}
 
             long subtotal = 0;
             long quantity = 0;

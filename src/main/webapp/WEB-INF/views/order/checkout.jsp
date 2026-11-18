@@ -48,6 +48,13 @@
     <%@ include file="../common/navigation.jspf" %>
     <main id="main-content" class="container shop-page order-screen" data-page="checkout" tabindex="-1">
     <h1 class="order-title">택배배송 주문서</h1>
+    <div id="order-selected-items" hidden>
+    <% for (CartBean item : orderItems) { %>
+        <input type="hidden"
+               name="cartItemId"
+               value="<%= item.getCartItemId() %>">
+    <% } %>
+</div>
     <% if (orderItems.isEmpty()) { %>
         <div class="order-empty"><p>주문할 상품이 없습니다.</p><a href="<%= orderContext %>/app/cart">장바구니로</a></div>
     <% } else { %>
@@ -87,6 +94,7 @@
           <% } %>
           <div class="order-note"><strong>확인해 주세요</strong><p>· 주문 시점에 따라 상품의 판매 상태와 재고가 달라질 수 있습니다.</p><p>· 상품 금액 30,000원 이상 구매 시 무료배송입니다.</p><p>· 주문 전 상품과 배송 정보를 확인해 주세요.</p></div>
         </section>
+        <%-- 
         <section class="order-block" aria-labelledby="coupon-heading">
           <div class="order-section-heading"><h2 id="coupon-heading">쿠폰 적용 <span>0</span></h2></div>
           <div class="coupon-row"><input aria-label="선택된 쿠폰" value="쿠폰을 선택해주세요" readonly><button class="order-small-button" type="button" id="open-coupon">선택</button></div>
@@ -97,7 +105,7 @@
           <div class="order-point-row"><label for="mall-points">다이소몰 포인트 ⓘ</label><div class="order-point-input"><input id="mall-points" value="0" disabled><span>P</span><p class="order-point-balance">보유 0P</p></div><button class="order-small-button" type="button" disabled>전액사용</button></div>
           <div class="order-point-row"><label for="gift-balance">다이소 상품권 ⓘ</label><div class="order-point-input"><input id="gift-balance" placeholder="보유 금액을 조회해 주세요" disabled><p class="order-point-balance">보유 -원</p></div><button class="order-small-button" type="button" data-order-unavailable>조회하기</button></div>
           <div class="gift-register"><button class="order-small-button" type="button" data-order-unavailable>상품권 등록</button><span>상품권을 등록하고 편하게 쇼핑하세요.</span></div>
-        </section>
+        </section>--%>
         <section class="order-block" aria-labelledby="payment-heading">
           <div class="order-section-heading"><h2 id="payment-heading">결제수단<span class="order-required">*</span></h2><label class="order-remember"><input id="remember-payment" type="checkbox"> 이 결제 수단을 다음에도 사용</label></div>
           <div class="payment-methods" role="group" aria-label="결제수단 선택">
@@ -116,7 +124,7 @@
             <button class="payment-method" type="button" disabled><span class="payment-wordmark culture">CULTURE LAND</span>컬쳐랜드상품권</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark">▱</span>금융 법인카드(무기명)</button>
           </div>
-          <div class="payment-detail"><p><strong>카카오페이</strong></p><p>카카오페이 모의결제로 진행할 예정입니다.</p></div>
+          <div class="payment-detail"><p><strong>카카오페이</strong></p></div>
           <p class="payment-help">현재 결제수단은 카카오페이로 제공됩니다.</p>
           <div class="order-agreements"><label><input id="order-consent" type="checkbox"><span>주문 상품과 배송 정보를 확인했으며, 주문 및 결제 진행에 동의합니다.</span></label></div>
         </section>
@@ -128,7 +136,7 @@
         <div class="order-summary-total"><span>결제 예상 금액</span><strong><%= orderMoney.format(orderTotal) %>원</strong></div>
         <details><summary>주문 정보 확인 후, 결제에 동의합니다.</summary><p>주문 상품, 수량, 결제 금액 및 배송지를 확인해 주세요. 결제 진행 시 상품 상태와 재고를 다시 확인합니다.</p></details>
         <button type="button" class="order-pay-button" id="order-pay"><%= orderMoney.format(orderTotal) %>원 결제하기</button>
-        <p class="order-pay-note">모의결제 연동 준비 중</p>
+        
       </aside>
     </div>
     <% } %>
@@ -191,7 +199,7 @@
         try { remember.checked = localStorage.getItem('daiso.order.rememberKakao') === 'true'; } catch (ignored) { /* 저장소 차단 시 기본값 사용 */ }
         remember.addEventListener('change',function () { try { if (remember.checked) localStorage.setItem('daiso.order.rememberKakao','true'); else localStorage.removeItem('daiso.order.rememberKakao'); } catch (ignored) { /* 화면 선택은 유지 */ } });
         document.querySelectorAll('[data-close-dialog]').forEach(function (button) { button.addEventListener('click', function () { button.closest('dialog').close(); }); });
-        document.getElementById('open-coupon').addEventListener('click', function () { document.getElementById('coupon-dialog').showModal(); });
+        //document.getElementById('open-coupon').addEventListener('click', function () { document.getElementById('coupon-dialog').showModal(); });
         document.querySelectorAll('[data-order-unavailable]').forEach(function (button) { button.addEventListener('click', function () { showNotice('상품권 기능은 준비 중입니다.'); }); });
         messageChoice.addEventListener('change', function () { customMessage.hidden = messageChoice.value !== 'custom'; if (!customMessage.hidden) customMessage.focus(); saveMessage(); });
         customMessage.addEventListener('change',saveMessage);
@@ -269,6 +277,11 @@
 
         	        data.set("csrfToken", form.elements.csrfToken.value);
         	        data.set("consent", "true");
+        	        document.querySelectorAll(
+        	        	    '#order-selected-items input[name="cartItemId"]'
+        	        	).forEach(function (input) {
+        	        	    data.append("cartItemId", input.value);
+        	        	});
 
         	        try {
         	            const response = await fetch(

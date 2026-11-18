@@ -1,9 +1,17 @@
 package daiso.order.controller;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import javax.servlet.http.HttpServletRequest;
 
+import daiso.cart.db.CartBean;
+import daiso.cart.db.CartDAO;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
+
 
 @DaisoController
 public class OrderController {
@@ -14,7 +22,43 @@ public class OrderController {
         String memberId = session == null ? null : (String) session.getAttribute("member_id");
         if (memberId == null || memberId.isBlank()) return "redirect:/member/login";
 
-        java.util.List<daiso.cart.db.CartBean> items = new daiso.cart.db.CartDAO().getCartList(memberId);
+        String[]selectedValues = request.getParameterValues("cartItemId");
+        
+        if (selectedValues ==null|| selectedValues.length ==0) {
+        	return "redirect:/cart";
+        }
+        
+        Set<Long> selectedIds = new HashSet<>();
+        
+        try {
+        	for(String value : selectedValues) {
+        		long id = Long.parseLong(value);
+        		
+        		if(id<=0) {
+        			return "redirect:/cart";
+        		}
+        		
+        		selectedIds.add(id);
+        	}
+        }catch (NumberFormatException e) {
+        	return "redirect:/cart";
+        }
+        
+        //로그인 한 회원의 장바구니만 조회
+        List<CartBean> cartItems= new CartDAO().getCartList(memberId);
+        
+        //선택한 항목만 주문목록에 추가
+        List<CartBean> items = new ArrayList<>();
+        
+        for(CartBean item : cartItems) {
+        	if(selectedIds.contains(item.getCartItemId())) {
+        		items.add(item);
+        	}
+        }
+        //삭제된 항목이나 다른 회원번호가 섞이면 주문 진행 중단
+        if(items.size() != selectedIds.size()) {
+        	return "redirect:/cart";
+        }
         long subtotal = 0;
         boolean purchasable = true;
         for (daiso.cart.db.CartBean item : items) {

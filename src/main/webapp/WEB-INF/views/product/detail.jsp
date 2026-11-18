@@ -39,15 +39,21 @@
                         <p>배송비 3,000원 · 상품 30,000원 이상 무료</p>
                     </div>
                     <a class="button secondary" href="<%= ProductView.url(context, "/search.jsp", Map.of("collection", "store", "q", product.getProductCode())) %>">매장 상품 찾기</a>
+                    
+                    <!-- 1. 장바구니 요청 시작 -->
                     <form id="cartAddForm" method="post" action="${pageContext.request.contextPath}/app/cart/add">
+                    <!-- input 안 서버로 보낼 값 -->
+                    <!-- 여기 name(productId, quantity)은 자바에서 값을 꺼내 쓰는 이름  -->
                         <input type="hidden" name="productId" value="<%= ProductView.escape(product.getProductId()) %>">
                     <label class="field">
                         수량
                         <input type="number" name="quantity" min="1" max="<%= Math.max(1, Math.min(99, product.getStockQuantity())) %>" value="1" <%= ProductView.available(product) ? "" : "disabled" %>>
                     </label>
                     <p class="detail-total">합계 <%= ProductView.money(product.getPrice()) %></p>
+                    <!-- 담기 버튼을 누르면 submit 이벤트가 발생 -->
                     <button type="submit" class="button primary" data-add-cart <%= ProductView.available(product) ? "" : "disabled" %>>장바구니 담기</button>
                     </form>
+                    
                 </section>
             </div>
             <section class="product-description">

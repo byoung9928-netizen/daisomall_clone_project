@@ -1,0 +1,308 @@
+<%@ page pageEncoding="UTF-8" %>
+<%
+    java.util.Map<String, String> cartDeliveryValues =
+        request.getAttribute("deliveryAddress") instanceof java.util.Map
+        ? (java.util.Map<String, String>)
+            request.getAttribute("deliveryAddress")
+        : java.util.Collections.emptyMap();
+%>
+
+<style>
+#cart-delivery-open {
+    background: white;
+    cursor: pointer;
+}
+
+#cart-delivery-dialog {
+    width: 520px;
+    max-width: calc(100% - 32px);
+    max-height: 90vh;
+    padding: 24px;
+    border: 0;
+    color: #17212a;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+#cart-delivery-dialog::backdrop {
+    background: rgba(0, 0, 0, .65);
+}
+
+.cart-delivery-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+}
+
+.cart-delivery-heading h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+#cart-delivery-close {
+    border: 0;
+    background: none;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.cart-delivery-field {
+    margin-bottom: 24px;
+}
+
+.cart-delivery-field label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 700;
+}
+
+.cart-delivery-field input {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px;
+    border: 1px solid #e1e4e9;
+    box-sizing: border-box;
+}
+
+.cart-delivery-postcode {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cart-delivery-postcode input {
+    flex: 1;
+    min-width: 0;
+}
+
+#cart-find-address {
+    flex-shrink: 0;
+    padding: 0 14px;
+    border: 1px solid #e1e4e9;
+    background: white;
+    cursor: pointer;
+}
+
+#cart-address1 {
+    margin-bottom: 12px;
+}
+
+#cart-delivery-save {
+    width: 100%;
+    min-height: 48px;
+    border: 0;
+    background: #171e24;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#cart-delivery-error {
+    color: #d60020;
+    font-size: 14px;
+}
+
+.cart-address-message {
+    white-space: pre-line;
+}
+</style>
+
+<dialog id="cart-delivery-dialog"
+        aria-labelledby="cart-delivery-title">
+
+    <div class="cart-delivery-heading">
+        <h2 id="cart-delivery-title">배송지 등록</h2>
+        <button id="cart-delivery-close"
+                type="button"
+                aria-label="배송지 등록 닫기">×</button>
+    </div>
+
+    <form id="cart-delivery-form"
+          method="post"
+          action="${pageContext.request.contextPath}/app/order/address">
+
+        <input type="hidden"
+               name="csrfToken"
+               value="<%= daiso.product.controller.ProductView.escape(
+                   request.getAttribute("orderCsrf")
+               ) %>">
+
+        <div class="cart-delivery-field">
+            <label for="cart-address-name">배송지명 *</label>
+            <input id="cart-address-name"
+                   name="addressName"
+                   maxlength="50"
+                   placeholder="배송지명을 입력해 주세요"
+                   value="<%= daiso.product.controller.ProductView.escape(
+                       cartDeliveryValues.get("addressName")
+                   ) %>"
+                   required>
+        </div>
+
+        <div class="cart-delivery-field">
+            <label for="cart-recipient">수령인 이름 *</label>
+            <input id="cart-recipient"
+                   name="recipient"
+                   maxlength="100"
+                   placeholder="수령인 이름을 입력해 주세요"
+                   value="<%= daiso.product.controller.ProductView.escape(
+                       cartDeliveryValues.get("recipient")
+                   ) %>"
+                   required>
+        </div>
+
+        <div class="cart-delivery-field">
+            <label for="cart-phone">수령인 휴대폰번호 *</label>
+            <input id="cart-phone"
+                   name="phone"
+                   type="tel"
+                   maxlength="30"
+                   placeholder="휴대폰번호를 입력해 주세요"
+                   value="<%= daiso.product.controller.ProductView.escape(
+                       cartDeliveryValues.get("phone")
+                   ) %>"
+                   required>
+        </div>
+
+        <div class="cart-delivery-field">
+            <label for="cart-postcode">주소 *</label>
+
+            <div class="cart-delivery-postcode">
+                <input id="cart-postcode"
+                       name="postcode"
+                       maxlength="5"
+                       pattern="[0-9]{5}"
+                       inputmode="numeric"
+                       placeholder="우편번호"
+                       value="<%= daiso.product.controller.ProductView.escape(
+                           cartDeliveryValues.get("postcode")
+                       ) %>"
+                       required>
+
+                <button id="cart-find-address" type="button">
+                    주소 찾기
+                </button>
+            </div>
+
+            <input id="cart-address1"
+                   name="address1"
+                   maxlength="255"
+                   aria-label="기본주소"
+                   placeholder="기본주소"
+                   value="<%= daiso.product.controller.ProductView.escape(
+                       cartDeliveryValues.get("address1")
+                   ) %>"
+                   required>
+
+            <input name="address2"
+                   maxlength="255"
+                   aria-label="상세주소"
+                   placeholder="상세주소를 입력해 주세요"
+                   value="<%= daiso.product.controller.ProductView.escape(
+                       cartDeliveryValues.get("address2")
+                   ) %>">
+        </div>
+
+        <p id="cart-delivery-error" role="alert"></p>
+
+        <button id="cart-delivery-save" type="submit">저장</button>
+    </form>
+</dialog>
+
+<script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+        defer></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const openButton = document.getElementById("cart-delivery-open");
+    const dialog = document.getElementById("cart-delivery-dialog");
+    const form = document.getElementById("cart-delivery-form");
+    const error = document.getElementById("cart-delivery-error");
+    const saveButton = document.getElementById("cart-delivery-save");
+
+    function showAddress() {
+        if (!form.elements.address1.value.trim()) return;
+
+        document.querySelector(".cart-address-message").textContent =
+            form.elements.recipient.value + "\n"
+            + form.elements.phone.value + "\n"
+            + form.elements.address1.value + " "
+            + form.elements.address2.value;
+
+        openButton.textContent = "⌖ 변경";
+    }
+
+    showAddress();
+
+    openButton.addEventListener("click", function () {
+        error.textContent = "";
+        dialog.showModal();
+    });
+
+    document.getElementById("cart-delivery-close")
+        .addEventListener("click", function () {
+            dialog.close();
+        });
+
+    document.getElementById("cart-find-address")
+        .addEventListener("click", function () {
+            const Postcode =
+                (window.kakao && window.kakao.Postcode)
+                || (window.daum && window.daum.Postcode);
+
+            if (!Postcode) {
+                error.textContent =
+                    "주소 검색을 불러오지 못했습니다. 직접 입력해 주세요.";
+                return;
+            }
+
+            new Postcode({
+                oncomplete: function (data) {
+                    form.elements.postcode.value = data.zonecode;
+
+                    form.elements.address1.value =
+                        data.userSelectedType === "R"
+                            ? data.roadAddress : data.jibunAddress;
+
+                    form.elements.address2.focus();
+                }
+            }).open();
+        });
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (saveButton.disabled) return;
+        saveButton.disabled = true;
+        error.textContent = "";
+
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new URLSearchParams(new FormData(form))
+            });
+
+            if (!response.ok) {
+                throw new Error("배송지 저장 요청에 실패했습니다.");
+            }
+
+            const result = (await response.text()).trim();
+
+            if (result !== "OK") {
+                throw new Error(result);
+            }
+
+            showAddress();
+            dialog.close();
+            window.Daiso.ui.notice("배송지가 저장되었습니다.");
+
+        } catch (cause) {
+            error.textContent = cause.message;
+
+        } finally {
+            saveButton.disabled = false;
+        }
+    });
+});
+</script>
