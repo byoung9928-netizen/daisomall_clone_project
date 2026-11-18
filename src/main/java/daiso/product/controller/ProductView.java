@@ -41,6 +41,7 @@ public final class ProductView {
 
     public static String image(String context, ProductDTO product) {
         String value = product.getImage();
+        if (daiso.product.service.ProductImageStorage.isImagePath(value)) return escape(context + "/" + value);
         if (value != null) {
             try {
                 URI uri = URI.create(value);

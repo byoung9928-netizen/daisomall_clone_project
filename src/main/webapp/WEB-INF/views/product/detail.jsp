@@ -9,12 +9,22 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
     <%@ include file="../common/header.jspf" %>
     <%@ include file="../common/navigation.jspf" %>
+    <div class="wishlist-tools" data-wishlist-config
+         data-base-url="${pageContext.request.contextPath}/app/products/wishlist"
+         data-login-url="${pageContext.request.contextPath}/app/member/login"
+         data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"
+         data-logged-in="<%= Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn")) %>">
+        <a class="button secondary" href="${pageContext.request.contextPath}/app/products/wishlist">♡ 관심상품 보기</a>
+        <p class="wishlist-feedback" data-wishlist-feedback role="status" aria-live="polite"><%= ProductView.escape(request.getAttribute("wishlistError")) %></p>
+    </div>
     <main id="main-content" class="container shop-page" data-page="product" tabindex="-1">
         <% if (product == null) { %>
             <h1 class="page-title">상품을 찾을 수 없습니다.</h1>
@@ -34,6 +44,17 @@
                     <% } %>
                     <p data-product="id">품번 <%= ProductView.escape(product.getProductCode()) %></p>
                     <p class="stock-status" data-product="stock"><%= ProductView.status(product) %> · 온라인 재고 <%= product.getStockQuantity() %>개</p>
+                    <% boolean wishlistDetailSelected = request.getAttribute("wishlistSelected") instanceof java.util.Set<?>
+                            && ((java.util.Set<?>) request.getAttribute("wishlistSelected")).contains(product.getProductId()); %>
+    <button type="button" class="wishlist-button<%= wishlistDetailSelected ? " is-selected" : "" %>"
+            data-wishlist-product="<%= ProductView.escape(product.getProductId()) %>"
+            data-wishlist-name="<%= ProductView.escape(product.getName()) %>"
+            aria-pressed="<%= wishlistDetailSelected %>"
+            aria-label="<%= ProductView.escape(product.getName()) %> <%= request.getAttribute("wishlistError") != null ? "찜 상태 확인 불가" : (wishlistDetailSelected ? "관심상품 해제" : "관심상품 등록") %>"
+            <%= request.getAttribute("wishlistError") != null ? "disabled" : "" %>>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 3.5 12.5C-2 6.5 6 0 12 6c6-6 14 0.5 8.5 6.5Z"/></svg>
+        <span data-wishlist-label><%= wishlistDetailSelected ? "찜 해제" : "찜" %></span>
+    </button>
                     <div class="delivery-summary">
                         <strong>택배배송</strong>
                         <p>배송비 3,000원 · 상품 30,000원 이상 무료</p>

@@ -1,4 +1,6 @@
 <%@ page pageEncoding="UTF-8" %>
+<% boolean wishlistCardSelected = request.getAttribute("wishlistSelected") instanceof java.util.Set<?>
+        && ((java.util.Set<?>) request.getAttribute("wishlistSelected")).contains(item.getProductId()); %>
 <article class="product-card" data-product-id="<%= ProductView.escape(item.getProductId()) %>">
     <a class="product-cover" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>">
         <img src="<%= ProductView.image(context, item) %>" alt="<%= ProductView.escape(item.getName()) %>" loading="lazy">
@@ -6,6 +8,15 @@
             <span class="product-status"><%= ProductView.status(item) %></span>
         <% } %>
     </a>
+    <button type="button" class="wishlist-button<%= wishlistCardSelected ? " is-selected" : "" %>"
+            data-wishlist-product="<%= ProductView.escape(item.getProductId()) %>"
+            data-wishlist-name="<%= ProductView.escape(item.getName()) %>"
+            aria-pressed="<%= wishlistCardSelected %>"
+            aria-label="<%= ProductView.escape(item.getName()) %> <%= request.getAttribute("wishlistError") != null ? "찜 상태 확인 불가" : (wishlistCardSelected ? "관심상품 해제" : "관심상품 등록") %>"
+            <%= request.getAttribute("wishlistError") != null ? "disabled" : "" %>>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 3.5 12.5C-2 6.5 6 0 12 6c6-6 14 0.5 8.5 6.5Z"/></svg>
+        <span data-wishlist-label><%= wishlistCardSelected ? "찜 해제" : "찜" %></span>
+    </button>
     <p class="product-price"><%= ProductView.money(item.getPrice()) %></p>
     <a class="product-name" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>"><%= ProductView.escape(item.getName()) %></a>
     <div class="product-badges"><span class="badge">택배배송</span></div>
