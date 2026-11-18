@@ -32,7 +32,7 @@
                     <a class="button secondary" href="${pageContext.request.contextPath}/app/member/login">로그인 화면</a>
                 <% } %>
             <% } else { %>
-                <% if (request.getAttribute("adminProductError") != null) { %>
+                <% if (productForm == null && request.getAttribute("adminProductError") != null) { %>
                     <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
                 <% } %>
                 <% if (request.getAttribute("adminProductNotice") != null) { %>
@@ -49,9 +49,15 @@
                 </div>
 
                 <% if (productForm != null) { %>
-                    <section class="admin-panel" id="product-editor">
-                        <h2><%= productForm.getOrDefault("id", "").isEmpty() ? "상품 등록" : "상품 수정" %></h2>
-                        <form class="admin-editor-form" method="post" action="${pageContext.request.contextPath}/app/admin/products/save"
+                    <dialog class="product-editor-dialog" id="product-editor" open aria-labelledby="product-editor-title">
+                        <div class="product-editor-heading">
+                            <h2 id="product-editor-title" tabindex="-1"><%= productForm.getOrDefault("id", "").isEmpty() ? "상품 등록" : "상품 수정" %></h2>
+                            <a class="product-editor-close" href="<%= request.getAttribute("adminProductList") %>" aria-label="상품 입력 창 닫기">×</a>
+                        </div>
+                        <% if (request.getAttribute("adminProductError") != null) { %>
+                            <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
+                        <% } %>
+                        <form class="admin-editor-form" method="post" enctype="multipart/form-data" action="${pageContext.request.contextPath}/app/admin/products/save"
                               data-code-check="${pageContext.request.contextPath}/app/admin/products/check-code">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
                             <input type="hidden" name="id" value="<%= ProductView.escape(productForm.get("id")) %>">
@@ -89,16 +95,24 @@
                                     <% } %>
                                 </select>
                             </label>
-                            <label class="field">대표 이미지 경로 또는 HTTPS URL
+                            <label class="field">대표 이미지 파일
+                                <input name="imageFile" type="file" accept="image/jpeg,image/png" aria-describedby="product-image-feedback">
+                            </label>
+                            <p id="product-image-feedback" class="product-field-feedback" role="status">JPG·PNG, 최대 5MB, 가로·세로 각각 최대 4,096픽셀. 파일을 선택하면 기존 사진을 교체합니다.</p>
+                            <img class="product-image-preview" data-product-image-preview data-image-base="${pageContext.request.contextPath}/"
+                                 alt="선택한 상품 대표 이미지 미리보기" hidden>
+                            <label class="field">이미지 경로 또는 HTTPS URL (직접 입력)
                                 <input name="image" maxlength="1000" placeholder="assets/images/…" value="<%= ProductView.escape(productForm.get("image")) %>">
                             </label>
                             <label class="field">상품 설명
                                 <textarea name="description" maxlength="2000" rows="4"><%= ProductView.escape(productForm.get("description")) %></textarea>
                             </label>
-                            <button type="submit" class="button primary">상품 저장</button>
-                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                            <div class="product-editor-actions">
+                                <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                                <button type="submit" class="button primary">상품 저장</button>
+                            </div>
                         </form>
-                    </section>
+                    </dialog>
                 <% } %>
 
                 <% if (deletion != null) { %>

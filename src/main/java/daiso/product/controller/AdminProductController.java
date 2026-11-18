@@ -21,6 +21,7 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.common.annotation.DaisoResponseBody;
+import daiso.product.service.ProductImageStorage;
 import daiso.product.controller.ProductDAO.CatalogPage;
 
 @DaisoController
@@ -84,20 +85,52 @@ public final class AdminProductController {
         HttpSession session = adminSession(request);
         if (session == null) return denied(request, response, "관리자 계정으로 로그인해 주세요.");
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
-
-        Map<String, String> form = productForm(request);
+        Map<String, String> form = new LinkedHashMap<>();
+        ProductImageStorage imageStorage = new ProductImageStorage(request.getServletContext());
+        String uploadedImage = null;
+        String previousImage = "";
+        boolean saved = false;
+        boolean replacingImage = false;
         try {
+            if (request.getContentType() != null && request.getContentType().startsWith("multipart/form-data")) {
+                request.getParts();
+            }
+            if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
+            form = productForm(request);
+            previousImage = form.get("image");
+            javax.servlet.http.Part file = null;
+            if (request.getContentType() != null && request.getContentType().startsWith("multipart/form-data")) {
+                file = request.getPart("imageFile");
+            }
+            boolean hasFile = file != null && file.getSubmittedFileName() != null && !file.getSubmittedFileName().isBlank();
+            replacingImage = hasFile;
+            if (hasFile) form.put("image", "");
             boolean create = form.get("id").isEmpty();
             ProductDTO product = product(form);
+            if (hasFile) {
+                uploadedImage = imageStorage.save(file);
+                product.setImage(uploadedImage);
+                form.put("image", uploadedImage);
+            }
             try (Connection conn = writableConnection()) {
                 if (!dao.saveAdminProduct(conn, product, create)) {
                     return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST,
                             "상품과 최하위 카테고리를 확인해 주세요.", form);
                 }
+                saved = true;
             }
             session.setAttribute(NOTICE, create ? "상품을 등록했습니다." : "상품을 수정했습니다.");
             return "redirect:" + ROUTE;
+        } catch (IllegalStateException error) {
+            response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+            request.setAttribute("adminProductBlocked", "사진은 5MB 이하의 JPG 또는 PNG 파일을 선택해 주세요.");
+            return VIEW;
+        } catch (javax.servlet.ServletException error) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            request.setAttribute("adminProductBlocked", "사진 업로드 요청을 확인해 주세요.");
+            return VIEW;
+        } catch (java.io.IOException error) {
+            return unavailable(request, response, error);
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), form);
         } catch (SQLException error) {
@@ -107,6 +140,15 @@ public final class AdminProductController {
             return unavailable(request, response, error);
         } catch (NamingException error) {
             return unavailable(request, response, error);
+        } finally {
+            if (replacingImage && !saved) form.put("image", previousImage);
+            if (uploadedImage != null && !saved) {
+                try {
+                    imageStorage.discard(uploadedImage);
+                } catch (java.io.IOException error) {
+                    request.getServletContext().log("저장되지 않은 상품 사진 정리 실패", error);
+                }
+            }
         }
     }
 
@@ -329,6 +371,7 @@ public final class AdminProductController {
     }
 
     private static boolean validImage(String value) {
+        if (ProductImageStorage.isImagePath(value)) return true;
         try {
             URI image = URI.create(value);
             if ("https".equalsIgnoreCase(image.getScheme()) && image.getHost() != null && image.getUserInfo() == null) {

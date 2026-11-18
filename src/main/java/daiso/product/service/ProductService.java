@@ -117,6 +117,7 @@ public final class ProductService {
     }
 
     private static boolean validImage(String value) {
+        if (ProductImageStorage.isImagePath(value)) return true;
         try {
             URI image = URI.create(value);
             if ("https".equalsIgnoreCase(image.getScheme()) && image.getHost() != null && image.getUserInfo() == null) {
