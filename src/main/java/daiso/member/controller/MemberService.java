@@ -122,6 +122,30 @@ public class MemberService {
         );
     }
     
+    public boolean isLoginIdAvailable(String loginId) throws Exception {
+        loginId = loginId == null
+                ? ""
+                : loginId.trim().toLowerCase(Locale.ROOT);
+
+        if (!loginId.matches("^[a-z0-9._-]{4,50}$")) {
+            return false;
+        }
+
+        return !memberDAO.existsByLoginId(loginId);
+    }
+
+    public boolean isEmailAvailable(String email) throws Exception {
+        email = email == null
+                ? ""
+                : email.trim().toLowerCase(Locale.ROOT);
+
+        if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return false;
+        }
+
+        return !memberDAO.existsByEmail(email);
+    }
+    
     public MemberLoginInfo login(String loginIdOrEmail, String password)
             throws Exception {
 

@@ -7,6 +7,7 @@ import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
+import daiso.common.annotation.DaisoResponseBody;
 
 @DaisoController
 public class UserController {
@@ -48,13 +49,79 @@ public class UserController {
             return "redirect:/member/login?signup=success";
 
         } catch (IllegalArgumentException e) {
+        	keepSignupInput(request);
             request.setAttribute("signupError", e.getMessage());
             return "member/signup";
 
         } catch (Exception e) {
             e.printStackTrace();
+            keepSignupInput(request);
             request.setAttribute("signupError", "가입 처리 중 오류가 발생했습니다.");
             return "member/signup";
+        }
+        
+    }
+    
+    @DaisoGetMapping("/member/signup/check-login-id")
+    @DaisoResponseBody
+    public String checkSignupLoginId(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        response.setHeader("Cache-Control", "no-store");
+
+        String loginId = request.getParameter("loginId");
+
+        if (loginId == null
+                || !loginId.trim().toLowerCase(java.util.Locale.ROOT)
+                        .matches("^[a-z0-9._-]{4,50}$")) {
+            return "invalid";
+        }
+
+        try {
+            return memberService.isLoginIdAvailable(loginId)
+                    ? "available"
+                    : "duplicate";
+        } catch (Exception e) {
+            request.getServletContext().log("아이디 중복 확인 실패", e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return "error";
+        }
+    }
+
+    @DaisoGetMapping("/member/signup/check-email")
+    @DaisoResponseBody
+    public String checkSignupEmail(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        response.setHeader("Cache-Control", "no-store");
+
+        String email = request.getParameter("email");
+
+        if (email == null
+                || !email.trim().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return "invalid";
+        }
+
+        try {
+            return memberService.isEmailAvailable(email)
+                    ? "available"
+                    : "duplicate";
+        } catch (Exception e) {
+            request.getServletContext().log("이메일 중복 확인 실패", e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return "error";
+        }
+    }
+    
+    private void keepSignupInput(HttpServletRequest request) {
+        String[] fields = {
+            "loginId", "email", "name", "phone", "birthDate", "gender"
+        };
+
+        for (String field : fields) {
+            request.setAttribute(field, request.getParameter(field));
         }
     }
 
