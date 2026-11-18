@@ -10,6 +10,7 @@ import java.util.Map;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
@@ -28,30 +29,37 @@ public class ProductController {
     private final ProductDAO dao = new ProductDAO();
 
     @DaisoGetMapping("/products/home")
-    public String home(HttpServletRequest request) throws SQLException, NamingException {
+    public String home(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
         try (Connection conn = ProductQueries.connect()) {
             request.setAttribute("productCategories", dao.findVisibleCategories(conn));
             request.setAttribute("activeNavigation", "home");
-            request.setAttribute("featuredProducts", dao.findCatalog(conn, selection("recommended", "", 6)).products);
-            request.setAttribute("newProducts", dao.findCatalog(conn, selection("newest", "", 6)).products);
+            List<ProductDTO> featured = dao.findCatalog(conn, selection("recommended", "", 6)).products;
+            List<ProductDTO> newest = dao.findCatalog(conn, selection("newest", "", 6)).products;
+            request.setAttribute("featuredProducts", featured);
+            request.setAttribute("newProducts", newest);
+            // 메인에 표시된 상품의 찜 상태를 한 번에 조회
+            List<String> wishlistIds = new ArrayList<>();
+            for (ProductDTO item : featured) wishlistIds.add(item.getProductId());
+            for (ProductDTO item : newest) wishlistIds.add(item.getProductId());
+            WishlistController.prepare(request, response, conn, wishlistIds);
             conn.commit();
         }
         return "shop/home";
     }
 
     @DaisoGetMapping("/products")
-    public String products(HttpServletRequest request) throws SQLException, NamingException {
-        return catalog(request, "list");
+    public String products(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        return catalog(request, response, "list");
     }
 
     @DaisoGetMapping("/products/search")
-    public String search(HttpServletRequest request) throws SQLException, NamingException {
-        return catalog(request, "search");
+    public String search(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        return catalog(request, response, "search");
     }
 
     @DaisoGetMapping("/products/page")
-    public String page(HttpServletRequest request) throws SQLException, NamingException {
-        return detail(request);
+    public String page(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        return detail(request, response);
     }
 
     @DaisoGetMapping("/products/move")
@@ -60,7 +68,7 @@ public class ProductController {
     }
 
     @DaisoGetMapping("/products/detail")
-    public String detail(HttpServletRequest request) throws SQLException, NamingException {
+    public String detail(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
         String id = request.getParameter("id");
         if (id == null || id.isBlank() || id.length() > 100) {
             return "product/detail";
@@ -82,13 +90,18 @@ public class ProductController {
                     }
                 }
                 request.setAttribute("relatedProducts", recommendations);
+                // 상세와 추천 카드가 같은 찜 상태를 사용
+                List<String> wishlistIds = new ArrayList<>();
+                wishlistIds.add(product.getProductId());
+                for (ProductDTO item : recommendations) wishlistIds.add(item.getProductId());
+                WishlistController.prepare(request, response, conn, wishlistIds);
             }
             conn.commit();
         }
         return "product/detail";
     }
 
-    private String catalog(HttpServletRequest request, String view) throws SQLException, NamingException {
+    private String catalog(HttpServletRequest request, HttpServletResponse response, String view) throws SQLException, NamingException {
         String collection = request.getParameter("collection");
         collection = collection == null ? "" : collection;
         String title = COLLECTIONS.get(collection);
@@ -134,6 +147,10 @@ public class ProductController {
                         title = "‘" + filter.keyword + "’ 검색 결과";
                     }
                 }
+                // 현재 페이지의 찜 상태를 상품별 반복 조회 없이 준비
+                List<String> wishlistIds = new ArrayList<>();
+                for (ProductDTO item : result.products) wishlistIds.add(item.getProductId());
+                WishlistController.prepare(request, response, conn, wishlistIds);
                 request.setAttribute("activeNavigation", collection);
                 request.setAttribute("categoryPath", path);
                 request.setAttribute("catalog", new ProductCatalogView(request.getContextPath(), "/" + view + ".jsp",

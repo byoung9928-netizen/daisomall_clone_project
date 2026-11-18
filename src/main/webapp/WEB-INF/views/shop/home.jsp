@@ -7,6 +7,8 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
 
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/home.css">
@@ -37,6 +39,14 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 <% } %>
     <%@ include file="../common/navigation.jspf" %>
+    <div class="wishlist-tools" data-wishlist-config
+         data-base-url="${pageContext.request.contextPath}/app/products/wishlist"
+         data-login-url="${pageContext.request.contextPath}/app/member/login"
+         data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"
+         data-logged-in="<%= Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn")) %>">
+        <a class="button secondary" href="${pageContext.request.contextPath}/app/products/wishlist">♡ 관심상품 보기</a>
+        <p class="wishlist-feedback" data-wishlist-feedback role="status" aria-live="polite"><%= ProductView.escape(request.getAttribute("wishlistError")) %></p>
+    </div>
     <main id="main-content" class="container storefront" data-page="home" tabindex="-1">
         <%@ include file="home-promotions.jspf" %>
         <section class="product-section" id="featured">
