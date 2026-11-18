@@ -35,7 +35,155 @@
 .cart-price-lines{padding:20px 0}
 .cart-grand-total{padding:18px 0}
 @media(max-width:800px){.cart-screen.container{width:calc(100% - 32px);padding-top:24px}.cart-screen .page-title{font-size:28px;margin-bottom:28px}.cart-board{grid-template-columns:minmax(0,1fr)}.cart-payment{width:100%;min-height:0}.cart-empty{min-height:340px;padding-top:0}}
-.cart-shipping-progress{border:1px solid #e2e5e9;margin-top:24px;padding:24px}.cart-progress-top,.cart-progress-caption{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}.cart-progress-top{color:#718092}.cart-progress-top a{color:inherit;text-decoration:none}.cart-progress-caption{margin-top:12px}.cart-progress-caption span{color:#718092}.cart-shipping-progress progress{display:block;width:100%;height:8px;border:0;border-radius:8px;overflow:hidden;margin-top:16px;appearance:none;background:#e9ecf2}.cart-shipping-progress progress::-webkit-progress-bar{background:#e9ecf2;border-radius:8px}.cart-shipping-progress progress::-webkit-progress-value{background:linear-gradient(90deg,#ffb1bb,#e60020);border-radius:8px}.cart-shipping-progress progress::-moz-progress-bar{background:#e60020}.cart-selection-toolbar{display:flex;justify-content:space-between;align-items:center;min-height:74px;font-size:13px}.cart-selection-toolbar label{display:flex;align-items:center;gap:7px}.cart-screen input[type=checkbox]{appearance:auto;width:20px;height:20px;accent-color:#171e24;margin:0;flex-shrink:0}.cart-selection-toolbar button{border:0;background:none;color:#8b949f;font-size:13px}.cart-product-table{width:100%;border-collapse:collapse;table-layout:fixed;border-top:2px solid #171e24}.cart-col-check{width:32px}.cart-col-price{width:130px}.cart-col-quantity{width:130px}.cart-col-total{width:120px}.cart-col-delete{width:34px}.cart-product-table th{height:54px;background:#f5f6f8;border-bottom:1px solid #dfe3e8;font-size:14px;text-align:center}.cart-product-table td{padding:24px 8px;vertical-align:middle}.cart-product-table .cart-check-cell{padding-left:4px;vertical-align:top}.cart-table-product{display:flex;align-items:center;gap:16px;text-decoration:none;color:#171e24;font-size:13px;line-height:1.6}.cart-table-product img{width:80px;height:108px;object-fit:contain;background:#f5f5f5;flex-shrink:0}.cart-table-money{text-align:center;font-size:17px;font-weight:700;white-space:nowrap}.cart-stepper{display:flex;align-items:center;justify-content:space-between;border:1px solid #e2e5e9;width:118px;height:36px;box-sizing:border-box;margin:auto;font-size:14px;font-weight:700}.cart-stepper button{border:0;background:none;width:34px;height:34px;font-size:18px;color:#a0a7b0;padding:0}.cart-remove{border:0;background:none;font-size:28px;color:#9ca5af;padding:0;line-height:1}.cart-cautions{background:#f6f7f9;border-radius:3px;padding:18px 20px;color:#758395;font-size:12px;line-height:1.7}.cart-cautions p{margin:4px 0 0}.cart-table-wrap{overflow-x:auto}@media(max-width:1100px){.cart-col-price{width:85px}.cart-col-quantity{width:105px}.cart-col-total{width:90px}.cart-stepper{width:96px}.cart-table-product{gap:8px}.cart-table-product img{width:60px;height:80px}.cart-table-money{font-size:14px}}@media(max-width:800px){.cart-product-table{min-width:620px}.cart-shipping-progress{padding:18px}.cart-progress-caption{font-size:12px}}
+.cart-shipping-progress{
+border:1px solid #e2e5e9;margin-top:24px;padding:24px}
+.cart-progress-top,.cart-progress-caption{
+display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+.cart-progress-top{
+					color:#718092}
+.cart-progress-top a{
+					color:inherit;text-decoration:none}
+.cart-progress-caption{
+					margin-top:12px}
+.cart-progress-caption span{color:#718092}
+.cart-shipping-progress progress{	
+				display:block;width:100%;height:8px;border:0;
+				border-radius:8px;overflow:hidden;margin-top:16px;
+				appearance:none;background:#e9ecf2}
+.cart-shipping-progress progress::-webkit-progress-bar{
+				background:#e9ecf2;border-radius:8px}
+.cart-shipping-progress progress::-webkit-progress-value{
+				background:linear-gradient(90deg,#ffb1bb,#e60020);border-radius:8px}
+.cart-shipping-progress progress::-moz-progress-bar{background:#e60020}
+.cart-selection-toolbar{display:flex;justify-content:space-between;align-items:center;min-height:74px;font-size:13px}
+.cart-selection-toolbar label{display:flex;align-items:center;gap:7px}
+.cart-screen input[type=checkbox]{appearance:auto;width:20px;height:20px;accent-color:#171e24;margin:0;flex-shrink:0}
+.cart-selection-toolbar button{border:0;background:none;color:#8b949f;font-size:13px}
+.cart-product-table{width:100%;border-collapse:collapse;table-layout:fixed;border-top:2px solid #171e24}
+.cart-col-check{width:32px}.cart-col-price{width:130px}
+.cart-col-quantity{width:130px}
+.cart-col-total{width:120px}
+.cart-col-delete{width:34px}
+.cart-product-table th{height:54px;background:#f5f6f8;border-bottom:1px solid #dfe3e8;font-size:14px;text-align:center}
+.cart-product-table td{padding:24px 8px;vertical-align:middle}
+.cart-product-table .cart-check-cell{padding-left:4px;vertical-align:top}
+.cart-table-product{display:flex;align-items:center;gap:16px;text-decoration:none;color:#171e24;font-size:13px;line-height:1.6}
+.cart-table-product img{width:80px;height:108px;object-fit:contain;background:#f5f5f5;flex-shrink:0}
+.cart-table-money{text-align:center;font-size:17px;font-weight:700;white-space:nowrap}
+.cart-stepper{display:flex;align-items:center;justify-content:space-between;border:1px solid #e2e5e9;
+				width:118px;height:36px;box-sizing:border-box;margin:auto;font-size:14px;font-weight:700}
+.cart-stepper button{border:0;background:none;width:34px;height:34px;font-size:18px;color:#a0a7b0;padding:0}
+.cart-remove{border:0;background:none;font-size:28px;color:#9ca5af;padding:0;line-height:1}
+.cart-cautions{background:#f6f7f9;border-radius:3px;padding:18px 20px;color:#758395;font-size:12px;line-height:1.7}
+.cart-cautions p{margin:4px 0 0}
+.cart-table-wrap{overflow-x:auto}
+@media(max-width:1100px){.cart-col-price{width:85px}.cart-col-quantity{width:105px}.cart-col-total{width:90px}
+				.cart-stepper{width:96px}.cart-table-product{gap:8px}.cart-table-product img{width:60px;height:80px}
+				.cart-table-money{font-size:14px}}@media(max-width:800px){.cart-product-table{min-width:620px}
+.cart-shipping-progress{padding:18px}.cart-progress-caption{font-size:12px}}
+@media (max-width: 800px) {
+    .cart-table-wrap {
+        overflow: visible;
+    }
+
+    .cart-product-table {
+        display: block;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .cart-product-table colgroup,
+    .cart-product-table thead {
+        display: none;
+    }
+
+    .cart-product-table tbody {
+        display: block;
+    }
+
+    .cart-product-table tr {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) 28px;
+        gap: 14px 10px;
+        padding: 20px 0;
+        border-bottom: 1px solid #e2e5e9;
+    }
+
+    .cart-product-table td {
+        display: block;
+        padding: 0;
+        min-width: 0;
+    }
+
+    .cart-product-table .cart-check-cell {
+        grid-column: 1;
+        grid-row: 1;
+        padding: 0;
+    }
+
+    .cart-product-table td:nth-child(2) {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .cart-table-product {
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .cart-table-product img {
+        width: 60px;
+        height: 80px;
+    }
+
+    .cart-table-product span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .cart-product-table td:nth-child(3) {
+        grid-column: 2;
+        grid-row: 2;
+        text-align: left;
+        font-size: 14px;
+    }
+
+    .cart-product-table td:nth-child(3)::before {
+        content: "상품금액 ";
+        color: #748090;
+        font-weight: 400;
+    }
+
+    .cart-product-table td:nth-child(4) {
+        grid-column: 2;
+        grid-row: 3;
+    }
+
+    .cart-stepper {
+        width: 118px;
+        margin: 0;
+    }
+
+    .cart-product-table td:nth-child(5) {
+        grid-column: 2;
+        grid-row: 4;
+        text-align: left;
+        font-size: 17px;
+    }
+
+    .cart-product-table td:nth-child(5)::before {
+        content: "총 금액 ";
+        color: #748090;
+        font-size: 14px;
+        font-weight: 400;
+    }
+
+    .cart-product-table td:nth-child(6) {
+        grid-column: 3;
+        grid-row: 1;
+        text-align: right;
+    }
+}
 </style>
 </head>
 <body>
