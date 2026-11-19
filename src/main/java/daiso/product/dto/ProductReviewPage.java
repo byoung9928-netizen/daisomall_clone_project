@@ -11,9 +11,10 @@ public final class ProductReviewPage {
     public final BigDecimal average;
     public final int page;
     public final long totalPages;
+    public final ReviewExtras extras;
 
     public ProductReviewPage(List<ProductReview> items, ProductReview ownReview, boolean canWrite,
-            long total, BigDecimal average, int page, long totalPages) {
+            long total, BigDecimal average, int page, long totalPages, ReviewExtras extras) {
         this.items = List.copyOf(items);
         this.ownReview = ownReview;
         this.canWrite = canWrite;
@@ -21,5 +22,6 @@ public final class ProductReviewPage {
         this.average = average;
         this.page = page;
         this.totalPages = totalPages;
+        this.extras = extras;
     }
 }

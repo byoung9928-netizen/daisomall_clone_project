@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -97,17 +98,21 @@ public final class ProductReviewDAO {
         }
     }
 
-    public void insert(Connection connection, String productId, String memberId, long orderItemId,
+    public long insert(Connection connection, String productId, String memberId, long orderItemId,
             int rating, String content) throws SQLException {
         String sql = "INSERT INTO product_reviews (product_id, member_id, order_item_id, rating, content) "
                 + "VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement query = connection.prepareStatement(sql)) {
+        try (PreparedStatement query = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             query.setString(1, productId);
             query.setString(2, memberId);
             query.setLong(3, orderItemId);
             query.setInt(4, rating);
             query.setString(5, content);
             query.executeUpdate();
+            try (ResultSet keys = query.getGeneratedKeys()) {
+                if (keys.next()) return keys.getLong(1);
+                throw new SQLException("저장한 리뷰 ID를 확인할 수 없습니다.");
+            }
         }
     }
 

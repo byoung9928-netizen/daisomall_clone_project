@@ -1,5 +1,5 @@
 <%@ page pageEncoding="UTF-8" %>
-<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview" %>
+<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview,daiso.product.dto.ReviewExtras.Answer" %>
 <section id="product-reviews" class="pd-reviews" aria-labelledby="product-reviews-title" tabindex="-1">
     <div class="pd-reviews__heading">
         <h2 id="product-reviews-title">상품 리뷰<%= detailReviews == null ? "" : " (" + detailReviews.total + ")" %></h2>
@@ -40,6 +40,24 @@
                             <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
                         </div>
                         <p class="pd-reviews__body"><%= ProductView.escape(review.content) %></p>
+                        <% if (!detailReviews.extras.answers(review.id).isEmpty()) { %>
+                            <dl class="pd-reviews__answers">
+                                <% for (Answer answer : detailReviews.extras.answers(review.id)) { %>
+                                    <div><dt><%= ProductView.escape(answer.question) %></dt><dd><%= ProductView.escape(answer.label) %></dd></div>
+                                <% } %>
+                            </dl>
+                        <% } %>
+                        <% if (!detailReviews.extras.photos(review.id).isEmpty()) { %>
+                            <div class="pd-reviews__photos">
+                                <% int number = 1;
+                                   for (long photoId : detailReviews.extras.photos(review.id)) {
+                                       String photoUrl = ProductView.escape(context + "/product-review-photo?id=" + photoId);
+                                %>
+                                    <a href="<%= photoUrl %>"><img src="<%= photoUrl %>" loading="lazy"
+                                         alt="리뷰 사진 <%= number++ %> 크게 보기" width="96" height="96"></a>
+                                <% } %>
+                            </div>
+                        <% } %>
                     </li>
                 <% } %>
             </ul>

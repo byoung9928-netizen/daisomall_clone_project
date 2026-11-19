@@ -4,18 +4,28 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.product.dao.ProductReviewDAO.Sort;
+import daiso.product.dto.ReviewExtras.Submission;
 import daiso.product.service.ProductReviewService;
 import daiso.product.service.ProductReviewService.Result;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import javax.naming.NamingException;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
 
 @DaisoController
 public final class ProductReviewController {
@@ -84,6 +94,17 @@ public final class ProductReviewController {
         if (member == null) return error(request, response, 401, "로그인이 필요합니다.");
         try {
             request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            Collection<Part> parts = List.of();
+            String type = request.getContentType();
+            if (action != Action.DELETE && type != null && type.startsWith("multipart/form-data")) {
+                try {
+                    parts = request.getParts();
+                } catch (IllegalStateException limit) {
+                    return error(request, response, 413, "사진은 한 번에 총 5MB까지 첨부할 수 있습니다.");
+                } catch (ServletException malformed) {
+                    return error(request, response, 400, "사진 첨부 요청을 읽을 수 없습니다.");
+                }
+            }
             if (!validToken(request, session, member)) {
                 return error(request, response, 403, "보안 확인에 실패했습니다. 리뷰 화면을 다시 열어 주세요.");
             }
@@ -94,13 +115,14 @@ public final class ProductReviewController {
             if (version < 0 || (action != Action.CREATE && id < 1)) throw new IllegalArgumentException();
             int rating = action == Action.DELETE ? 0 : Integer.parseInt(request.getParameter("rating"));
             String content = request.getParameter("content");
+            Submission submission = action == Action.DELETE ? null : submission(request, parts, action);
             Result result;
             switch (action) {
                 case CREATE:
-                    result = service.create(productId, member, rating, content);
+                    result = service.create(productId, member, rating, content, submission);
                     break;
                 case UPDATE:
-                    result = service.update(productId, member, id, version, rating, content);
+                    result = service.update(productId, member, id, version, rating, content, submission);
                     break;
                 default:
                     result = service.delete(productId, member, id, version);
@@ -113,14 +135,45 @@ public final class ProductReviewController {
                     return error(request, response, 403, "취소되지 않은 결제 완료 구매가 있어야 작성할 수 있습니다.");
                 case DUPLICATE:
                     return error(request, response, 409, "이미 이 상품에 작성한 리뷰가 있습니다.");
+                case EXTRAS_UNAVAILABLE:
+                    return error(request, response, 503, "리뷰 답변과 사진을 저장할 수 없습니다. 화면을 다시 열어 주세요.");
                 default:
                     return error(request, response, 409, "수정하거나 삭제할 수 없는 리뷰입니다. 화면을 다시 열어 주세요.");
             }
+        } catch (NumberFormatException failure) {
+            return error(request, response, 400, "별점과 리뷰 정보를 확인해 주세요.");
         } catch (IllegalArgumentException failure) {
-            return error(request, response, 400, "입력값을 확인해 주세요. 별점은 1~5점, 내용은 1~2,000자입니다.");
-        } catch (SQLException | NamingException | java.io.UnsupportedEncodingException failure) {
+            return error(request, response, 400, failure.getMessage() == null
+                    ? "상품과 리뷰 입력값을 확인해 주세요." : failure.getMessage());
+        } catch (SQLException | NamingException | IOException failure) {
             return unavailable(request, response, failure);
         }
+    }
+
+    private static Submission submission(HttpServletRequest request, Collection<Part> parts, Action action)
+            throws IOException {
+        String[] enabled = request.getParameterValues("reviewExtras");
+        if (enabled == null && parts.isEmpty()) return null;
+        if (enabled == null || enabled.length != 1 || !"1".equals(enabled[0])) throw new IllegalArgumentException();
+
+        Map<String, Integer> answers = new HashMap<>();
+        for (Map.Entry<String, String[]> entry : request.getParameterMap().entrySet()) {
+            if (!entry.getKey().startsWith("answer_")) continue;
+            String[] values = entry.getValue();
+            if (answers.size() >= 2 || values.length != 1) throw new IllegalArgumentException();
+            if (!values[0].isEmpty()) answers.put(entry.getKey().substring("answer_".length()), Integer.parseInt(values[0]));
+        }
+
+        Set<Long> removals = new LinkedHashSet<>();
+        String[] requested = request.getParameterValues("removePhoto");
+        if (requested != null) {
+            if (action != Action.UPDATE || requested.length > Submission.MAX_PHOTOS) throw new IllegalArgumentException();
+            for (String value : requested) {
+                long id = Long.parseLong(value);
+                if (id < 1 || !removals.add(id)) throw new IllegalArgumentException();
+            }
+        }
+        return new Submission(answers, ReviewPhotoUpload.read(parts, Submission.MAX_PHOTOS), List.copyOf(removals));
     }
 
     private enum Action { CREATE, UPDATE, DELETE }
