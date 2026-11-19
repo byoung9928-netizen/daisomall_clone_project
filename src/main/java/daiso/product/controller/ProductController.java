@@ -17,6 +17,8 @@ import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.ProductDAO.CatalogFilter;
 import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.controller.ProductDAO.Category;
+import daiso.product.dao.ProductReviewDAO.Sort;
+import daiso.product.service.ProductReviewService;
 
 @DaisoController
 public class ProductController {
@@ -27,6 +29,8 @@ public class ProductController {
             "store", "매장 상품 찾기", "exhibitions", "기획전", "exhibition", "기획전");
 
     private final ProductDAO dao = new ProductDAO();
+    private final OfficialProductDetails officialDetails = new OfficialProductDetails();
+    private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/products/home")
     public String home(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
@@ -98,7 +102,34 @@ public class ProductController {
             }
             conn.commit();
         }
+        ProductDTO product = (ProductDTO) request.getAttribute("product");
+        if (product != null) {
+            request.setAttribute("officialProductDetails", officialDetails.find(request.getServletContext(), product));
+            prepareDetailReviews(request, product.getProductId());
+        }
         return "product/detail";
+    }
+
+    private void prepareDetailReviews(HttpServletRequest request, String productId) {
+        String requestedSort = request.getParameter("reviewSort");
+        Sort sort = "highest".equals(requestedSort) ? Sort.HIGHEST
+                : "lowest".equals(requestedSort) ? Sort.LOWEST : Sort.NEWEST;
+        int page = 1;
+        String rawPage = request.getParameter("reviewPage");
+        if (rawPage != null) {
+            try {
+                page = Math.max(1, Integer.parseInt(rawPage));
+            } catch (NumberFormatException ignored) {
+                // 잘못된 리뷰 페이지 값은 첫 페이지로 표시한다.
+            }
+        }
+        request.setAttribute("detailReviewSort", sort.key);
+        try {
+            // 상품 조회 트랜잭션과 분리해 리뷰 오류에도 상세 화면을 표시한다.
+            request.setAttribute("detailReviews", reviews.page(productId, null, sort, page));
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("상품 상세 리뷰 조회 실패", error);
+        }
     }
 
     private String catalog(HttpServletRequest request, HttpServletResponse response, String view) throws SQLException, NamingException {
