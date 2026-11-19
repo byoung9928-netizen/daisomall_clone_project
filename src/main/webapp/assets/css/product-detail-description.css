@@ -1,0 +1,78 @@
+.pd-official {
+    max-width: 900px;
+    margin: 2rem auto 3rem;
+    padding-inline: clamp(0rem, 2vw, 1rem);
+}
+
+.pd-official h2, .pd-official h3 { margin: 0 0 1rem; }
+.pd-official__empty { margin: 0; color: #505a65; }
+
+.pd-official__expand > summary {
+    display: block;
+    cursor: pointer;
+    list-style: none;
+}
+.pd-official__expand > summary::-webkit-details-marker { display: none; }
+.pd-official__expand > summary:focus-visible {
+    outline: 2px solid #145da0;
+    outline-offset: 4px;
+}
+
+.pd-official__preview {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    max-height: clamp(14rem, 62vw, 33rem);
+    background: #f5f6f7;
+}
+.pd-official__preview img, .pd-official__photos img { display: block; width: 100%; height: auto; }
+.pd-official__preview::after {
+    position: absolute;
+    inset: auto 0 0;
+    height: 4rem;
+    content: "";
+    background: linear-gradient(transparent, #fff);
+    pointer-events: none;
+}
+.pd-official__toggle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: .65rem;
+    min-height: 48px;
+    padding: .7rem;
+    border: 1px solid #343c44;
+    border-radius: .3rem;
+    font-weight: 700;
+}
+.pd-official__toggle::after {
+    content: "";
+    width: .48rem;
+    height: .48rem;
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+}
+.pd-official__less, .pd-official__expand[open] .pd-official__more,
+.pd-official__expand[open] .pd-official__preview { display: none; }
+.pd-official__expand[open] .pd-official__less { display: inline; }
+.pd-official__expand[open] .pd-official__toggle::after { transform: rotate(225deg); }
+.pd-official__content { padding-top: 1rem; }
+.pd-official__photos { display: grid; gap: .5rem; margin-bottom: 1.75rem; }
+.pd-official__photos--representative img, .pd-official__preview--representative img {
+    max-width: 500px;
+    margin-inline: auto;
+}
+.pd-official__facts { margin: 0 0 1rem; border-top: 1px solid #dbe1e7; }
+.pd-official__facts > div {
+    display: grid;
+    grid-template-columns: minmax(5rem, 24%) minmax(0, 1fr);
+    border-bottom: 1px solid #dbe1e7;
+}
+.pd-official__facts :is(dt, dd) { padding: .7rem; margin: 0; overflow-wrap: anywhere; }
+.pd-official__facts dt { font-weight: 700; background: #f5f6f7; }
+.pd-official__source { display: inline-block; padding-block: .45rem; text-underline-offset: .2em; }
+
+@media (max-width: 480px) {
+    .pd-official__facts :is(dt, dd) { padding: .55rem; }
+}

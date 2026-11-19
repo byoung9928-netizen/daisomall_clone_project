@@ -11,9 +11,19 @@ import java.util.List;
 import java.util.Map;
 
 public class ProductDAO {
-    private static final String COLUMNS = "p.product_id, p.name, p.price, p.stock_quantity, "
-            + "p.category_id, p.product_code, p.brand, p.status, p.image_url, p.description, p.rating, "
-            + "p.review_count, p.source_kind, p.source_note";
+    private static final String PRODUCT_FIELDS = "p.product_id, p.name, p.price, p.stock_quantity, "
+            + "p.category_id, p.product_code, p.brand, p.status, p.image_url, p.description, "
+            + "p.source_kind, p.source_note";
+    private static final String ADMIN_COLUMNS = PRODUCT_FIELDS + ", p.rating, p.review_count";
+    private static final String REVIEW_AVERAGE = "COALESCE(review_stats.average_rating, 0)";
+    private static final String REVIEW_COUNT = "COALESCE(review_stats.review_count, 0)";
+    private static final String PUBLIC_COLUMNS = PRODUCT_FIELDS
+            + ", " + REVIEW_AVERAGE + " AS rating, " + REVIEW_COUNT + " AS review_count";
+    // 공개 상품 조회는 논리 삭제되지 않은 구매 리뷰만 한 번에 집계한다.
+    private static final String ACTIVE_REVIEW_STATS =
+            " LEFT JOIN (SELECT product_id, AVG(rating) AS average_rating, COUNT(*) AS review_count "
+            + "FROM product_reviews WHERE deleted_at IS NULL GROUP BY product_id) review_stats "
+            + "ON review_stats.product_id = p.product_id";
     private static final String VISIBLE_CATEGORIES =
             "WITH RECURSIVE visible_categories AS ("
             + "SELECT category_id, parent_id, name, level, display_order FROM categories "
@@ -38,7 +48,7 @@ public class ProductDAO {
                 total = rows.getInt(1);
             }
         }
-        try (PreparedStatement query = conn.prepareStatement("SELECT " + COLUMNS + scope
+        try (PreparedStatement query = conn.prepareStatement("SELECT " + ADMIN_COLUMNS + scope
                 + " ORDER BY p.created_at DESC, p.product_id LIMIT ? OFFSET ?")) {
             bind(query, terms);
             query.setInt(5, limit);
@@ -104,7 +114,7 @@ public class ProductDAO {
     }
 
     public List<ProductDTO> findAll(Connection conn) throws SQLException {
-        try (PreparedStatement query = conn.prepareStatement("SELECT " + COLUMNS + " FROM products p")) {
+        try (PreparedStatement query = conn.prepareStatement("SELECT " + PUBLIC_COLUMNS + " FROM products p" + ACTIVE_REVIEW_STATS)) {
             return readProducts(query);
         }
     }
@@ -119,9 +129,10 @@ public class ProductDAO {
 
     private ProductDTO findById(Connection conn, String productId, boolean visibleOnly) throws SQLException {
         String sql = visibleOnly
-                ? VISIBLE_CATEGORIES + " SELECT " + COLUMNS + " FROM products p "
-                        + "JOIN visible_categories v ON p.category_id = v.category_id WHERE p.product_id = ?"
-                : "SELECT " + COLUMNS + " FROM products p WHERE p.product_id = ?";
+                ? VISIBLE_CATEGORIES + " SELECT " + PUBLIC_COLUMNS + " FROM products p "
+                        + "JOIN visible_categories v ON p.category_id = v.category_id"
+                        + ACTIVE_REVIEW_STATS + " WHERE p.product_id = ?"
+                : "SELECT " + ADMIN_COLUMNS + " FROM products p WHERE p.product_id = ?";
         try (PreparedStatement query = conn.prepareStatement(sql)) {
             query.setString(1, productId);
             try (ResultSet row = query.executeQuery()) {
@@ -132,7 +143,7 @@ public class ProductDAO {
 
     public List<ProductDTO> searchProducts(Connection conn, String keyword) throws SQLException {
         try (PreparedStatement query = conn.prepareStatement(
-                "SELECT " + COLUMNS + " FROM products p WHERE p.name LIKE ?")) {
+                "SELECT " + PUBLIC_COLUMNS + " FROM products p" + ACTIVE_REVIEW_STATS + " WHERE p.name LIKE ?")) {
             query.setString(1, "%" + keyword + "%");
             return readProducts(query);
         }
@@ -161,7 +172,7 @@ public class ProductDAO {
             parameters.add(filter.category);
         }
         StringBuilder scope = new StringBuilder(" FROM products p JOIN " + categories
-                + " c ON p.category_id = c.category_id WHERE 1 = 1");
+                + " c ON p.category_id = c.category_id" + ACTIVE_REVIEW_STATS + " WHERE 1 = 1");
         if (!filter.keyword.isEmpty()) {
             scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0"
                     + " OR LOCATE(?, p.brand) > 0)");
@@ -186,7 +197,7 @@ public class ProductDAO {
             scope.append(" AND p.stock_quantity <= 5");
         }
         if (filter.topRated) {
-            scope.append(" AND p.rating = 5 AND p.review_count > 0");
+            scope.append(" AND " + REVIEW_AVERAGE + " = 5 AND " + REVIEW_COUNT + " > 0");
         }
 
         int total;
@@ -206,7 +217,7 @@ public class ProductDAO {
         parameters.add(filter.limit);
         parameters.add(filter.offset);
         try (PreparedStatement query = conn.prepareStatement(
-                sql + " SELECT " + COLUMNS + scope + " ORDER BY " + order + ", p.product_id LIMIT ? OFFSET ?")) {
+                sql + " SELECT " + PUBLIC_COLUMNS + scope + " ORDER BY " + order + ", p.product_id LIMIT ? OFFSET ?")) {
             bind(query, parameters);
             return new CatalogPage(readProducts(query), total);
         }
@@ -221,9 +232,9 @@ public class ProductDAO {
             case "priceDesc":
                 return "p.price DESC";
             case "rating":
-                return "p.rating DESC, p.review_count DESC";
+                return REVIEW_AVERAGE + " DESC, " + REVIEW_COUNT + " DESC";
             case "reviews":
-                return "p.review_count DESC";
+                return REVIEW_COUNT + " DESC";
             default:
                 return "p.sales DESC";
         }
