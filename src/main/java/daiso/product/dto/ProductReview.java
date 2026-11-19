@@ -9,14 +9,16 @@ public final class ProductReview {
     public final LocalDateTime createdAt;
     public final boolean owner;
     public final long version;
+    public final boolean refunded;
 
     public ProductReview(long id, int rating, String content, LocalDateTime createdAt,
-            boolean owner, long version) {
+            boolean owner, long version, boolean refunded) {
         this.id = id;
         this.rating = rating;
         this.content = content;
         this.createdAt = createdAt;
         this.owner = owner;
         this.version = version;
+        this.refunded = refunded;
     }
 }
