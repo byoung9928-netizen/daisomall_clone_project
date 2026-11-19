@@ -1,5 +1,6 @@
 package daiso.product.controller;
 
+import daiso.product.dao.ReviewVisibility;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -22,7 +23,8 @@ public class ProductDAO {
     // 공개 상품 조회는 논리 삭제되지 않은 구매 리뷰만 한 번에 집계한다.
     private static final String ACTIVE_REVIEW_STATS =
             " LEFT JOIN (SELECT product_id, AVG(rating) AS average_rating, COUNT(*) AS review_count "
-            + "FROM product_reviews WHERE deleted_at IS NULL GROUP BY product_id) review_stats "
+            + "FROM product_reviews rv WHERE rv.deleted_at IS NULL" + ReviewVisibility.PUBLISHED
+            + " GROUP BY product_id) review_stats "
             + "ON review_stats.product_id = p.product_id";
     private static final String VISIBLE_CATEGORIES =
             "WITH RECURSIVE visible_categories AS ("
@@ -36,32 +38,50 @@ public class ProductDAO {
             + "UNION ALL SELECT v.category_id FROM visible_categories v "
             + "JOIN selected_categories s ON v.parent_id = s.category_id)";
 
-    CatalogPage findAdminProducts(Connection conn, String keyword, int limit, int offset) throws SQLException {
-        String scope = " FROM products p WHERE LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
-                + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0";
-        List<String> terms = List.of(keyword, keyword, keyword, keyword);
+    CatalogPage findAdminProducts(Connection conn, AdminProductFilter filter, int limit, int offset) throws SQLException {
+        String prefix = "";
+        StringBuilder scope = new StringBuilder(" FROM products p");
+        List<Object> terms = new ArrayList<>();
+        if (!filter.category.isEmpty()) {
+            prefix = "WITH RECURSIVE admin_selected AS (SELECT category_id FROM categories WHERE category_id = ? "
+                    + "UNION ALL SELECT c.category_id FROM categories c JOIN admin_selected s ON c.parent_id = s.category_id) ";
+            scope.append(" JOIN admin_selected s ON s.category_id = p.category_id");
+            terms.add(filter.category);
+        }
+        scope.append(" WHERE 1 = 1");
+        if (!filter.keyword.isEmpty()) {
+            scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
+                    + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0)");
+            terms.addAll(Collections.nCopies(4, filter.keyword));
+        }
+        if (!filter.status.isEmpty()) {
+            scope.append(" AND p.status = ?");
+            terms.add(filter.status);
+        }
+        scope.append(filter.stock.predicate);
+        if (filter.stockQuantity != null) terms.add(filter.stockQuantity);
         int total;
-        try (PreparedStatement query = conn.prepareStatement("SELECT COUNT(*)" + scope)) {
+        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT COUNT(*)" + scope)) {
             bind(query, terms);
             try (ResultSet rows = query.executeQuery()) {
                 rows.next();
                 total = rows.getInt(1);
             }
         }
-        try (PreparedStatement query = conn.prepareStatement("SELECT " + ADMIN_COLUMNS + scope
-                + " ORDER BY p.created_at DESC, p.product_id LIMIT ? OFFSET ?")) {
+        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + ADMIN_COLUMNS + scope
+                + " ORDER BY " + filter.sort.orderBy + ", p.product_id LIMIT ? OFFSET ?")) {
             bind(query, terms);
-            query.setInt(5, limit);
-            query.setInt(6, offset);
+            query.setInt(terms.size() + 1, limit);
+            query.setInt(terms.size() + 2, offset);
             return new CatalogPage(readProducts(query), total);
         }
     }
 
-    Map<String, String> findAdminCategories(Connection conn) throws SQLException {
+    Map<String, String> findAdminCategories(Connection conn, boolean leavesOnly) throws SQLException {
         String sql = "SELECT c.category_id, CONCAT_WS(' › ', g.name, p.name, c.name) AS path "
                 + "FROM categories c LEFT JOIN categories p ON c.parent_id = p.category_id "
                 + "LEFT JOIN categories g ON p.parent_id = g.category_id "
-                + "WHERE c.is_leaf = 1 ORDER BY path, c.category_id";
+                + (leavesOnly ? "WHERE c.is_leaf = 1 " : "") + "ORDER BY path, c.category_id";
         Map<String, String> categories = new LinkedHashMap<>();
         try (PreparedStatement query = conn.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
             while (rows.next()) {
@@ -103,6 +123,24 @@ public class ProductDAO {
             query.setString(10, product.getProductId());
             query.setString(11, product.getCategoryId());
             return query.executeUpdate() == 1;
+        }
+    }
+
+    ProductDTO lockAdminProduct(Connection conn, String id) throws SQLException {
+        try (PreparedStatement query = conn.prepareStatement(
+                "SELECT " + ADMIN_COLUMNS + " FROM products p WHERE p.product_id = ? FOR UPDATE")) {
+            query.setString(1, id);
+            try (ResultSet row = query.executeQuery()) {
+                return row.next() ? readProduct(row) : null;
+            }
+        }
+    }
+
+    void updateAdminStatus(Connection conn, String id, String status) throws SQLException {
+        try (PreparedStatement query = conn.prepareStatement("UPDATE products SET status = ? WHERE product_id = ?")) {
+            query.setString(1, status);
+            query.setString(2, id);
+            if (query.executeUpdate() != 1) throw new SQLException("상품 판매 상태 저장 실패");
         }
     }
 

@@ -118,7 +118,7 @@
                                         <div class="review-dialog__previews">
                                             <% for (long photoId : reviews.extras.photos(own.id)) { %>
                                                 <label>
-                                                    <img src="<%= ProductView.escape(context + "/product-review-photo?id=" + photoId) %>" alt="첨부된 리뷰 사진">
+                                                    <img src="<%= ProductView.escape(context + "/private-product-review-photo?id=" + photoId) %>" alt="첨부된 리뷰 사진">
                                                     <input type="checkbox" name="removePhoto" value="<%= photoId %>"> 삭제
                                                 </label>
                                             <% } %>

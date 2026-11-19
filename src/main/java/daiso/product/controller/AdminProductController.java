@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -23,6 +25,8 @@ import daiso.common.annotation.DaisoPostMapping;
 import daiso.common.annotation.DaisoResponseBody;
 import daiso.product.service.ProductImageStorage;
 import daiso.product.controller.ProductDAO.CatalogPage;
+import daiso.product.controller.AdminProductChanges.Action;
+import daiso.product.controller.AdminProductChanges.HistoryPage;
 
 @DaisoController
 public final class AdminProductController {
@@ -38,6 +42,7 @@ public final class AdminProductController {
     private static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
             "SCHEDULED", "판매 예정");
     private final ProductDAO dao = new ProductDAO();
+    private final AdminProductChanges changes = new AdminProductChanges();
 
     @DaisoGetMapping(ROUTE)
     public String list(HttpServletRequest request, HttpServletResponse response) {
@@ -112,15 +117,17 @@ public final class AdminProductController {
                 product.setImage(uploadedImage);
                 form.put("image", uploadedImage);
             }
-            try (Connection conn = writableConnection()) {
-                if (!dao.saveAdminProduct(conn, product, create)) {
-                    return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST,
-                            "상품과 최하위 카테고리를 확인해 주세요.", form);
-                }
-                saved = true;
-            }
+            saved = write(conn -> {
+                ProductDTO before = create ? null : dao.lockAdminProduct(conn, product.getProductId());
+                if (!create && before == null) return false;
+                if (!dao.saveAdminProduct(conn, product, create)) return false;
+                changes.record(conn, administrator(session), create ? Action.CREATE : Action.UPDATE, before, product);
+                return true;
+            });
+            if (!saved) return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST,
+                    "상품과 최하위 카테고리를 확인해 주세요.", form);
             session.setAttribute(NOTICE, create ? "상품을 등록했습니다." : "상품을 수정했습니다.");
-            return "redirect:" + ROUTE;
+            return redirectToList(request);
         } catch (IllegalStateException error) {
             response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
             request.setAttribute("adminProductBlocked", "사진은 5MB 이하의 JPG 또는 PNG 파일을 선택해 주세요.");
@@ -161,19 +168,23 @@ public final class AdminProductController {
         try {
             String id = ProductQueries.text(request, "id", 100);
             if (id.isEmpty()) throw new IllegalArgumentException();
-            try (Connection conn = writableConnection()) {
-                if (!dao.deleteAdminProduct(conn, id)) {
-                    return problem(request, response, session, HttpServletResponse.SC_NOT_FOUND, "상품을 찾을 수 없습니다.", null);
-                }
-            }
+            boolean deleted = write(conn -> {
+                ProductDTO before = dao.lockAdminProduct(conn, id);
+                if (before == null || !dao.deleteAdminProduct(conn, id)) return false;
+                changes.record(conn, administrator(session), Action.DELETE, before, null);
+                return true;
+            });
+            if (!deleted) return problem(request, response, session, HttpServletResponse.SC_NOT_FOUND,
+                    "상품을 찾을 수 없습니다.", null);
             session.setAttribute(NOTICE, "상품을 삭제했습니다.");
-            return "redirect:" + ROUTE;
+            return redirectToList(request);
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, "삭제할 상품을 확인해 주세요.", null);
         } catch (SQLException error) {
             if (error.getErrorCode() == 1451) {
+                request.setAttribute("adminProductRelatedId", request.getParameter("id").strip());
                 return problem(request, response, session, HttpServletResponse.SC_CONFLICT,
-                        "장바구니나 주문에 연결된 상품은 삭제할 수 없습니다. 판매 상태를 변경할 수 있습니다.", null);
+                        "주문·장바구니·찜·리뷰에 연결된 상품은 삭제할 수 없습니다. 판매 상태를 변경해 주세요.", null);
             }
             return unavailable(request, response, error);
         } catch (NamingException error) {
@@ -181,27 +192,87 @@ public final class AdminProductController {
         }
     }
 
+    @DaisoPostMapping(ROUTE + "/bulk-status")
+    public String bulkStatus(HttpServletRequest request, HttpServletResponse response)
+            throws java.io.UnsupportedEncodingException {
+        HttpSession session = adminSession(request);
+        if (session == null) return denied(request, response, "관리자 계정으로 로그인해 주세요.");
+        request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
+        try {
+            String status = ProductQueries.text(request, "targetStatus", 20);
+            if (!STATUSES.containsKey(status)) throw new IllegalArgumentException("변경할 판매 상태를 선택해 주세요.");
+            SortedSet<String> ids = selectedIds(request.getParameterValues("selectedProduct"));
+            int updated = write(conn -> {
+                int count = 0;
+                for (String id : ids) {
+                    ProductDTO before = dao.lockAdminProduct(conn, id);
+                    if (before == null || !before.getProductId().equals(id)) {
+                        throw new IllegalArgumentException("선택 목록에 삭제됐거나 찾을 수 없는 상품이 있습니다.");
+                    }
+                    if (status.equals(before.getStatus())) continue;
+                    dao.updateAdminStatus(conn, id, status);
+                    ProductDTO after = dao.lockAdminProduct(conn, id);
+                    changes.record(conn, administrator(session), Action.BULK_STATUS, before, after);
+                    count++;
+                }
+                return count;
+            });
+            session.setAttribute(NOTICE, ids.size() + "개 선택 · " + updated + "개 상품의 판매 상태를 변경했습니다.");
+            return redirectToList(request);
+        } catch (IllegalArgumentException error) {
+            return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
+        } catch (SQLException | NamingException error) {
+            return unavailable(request, response, error);
+        }
+    }
+
+    private static SortedSet<String> selectedIds(String[] values) {
+        if (values == null || values.length == 0 || values.length > PAGE_SIZE) {
+            throw new IllegalArgumentException("현재 페이지의 상품을 1~30개 선택해 주세요.");
+        }
+        SortedSet<String> ids = new TreeSet<>();
+        for (String id : values) {
+            if (id.isBlank() || id.codePointCount(0, id.length()) > 100
+                    || !id.equals(id.strip()) || id.codePoints().anyMatch(Character::isISOControl) || !ids.add(id)) {
+                throw new IllegalArgumentException("선택한 상품을 확인해 주세요.");
+            }
+        }
+        return ids;
+    }
+
     private String show(HttpServletRequest request, HttpServletResponse response, HttpSession session,
             Map<String, String> form) {
-        String query = "";
+        AdminProductFilter filter = AdminProductFilter.defaults();
         String editId = "";
         String deleteId = "";
+        String historyId = "";
+        Long historyBefore = null;
         int page = 1;
+        boolean history = "1".equals(request.getParameter("history"));
         try {
-            query = ProductQueries.text(request, "query", 120);
+            filter = AdminProductFilter.read(request, STATUSES);
             page = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
             editId = ProductQueries.text(request, "edit", 100);
             deleteId = ProductQueries.text(request, "delete", 100);
+            if (history) {
+                historyId = ProductQueries.text(request, "historyId", 100);
+                String before = ProductQueries.text(request, "beforeChange", 19);
+                if (!before.isEmpty()) {
+                    historyBefore = Long.valueOf(before);
+                    if (historyBefore < 1) throw new IllegalArgumentException();
+                }
+            }
         } catch (IllegalArgumentException error) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             request.setAttribute("adminProductError", "검색 조건을 확인해 주세요.");
         }
         try (Connection conn = ProductQueries.connect()) {
-            CatalogPage result = dao.findAdminProducts(conn, query, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+            CatalogPage result = dao.findAdminProducts(conn, filter, PAGE_SIZE, (page - 1) * PAGE_SIZE);
             int pages = Math.max(1, (result.total + PAGE_SIZE - 1) / PAGE_SIZE);
             if (page > pages) {
                 page = pages;
-                result = dao.findAdminProducts(conn, query, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+                result = dao.findAdminProducts(conn, filter, PAGE_SIZE, (page - 1) * PAGE_SIZE);
             }
             if (!editId.isEmpty() || !deleteId.isEmpty()) {
                 ProductDTO selected = dao.findById(conn, editId.isEmpty() ? deleteId : editId);
@@ -218,23 +289,48 @@ public final class AdminProductController {
             }
             if (form != null) {
                 request.setAttribute("productForm", form);
-                request.setAttribute("productCategories", dao.findAdminCategories(conn));
+                request.setAttribute("productCategories", dao.findAdminCategories(conn, true));
                 request.setAttribute("adminMinPrice", MIN_PRICE);
                 request.setAttribute("adminMaxPrice", MAX_PRICE);
                 request.setAttribute("adminPriceRange", PRICE_RANGE);
             }
-            conn.commit();
+            request.setAttribute("adminCategoryFilters", dao.findAdminCategories(conn, false));
+            request.setAttribute("adminStockFilters", AdminProductFilter.stockOptions());
             String context = request.getContextPath();
             String url = "/app" + ROUTE;
-            Map<String, String> filters = Map.of("query", query, "page", Integer.toString(page));
+            Map<String, String> filters = filter.parameters(page);
+            request.setAttribute("adminProductFilters", filters);
+            AdminProductFilter.Sort nextPriceSort = filter.sort == AdminProductFilter.Sort.PRICE_ASC
+                    ? AdminProductFilter.Sort.PRICE_DESC : AdminProductFilter.Sort.PRICE_ASC;
+            request.setAttribute("adminPriceSortLink", ProductView.url(context, url,
+                    ProductView.with(filter.parameters(1), "sort", nextPriceSort.name())));
+            Map<String, String> historyFilters = ProductView.with(filters, "history", "1");
+            request.setAttribute("adminProductHistory", ProductView.url(context, url, historyFilters));
+            request.setAttribute("adminProductSave", ProductView.url(context, url + "/save", filters));
+            request.setAttribute("adminProductDelete", ProductView.url(context, url + "/delete", filters));
+            request.setAttribute("adminProductBulk", ProductView.url(context, url + "/bulk-status", filters));
+            if (history) {
+                HistoryPage entries = changes.list(conn, historyId, historyBefore);
+                Map<String, String> scopedHistory = ProductView.with(historyFilters, "historyId", historyId);
+                request.setAttribute("productHistory", entries.entries);
+                request.setAttribute("productHistoryId", historyId);
+                if (entries.next != null) request.setAttribute("productHistoryOlder", ProductView.url(context, url,
+                        ProductView.with(scopedHistory, "beforeChange", entries.next.toString())));
+            }
+            String relatedId = (String) request.getAttribute("adminProductRelatedId");
+            if (relatedId != null) {
+                request.setAttribute("adminProductStatusLink", ProductView.url(context, url,
+                        ProductView.with(filters, "edit", relatedId)));
+            }
+            conn.commit();
             Map<ProductDTO, Map<String, String>> rows = new LinkedHashMap<>();
             for (ProductDTO product : result.products) {
                 rows.put(product, Map.of(
                         "edit", ProductView.url(context, url, ProductView.with(filters, "edit", product.getProductId())),
-                        "delete", ProductView.url(context, url, ProductView.with(filters, "delete", product.getProductId()))));
+                        "delete", ProductView.url(context, url, ProductView.with(filters, "delete", product.getProductId())),
+                        "history", ProductView.url(context, url, ProductView.with(historyFilters, "historyId", product.getProductId()))));
             }
             request.setAttribute("productRows", rows);
-            request.setAttribute("adminQuery", query);
             request.setAttribute("adminProductCount", result.total);
             Map<Integer, String> pageLinks = new LinkedHashMap<>();
             int firstPage = ((page - 1) / PAGE_LINKS) * PAGE_LINKS + 1;
@@ -277,13 +373,13 @@ public final class AdminProductController {
         return VIEW;
     }
 
-    private static HttpSession adminSession(HttpServletRequest request) {
+    static HttpSession adminSession(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         return session != null && session.getAttribute("member_id") != null && "ADMIN".equals(session.getAttribute("role"))
                 ? session : null;
     }
 
-    private static String token(HttpSession session) {
+    static String token(HttpSession session) {
         synchronized (session) {
             String value = (String) session.getAttribute(CSRF);
             if (value == null) {
@@ -294,16 +390,49 @@ public final class AdminProductController {
         }
     }
 
-    private static boolean validToken(HttpServletRequest request, HttpSession session) {
+    static boolean validToken(HttpServletRequest request, HttpSession session) {
         String expected = (String) session.getAttribute(CSRF);
         String submitted = request.getParameter("csrf");
         return expected != null && submitted != null && MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8), submitted.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static Connection writableConnection() throws SQLException, NamingException {
+    private static String redirectToList(HttpServletRequest request) {
+        try {
+            AdminProductFilter filter = AdminProductFilter.read(request, STATUSES);
+            int page = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
+            return "redirect:" + ProductView.rawUrl("", ROUTE, filter.parameters(page));
+        } catch (IllegalArgumentException ignored) {
+            return "redirect:" + ROUTE;
+        }
+    }
+
+    private static String administrator(HttpSession session) {
+        return session.getAttribute("member_id").toString();
+    }
+
+    private static <T> T write(AdminWrite<T> action) throws SQLException, NamingException {
         DataSource source = InitialContext.doLookup("java:comp/env/jdbc/mysqlDB");
-        return source.getConnection();
+        try (Connection conn = source.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                T result = action.run(conn);
+                conn.commit();
+                return result;
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface AdminWrite<T> {
+        T run(Connection conn) throws SQLException;
     }
 
     private static Map<String, String> productForm(HttpServletRequest request) {

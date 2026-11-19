@@ -1,0 +1,59 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.time.format.DateTimeFormatter,java.util.List,daiso.product.controller.AdminProductChanges.Entry" %>
+<%
+    List<Entry> productHistory = (List<Entry>) request.getAttribute("productHistory");
+    String scopedProductId = (String) request.getAttribute("productHistoryId");
+%>
+<% if (productHistory != null) {
+    DateTimeFormatter changeTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제");
+%>
+    <section class="admin-panel admin-product-history" id="product-history" aria-labelledby="product-history-title">
+        <div class="admin-product-history-heading">
+            <h2 id="product-history-title">상품 변경 이력</h2>
+            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">이력 닫기</a>
+        </div>
+        <% if (scopedProductId != null && !scopedProductId.isEmpty()) { %>
+            <p>상품 ID <strong><%= ProductView.escape(scopedProductId) %></strong></p>
+        <% } %>
+        <% if (productHistory.isEmpty()) { %>
+            <p>기록된 변경 이력이 없습니다.</p>
+        <% } else { %>
+            <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 변경 이력">
+                <table class="admin-table">
+                    <caption class="visually-hidden">관리자가 변경한 가격, 재고, 판매 상태</caption>
+                    <thead><tr>
+                        <th scope="col">변경 시각</th><th scope="col">관리자</th><th scope="col">상품</th>
+                        <th scope="col">작업</th><th scope="col">변경 항목</th>
+                    </tr></thead>
+                    <tbody>
+                        <% for (Entry change : productHistory) { %>
+                            <tr>
+                                <td><time datetime="<%= change.at %>"><%= change.at.format(changeTime) %></time></td>
+                                <td><%= ProductView.escape(change.actor) %></td>
+                                <td><%= ProductView.escape(change.productName) %> (<%= ProductView.escape(change.productCode) %>)</td>
+                                <td><%= ProductView.escape(actionNames.get(change.action)) %></td>
+                                <td>
+                                    <ul class="admin-product-history-differences">
+                                        <% if (change.priceChanged()) { %>
+                                            <li><strong>가격</strong> <%= change.beforePrice == null ? "—" : ProductView.money(change.beforePrice) %> → <%= change.afterPrice == null ? "—" : ProductView.money(change.afterPrice) %></li>
+                                        <% } %>
+                                        <% if (change.stockChanged()) { %>
+                                            <li><strong>재고</strong> <%= change.beforeStock == null ? "—" : change.beforeStock %> → <%= change.afterStock == null ? "—" : change.afterStock %></li>
+                                        <% } %>
+                                        <% if (change.statusChanged()) { %>
+                                            <li><strong>판매 상태</strong> <%= change.beforeStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.beforeStatus, change.beforeStatus)) %> → <%= change.afterStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.afterStatus, change.afterStatus)) %></li>
+                                        <% } %>
+                                    </ul>
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+        <% if (request.getAttribute("productHistoryOlder") != null) { %>
+            <p><a class="button secondary" href="<%= request.getAttribute("productHistoryOlder") %>#product-history">이전 기록</a></p>
+        <% } %>
+    </section>
+<% } %>
