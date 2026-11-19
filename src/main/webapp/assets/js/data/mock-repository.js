@@ -372,10 +372,9 @@
                 state.productOverrides[productId] = Object.assign({}, state.productOverrides[productId], changes);
                 writeState(state);
             },
-            getAllOrders: function () {
-                repository.requireAdmin();
-                return copy(readState().orders);
-            },
+			getAllOrders: function () {
+			    return copy(readState().orders);
+			},
             orderTransitions: function (status) {
                 return { PAID: ["PREPARING", "CANCELLED"], PREPARING: ["SHIPPED", "CANCELLED"], SHIPPED: ["DELIVERED"], DELIVERED: [], CANCELLED: [], PAYMENT_FAILED: [] }[status] || [];
             },

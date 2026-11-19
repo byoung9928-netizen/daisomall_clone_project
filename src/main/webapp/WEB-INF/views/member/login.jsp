@@ -116,12 +116,6 @@ document.addEventListener("DOMContentLoaded", function () {
 					</button>
 				</div>
 			</div>
-			<button type="button" id="adminDemoLogin" class="button secondary"
-				style="width: 100%; margin-top: 20px;">관리자 체험 로그인 (Mock)</button>
-
-			<p class="source-note">관리자 화면 확인용 체험 로그인입니다.</p>
-
-			<p id="adminDemoError" class="error-message" role="alert"></p>
 		</section>
 	</main>
 	<%@ include file="../common/footer.jspf"%>
@@ -135,37 +129,16 @@ document.addEventListener("DOMContentLoaded", function () {
 			var savedEmail = localStorage.getItem(storageKey);
 
 			if (savedEmail) {
-				emailInput.value = savedEmail;
-				saveEmail.checked = true;
+			    loginIdInput.value = savedEmail;
+			    saveEmail.checked = true;
 			}
 
 			form.addEventListener("submit", function() {
 				if (saveEmail.checked) {
-					localStorage.setItem(storageKey, emailInput.value.trim());
+					localStorage.setItem(storageKey, loginIdInput.value.trim());
 				} else {
 					localStorage.removeItem(storageKey);
 				}
-			});
-		});
-	</script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			var button = document.getElementById("adminDemoLogin");
-			var errorMessage = document.getElementById("adminDemoError");
-
-			window.Daiso.ready.then(function(repository) {
-				button.addEventListener("click", function() {
-					errorMessage.textContent = "";
-
-					try {
-						repository.login("admin@example.test", "demo1234");
-						location.href = window.Daiso.url("admin/", {
-							view : "dashboard"
-						});
-					} catch (error) {
-						errorMessage.textContent = error.message;
-					}
-				});
 			});
 		});
 	</script>

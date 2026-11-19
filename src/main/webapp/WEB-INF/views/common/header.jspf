@@ -7,7 +7,16 @@
             <div class="store-tools">
                 <button type="button" data-unavailable>매장 위치 찾기</button>
                 <a class="store-search-link" href="${pageContext.request.contextPath}/search.jsp?collection=store">매장 상품 찾기</a>
-            </div>
+				<%
+				if ("ADMIN".equalsIgnoreCase(String.valueOf(session.getAttribute("role")))) {
+				%>
+				<a href="${pageContext.request.contextPath}/app/admin/dashboard"
+					style="display: flex; align-items: center; white-space: nowrap; color: #e60023; font-size: 13px; font-weight: 600; text-decoration: none;"
+					title="관리자 대시보드로 이동"> 관리자 대시보드 </a>
+				<%
+				}
+				%>
+			</div>
         </div>
     </div>
     <div class="container header-main">
@@ -24,7 +33,9 @@
         </form>
         <button class="delivery-button" type="button" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg" alt="" width="16" height="16">배송이나 픽업 어때요? <span aria-hidden="true">⌄</span></button>
         <div class="account-tools" aria-label="회원 메뉴">
-            <% if (session.getAttribute("member_id") == null) { %>
+			<%
+			if (session.getAttribute("member_id") == null) {
+			%>
     <button type="button" title="로그인"
             onclick="location.href='${pageContext.request.contextPath}/app/member/login'">
         <svg class="account-icon" aria-hidden="true">
