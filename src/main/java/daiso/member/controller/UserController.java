@@ -197,6 +197,9 @@ public class UserController {
                 expireRememberCookie(request, response);
             }
 
+            if ("ADMIN".equalsIgnoreCase(member.getRole())) {
+                return "redirect:/admin/dashboard";
+            }
             return "redirect:/home";
 
         } catch (IllegalArgumentException e) {
@@ -735,6 +738,19 @@ public class UserController {
         request.setAttribute("memberEmail", session.getAttribute("email"));
 
         return "member/mypage";
+    }
+    @DaisoGetMapping("/admin/dashboard")
+    public String adminDashboard(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+
+        if (session == null
+                || session.getAttribute("member_id") == null
+                || !"ADMIN".equalsIgnoreCase(
+                        String.valueOf(session.getAttribute("role")))) {
+            return "redirect:/member/login";
+        }
+
+        return "admin/dashboard";
     }
     
     @DaisoGetMapping("/member/profile")
