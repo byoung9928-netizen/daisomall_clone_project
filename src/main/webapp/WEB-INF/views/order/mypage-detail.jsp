@@ -3,8 +3,19 @@
 <%@ page import="daiso.member.controller.MemberProfileInfo"%>
 <%@ page
 	import="java.util.Map,java.util.List,java.util.Collections,daiso.cart.db.CartBean,daiso.product.controller.ProductView"%>
+<%@ page import="java.util.Set"%>
 <%
 String myContext = request.getContextPath();
+Set<String> linkedSocialProviders =
+(Set<String>) request.getAttribute("linkedSocialProviders");
+
+if (linkedSocialProviders == null) {
+linkedSocialProviders = Collections.emptySet();
+}
+
+boolean kakaoLinked = linkedSocialProviders.contains("KAKAO");
+boolean naverLinked = linkedSocialProviders.contains("NAVER");
+boolean googleLinked = linkedSocialProviders.contains("GOOGLE");
 Map<String, Object> myOrder = (Map<String, Object>) request.getAttribute("myOrder");
 List<Map<String, Object>> myOrders = (List<Map<String, Object>>) request.getAttribute("myOrders");
 if (myOrders == null)
@@ -1283,6 +1294,102 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	background: #fff;
 	cursor: pointer;
 }
+.member-email-change-button {
+    margin-left: auto;
+    width: 197px;
+    min-height: 30px;
+    border: 1px solid #e2e5e9;
+    background: #fff;
+    cursor: pointer;
+}
+
+.member-email-editor {
+    border-top: 1px solid #e2e5e9;
+    padding: 20px 0;
+}
+
+.member-email-edit-content {
+    min-width: 0;
+    width: 100%;
+}
+
+.member-email-inputs {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) auto minmax(150px, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.member-email-inputs input,
+.member-email-inputs select {
+    width: 100%;
+    min-width: 0;
+    height: 48px;
+    padding: 0 12px;
+    border: 1px solid #ccd1d8;
+    background: #fff;
+    font: inherit;
+}
+
+.member-email-inputs button {
+    min-width: 150px;
+    height: 48px;
+    border: 1px solid #dfe4eb;
+    background: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.member-email-edit-row .member-login-label em {
+    color: #e60023;
+    font-style: normal;
+}
+
+.member-email-message {
+    min-height: 22px;
+    margin: 8px 0;
+    color: #e60023;
+    font-size: 13px;
+}
+
+.member-email-save-button {
+    width: 100%;
+    min-height: 48px;
+    border: 0;
+    background: #17212a;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.member-email-save-button:disabled {
+    background: #e7e9ec;
+    color: #aeb5bd;
+    cursor: default;
+}
+
+@media (max-width: 700px) {
+    .member-email-change-button {
+        width: auto;
+        padding: 0 12px;
+    }
+    
+
+    .member-email-inputs {
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .member-email-inputs button {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .member-email-edit-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
 
 .member-social-row {
 	align-items: start;
@@ -1351,6 +1458,95 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	color: #111;
 	font-weight: 700;
 }
+.member-login-social {
+    width: 100%;
+}
+
+.member-linked-social-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.member-linked-social,
+.member-kakao-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    color: #111;
+}
+
+.member-linked-social button,
+.member-kakao-link button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #111;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.member-linked-icon {
+    display: inline-grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.member-linked-icon-naver {
+    background: #03c75a;
+    color: #fff;
+}
+
+.member-linked-icon-google {
+    background: #f1f3f4;
+    color: #4285f4;
+}
+
+.member-social-empty {
+    margin: 0;
+    min-height: 32px;
+    color: #667b94;
+    font-size: 13px;
+}
+
+.member-social-help {
+    color: #667b94;
+    font-size: 13px;
+}
+
+.member-social-buttons {
+    flex-wrap: wrap;
+}
+
+.member-social-buttons button {
+    width: 275px;
+    min-height: 40px;
+}
+
+.member-kakao-button {
+    border: 0;
+    background: #fee500;
+    color: #111;
+    font-weight: 700;
+}
+
+.member-google-button {
+    border: 1px solid #111;
+    background: #fff;
+    color: #111;
+    font-weight: 700;
+}
+
+@media (max-width: 700px) {
+    .member-social-buttons button {
+        width: 100%;
+    }
+}
 
 @media ( max-width : 700px) {
 	.member-login-row {
@@ -1359,6 +1555,200 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	.member-social-buttons button {
 		width: 50%;
 	}
+}
+.my-screen .member-consent-section {
+    margin-top: 60px;
+    color: #17212a;
+}
+
+.my-screen .member-consent-section h3 {
+    margin: 0 0 28px;
+    font-size: 27px;
+    font-weight: 800;
+}
+
+.my-screen .member-consent-section .member-consent-row {
+    display: grid;
+    grid-template-columns: 218px minmax(0, 1fr);
+    margin-bottom: 30px;
+}
+
+.my-screen .member-consent-label {
+    padding-top: 4px;
+    color: #667b94;
+}
+
+.my-screen .member-consent-content {
+    min-width: 0;
+}
+
+.my-screen .member-consent-title,
+.my-screen .member-consent-check,
+.my-screen .member-consent-options,
+.my-screen .member-retention-options {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.my-screen .member-consent-title {
+    margin-bottom: 12px;
+}
+
+.my-screen .member-consent-title button,
+.my-screen .member-consent-check button,
+.my-screen .member-consent-footer button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #17212a;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+}
+
+.my-screen .member-consent-options label,
+.my-screen .member-retention-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.my-screen .member-consent-section input[type="checkbox"],
+.my-screen .member-consent-section input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    accent-color: #17212a;
+}
+
+.my-screen .member-consent-muted {
+    color: #9ca7b5;
+}
+
+.my-screen .member-consent-check {
+    margin-bottom: 14px;
+}
+
+.my-screen .member-consent-notice {
+    margin: 28px 0 0;
+    padding: 14px 18px 14px 30px;
+    background: #f6f7f9;
+    color: #667b94;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.my-screen .member-retention-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.my-screen .member-retention-options {
+    gap: 22px;
+}
+
+.my-screen .member-retention-save {
+    width: 197px;
+    min-height: 30px;
+    border: 0;
+    background: #e7e9ec;
+    color: #aeb5bd;
+}
+
+.my-screen .member-consent-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 78px;
+    padding-top: 18px;
+    border-top: 1px solid #e2e5e9;
+}
+
+@media (max-width: 700px) {
+    .my-screen .member-consent-section h3 {
+        font-size: 23px;
+    }
+
+    .my-screen .member-consent-section .member-consent-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .my-screen .member-retention-content {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .my-screen .member-retention-save {
+        width: 100%;
+    }
+}
+.profile-password-dialog {
+    width: min(440px, calc(100% - 32px));
+    border: 0;
+    padding: 28px;
+    color: #17212a;
+}
+
+.profile-password-dialog::backdrop {
+    background: rgba(0, 0, 0, .65);
+}
+
+.profile-password-dialog h2 {
+    margin: 0 0 24px;
+    font-size: 22px;
+}
+
+.profile-password-dialog label {
+    display: block;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.profile-password-dialog input {
+    display: block;
+    width: 100%;
+    height: 44px;
+    margin-top: 8px;
+    padding: 0 12px;
+    border: 1px solid #ccd1d8;
+    box-sizing: border-box;
+}
+
+.profile-password-hint {
+    margin: -8px 0 16px;
+    color: #667b94;
+    font-size: 12px;
+}
+
+.profile-password-message {
+    min-height: 20px;
+    color: #e60023;
+    font-size: 13px;
+}
+
+.profile-password-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.profile-password-actions button {
+    min-width: 100px;
+    height: 40px;
+    border: 1px solid #dfe4eb;
+    background: #fff;
+    cursor: pointer;
+}
+
+.profile-password-actions button[type="submit"] {
+    border-color: #17212a;
+    background: #17212a;
+    color: #fff;
 }
 </style>
 </head>
@@ -1637,10 +2027,10 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 									%> <strong> <%=ProductView.escape(profilePickupStore.get("storeName"))%>
 								</strong><br> <%=ProductView.escape(profilePickupStore.get("address"))%>
 									<%
- } else {
- %> 선택된 픽업매장이 없습니다. <%
- }
- %>
+									} else {
+									%> 선택된 픽업매장이 없습니다. <%
+									}
+									%>
 								</td>
 							</tr>
 						</tbody>
@@ -1768,6 +2158,23 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					String maskedProfileLoginId = profileLoginId.length() > 3
 							? profileLoginId.substring(0, 3) + "*".repeat(profileLoginId.length() - 3)
 							: profileLoginId;
+					String profileEmail =
+					        profile.getEmail() == null ? "" : profile.getEmail().trim();
+
+					String maskedProfileEmail = profileEmail;
+					int emailAtIndex = profileEmail.indexOf("@");
+
+					if (emailAtIndex > 0) {
+					    String emailId = profileEmail.substring(0, emailAtIndex);
+					    String emailDomain = profileEmail.substring(emailAtIndex);
+
+					    int visibleLength = Math.min(2, emailId.length());
+
+					    maskedProfileEmail =
+					            emailId.substring(0, visibleLength)
+					            + "********"
+					            + emailDomain;
+					}
 					%>
 
 					<h3 class="member-login-title">로그인 정보</h3>
@@ -1789,17 +2196,60 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 							<div class="member-login-label">비밀번호</div>
 							<div class="member-login-value">
 								<button type="button" class="member-login-password"
-									data-my-unavailable>비밀번호 변경</button>
+									id="openProfilePasswordDialog">비밀번호 변경</button>
 							</div>
 						</div>
 
 						<div class="member-login-row member-social-row">
-							<div class="member-login-label">간편 로그인 연결</div>
+							<div class="member-login-label">
+								간편 로그인 연결 <span class="member-social-help">ⓘ</span>
+							</div>
+
 							<div class="member-login-social">
-								<div class="member-kakao-link">
-									<span class="member-kakao-icon" aria-hidden="true">●</span> <strong>카카오
-										계정 연동</strong>
-									<button type="button" data-my-unavailable>해제</button>
+								<div class="member-linked-social-list">
+									<%
+									if (kakaoLinked) {
+									%>
+									<div class="member-kakao-link">
+										<span class="member-kakao-icon" aria-hidden="true">●</span> <strong>카카오
+											계정 연동</strong>
+										<button type="button" data-social-unlink="KAKAO">해제</button>
+									</div>
+									<%
+									}
+									%>
+
+									<%
+									if (naverLinked) {
+									%>
+									<div class="member-linked-social">
+										<span class="member-linked-icon member-linked-icon-naver"
+											aria-hidden="true">N</span> <strong>네이버 계정 연동</strong>
+										<button type="button" data-social-unlink="NAVER">해제</button>
+									</div>
+									<%
+									}
+									%>
+
+									<%
+									if (googleLinked) {
+									%>
+									<div class="member-linked-social">
+										<span class="member-linked-icon member-linked-icon-google"
+											aria-hidden="true">G</span> <strong>구글 계정 연동</strong>
+										<button type="button" data-social-unlink="GOOGLE">해제</button>
+									</div>
+									<%
+									}
+									%>
+
+									<%
+									if (!kakaoLinked && !naverLinked && !googleLinked) {
+									%>
+									<p class="member-social-empty">연동된 계정이 없습니다.</p>
+									<%
+									}
+									%>
 								</div>
 
 								<button type="button" id="toggleOtherSocial"
@@ -1808,14 +2258,241 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 								</button>
 
 								<div id="otherSocialButtons" class="member-social-buttons">
+									<%
+									if (!kakaoLinked) {
+									%>
+									<button type="button" class="member-kakao-button"
+										id="linkKakaoAccount">● 카카오 계정</button>
+									<%
+									}
+									%>
+
+									<%
+									if (!naverLinked) {
+									%>
 									<button type="button" class="member-naver-button"
-										data-my-unavailable>N 네이버 계정</button>
-									<button type="button" class="member-apple-button"
-										data-my-unavailable> 애플 계정</button>
+										id="linkNaverAccount">N 네이버 계정</button>
+									<%
+									}
+									%>
+
+									<%
+									if (!googleLinked) {
+									%>
+									<button type="button" class="member-google-button"
+										id="linkGoogleAccount">G 구글 계정</button>
+									<%
+									}
+									%>
 								</div>
 							</div>
 						</div>
-					</div>
+						</div>
+						<h3 class="member-login-title">이메일</h3>
+
+<div class="member-login-info">
+    <div class="member-login-row">
+        <div class="member-login-label">이메일</div>
+        <div class="member-login-value">
+            <span id="profileEmailText"
+                  data-masked="<%=ProductView.escape(maskedProfileEmail)%>"
+                  data-full="<%=ProductView.escape(profileEmail)%>"><%=ProductView.escape(maskedProfileEmail)%></span>
+
+            <button type="button"
+                    id="toggleProfileEmail"
+                    class="member-login-eye"
+                    aria-label="이메일 보기">◎</button>
+
+            <button type="button"
+                    id="openProfileEmailEditor"
+                    class="member-email-change-button">이메일 변경</button>
+        </div>
+    </div>
+
+    <div id="profileEmailEditor" class="member-email-editor" hidden>
+        <div class="member-login-row member-email-edit-row">
+            <div class="member-login-label">이메일 <em>*</em></div>
+
+            <div class="member-email-edit-content">
+                <div class="member-email-inputs">
+                    <input type="text"
+                           id="profileEmailLocal"
+                           maxlength="100"
+                           placeholder="아이디"
+                           aria-label="이메일 아이디">
+                    <span aria-hidden="true">@</span>
+
+                    <select id="profileEmailDomain" aria-label="이메일 도메인">
+                        <option value="">선택</option>
+                        <option value="naver.com">naver.com</option>
+                        <option value="gmail.com">gmail.com</option>
+                        <option value="daum.net">daum.net</option>
+                        <option value="hanmail.net">hanmail.net</option>
+                        <option value="nate.com">nate.com</option>
+                        <option value="custom">직접 입력</option>
+                    </select>
+
+                    <input type="text"
+                           id="profileEmailCustomDomain"
+                           maxlength="100"
+                           placeholder="도메인 입력"
+                           aria-label="이메일 도메인 직접 입력"
+                           hidden>
+
+                    <button type="button" id="checkProfileEmailButton">
+                        중복확인
+                    </button>
+                </div>
+
+                <p id="profileEmailMessage" class="member-email-message"
+                   role="status" aria-live="polite"></p>
+
+                <button type="button"
+                        id="saveProfileEmailButton"
+                        class="member-email-save-button"
+                        disabled>이메일 변경 저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+<section class="member-consent-section"
+         aria-labelledby="member-consent-title">
+
+    <h3 id="member-consent-title">알림 수신 및 개인정보 동의 설정</h3>
+
+    <div class="member-consent-row">
+        <div class="member-consent-label">쇼핑 이벤트/혜택 알림</div>
+
+        <div class="member-consent-content">
+            <div class="member-consent-title">
+                <strong>광고성 정보 수신 동의 (선택)</strong>
+                <button type="button" data-my-unavailable>전문보기</button>
+            </div>
+
+            <div class="member-consent-options">
+                <label>
+                    <input type="checkbox">
+                    <span>SMS로 받기</span>
+                </label>
+
+                <label>
+                    <input type="checkbox">
+                    <span>이메일로 받기</span>
+                </label>
+
+                <label class="member-consent-muted">
+                    <input type="checkbox" disabled>
+                    <span>앱 푸시로 받기</span>
+                </label>
+            </div>
+
+            <ul class="member-consent-notice">
+                <li>주문/배송 등 정보성 알림은 광고성 수신 동의 여부와 관계없이 발송됩니다.</li>
+                <li>광고성 정보를 수신하실 매체를 한 개 이상 선택 시 광고성 정보 수신에 동의 처리됩니다.</li>
+                <li>앱 푸시 알림은 다이소몰 앱에서 설정 가능합니다.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="member-consent-row">
+        <div class="member-consent-label">선택 동의</div>
+
+        <div class="member-consent-content">
+            <label class="member-consent-check">
+                <input type="checkbox">
+                <span>마케팅 활용 목적의 개인정보 수집 및 이용 동의 (선택)</span>
+                <button type="button" data-my-unavailable>전문보기</button>
+            </label>
+
+            <label class="member-consent-check">
+                <input type="checkbox" checked>
+                <span>위치기반 서비스 이용약관 (선택)</span>
+                <button type="button" data-my-unavailable>전문보기</button>
+            </label>
+
+            <ul class="member-consent-notice">
+                <li>선택 동의 항목은 언제든 동의 내역을 변경하실 수 있습니다. 동의 철회 시 일부 서비스 이용에 제한이 있을 수 있으나, 다이소몰 이용에 불이익은 없습니다.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="member-consent-row member-retention-row">
+        <div class="member-consent-label">개인정보 보관기간</div>
+
+        <div class="member-consent-content member-retention-content">
+            <div class="member-retention-options">
+                <label>
+                    <input type="radio" name="profileRetention" value="withdrawal" checked>
+                    <span>탈퇴 시까지</span>
+                </label>
+
+                <label>
+                    <input type="radio" name="profileRetention" value="5years">
+                    <span>5년</span>
+                </label>
+
+                <label>
+                    <input type="radio" name="profileRetention" value="3years">
+                    <span>3년</span>
+                </label>
+            </div>
+
+            <button type="button" class="member-retention-save" disabled>
+                개인정보 보관 기간 저장
+            </button>
+        </div>
+    </div>
+
+    <div class="member-consent-footer">
+        <button type="button" data-my-unavailable>회원탈퇴</button>
+        <button type="button" data-my-unavailable>개인정보 이용현황</button>
+    </div>
+</section>
+<dialog id="profilePasswordDialog" class="profile-password-dialog">
+    <h2>비밀번호 변경</h2>
+
+    <form id="profilePasswordForm">
+        <label>
+            현재 비밀번호
+            <input type="password"
+                   name="currentPassword"
+                   autocomplete="current-password"
+                   required>
+        </label>
+
+        <label>
+            새 비밀번호
+            <input type="password"
+                   name="newPassword"
+                   autocomplete="new-password"
+                   minlength="8"
+                   maxlength="16"
+                   required>
+        </label>
+
+        <p class="profile-password-hint">
+            영문, 숫자, 특수문자를 포함해 8~16자로 입력해 주세요.
+        </p>
+
+        <label>
+            새 비밀번호 확인
+            <input type="password"
+                   name="confirmPassword"
+                   autocomplete="new-password"
+                   required>
+        </label>
+
+        <p id="profilePasswordMessage"
+           class="profile-password-message"
+           role="status"
+           aria-live="polite"></p>
+
+        <div class="profile-password-actions">
+            <button type="button" id="closeProfilePasswordDialog">취소</button>
+            <button type="submit" id="saveProfilePasswordButton">변경하기</button>
+        </div>
+    </form>
+</dialog>
 					<%
 					}
 					%>
@@ -1890,53 +2567,46 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<span class="my-order-number">주문번호 <%=ProductView.escape(myOrder.get("orderNo"))%></span>
 				</div>
 				<%
-					    // DB에서 조회한 주문 상태
-					    String myStatus = String.valueOf(myOrder.get("status"));
-					    String myStatusLabel =
-					        String.valueOf(myOrder.get("statusLabel"));
-					
-					    // 현재 주문 단계. 결제 대기·취소·실패는 진행 단계가 없음
-					    int myCurrentStep = -1;
-					
-					    if ("PAID".equals(myStatus)) {
-					        myCurrentStep = 0;
-					    } else if ("PREPARING".equals(myStatus)) {
-					        myCurrentStep = 1;
-					    } else if ("SHIPPED".equals(myStatus)) {
-					        myCurrentStep = 3;
-					    } else if ("DELIVERED".equals(myStatus)) {
-					        myCurrentStep = 4;
-					    }
+				// DB에서 조회한 주문 상태
+				String myStatus = String.valueOf(myOrder.get("status"));
+				String myStatusLabel = String.valueOf(myOrder.get("statusLabel"));
+
+				// 현재 주문 단계. 결제 대기·취소·실패는 진행 단계가 없음
+				int myCurrentStep = -1;
+
+				if ("PAID".equals(myStatus)) {
+					myCurrentStep = 0;
+				} else if ("PREPARING".equals(myStatus)) {
+					myCurrentStep = 1;
+				} else if ("SHIPPED".equals(myStatus)) {
+					myCurrentStep = 3;
+				} else if ("DELIVERED".equals(myStatus)) {
+					myCurrentStep = 4;
+				}
+				%>
+
+				<section class="my-status-panel" aria-label="주문 처리 상태">
+					<h2><%=ProductView.escape(myStatusLabel)%></h2>
+
+					<%
+					if (myCurrentStep >= 0) {
 					%>
-					
-					<section class="my-status-panel" aria-label="주문 처리 상태">
-					    <h2><%= ProductView.escape(myStatusLabel) %></h2>
-					
-					    <% if (myCurrentStep >= 0) { %>
-					        <ol class="my-status-steps">
-					            <li <%= myCurrentStep == 0
-					                ? "aria-current=\"step\"" : "" %>>
-					                결제완료
-					            </li>
-					            <li <%= myCurrentStep == 1
-					                ? "aria-current=\"step\"" : "" %>>
-					                상품준비중
-					            </li>
-					            <li <%= myCurrentStep == 2
-					                ? "aria-current=\"step\"" : "" %>>
-					                배송준비중
-					            </li>
-					            <li <%= myCurrentStep == 3
-					                ? "aria-current=\"step\"" : "" %>>
-					                배송중
-					            </li>
-					            <li <%= myCurrentStep == 4
-					                ? "aria-current=\"step\"" : "" %>>
-					                배송완료
-					            </li>
-					        </ol>
-					    <% } %>
-					</section>
+					<ol class="my-status-steps">
+						<li <%=myCurrentStep == 0 ? "aria-current=\"step\"" : ""%>>
+							결제완료</li>
+						<li <%=myCurrentStep == 1 ? "aria-current=\"step\"" : ""%>>
+							상품준비중</li>
+						<li <%=myCurrentStep == 2 ? "aria-current=\"step\"" : ""%>>
+							배송준비중</li>
+						<li <%=myCurrentStep == 3 ? "aria-current=\"step\"" : ""%>>
+							배송중</li>
+						<li <%=myCurrentStep == 4 ? "aria-current=\"step\"" : ""%>>
+							배송완료</li>
+					</ol>
+					<%
+					}
+					%>
+				</section>
 				<%
 				for (CartBean item : myItems) {
 					String myImage = item.getImageUrl();
@@ -1961,7 +2631,9 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				}
 				%>
 				<div class="my-order-actions">
-					<a class="my-outline-button" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;" href="<%= myContext %>/app/order/cancel/form?orderNo=<%= java.net.URLEncoder.encode((String) myOrder.get("orderNo"), "UTF-8") %>">주문취소</a>
+					<a class="my-outline-button"
+						style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none;"
+						href="<%=myContext%>/app/order/cancel/form?orderNo=<%=java.net.URLEncoder.encode((String) myOrder.get("orderNo"), "UTF-8")%>">주문취소</a>
 					<button class="my-outline-button" type="button" data-my-unavailable>문의하기</button>
 				</div>
 				<section class="my-section" aria-labelledby="my-delivery-title">
@@ -2027,40 +2699,37 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 							</tr>
 							<tr class="tinted">
 								<%
-								    // DB의 결제 상태를 화면에 표시할 문구로 변환
-								    String myPaymentStatus =
-								        String.valueOf(myOrder.get("paymentStatus"));
-								
-								    String myPaymentLabel;
-								
-								    switch (myPaymentStatus) {
-								        case "APPROVED":
-								            myPaymentLabel = "결제완료";
-								            break;
-								
-								        case "PENDING":
-								            myPaymentLabel = "결제대기";
-								            break;
-								
-								        case "CANCELLED":
-								            myPaymentLabel = "취소완료";
-								            break;
-								
-								        case "FAILED":
-								            myPaymentLabel = "결제실패";
-								            break;
-								
-								        default:
-								            myPaymentLabel = "결제 상태 확인 필요";
-								            break;
-								    }
+								// DB의 결제 상태를 화면에 표시할 문구로 변환
+								String myPaymentStatus = String.valueOf(myOrder.get("paymentStatus"));
+
+								String myPaymentLabel;
+
+								switch (myPaymentStatus) {
+									case "APPROVED" :
+										myPaymentLabel = "결제완료";
+										break;
+
+									case "PENDING" :
+										myPaymentLabel = "결제대기";
+										break;
+
+									case "CANCELLED" :
+										myPaymentLabel = "취소완료";
+										break;
+
+									case "FAILED" :
+										myPaymentLabel = "결제실패";
+										break;
+
+									default :
+										myPaymentLabel = "결제 상태 확인 필요";
+										break;
+								}
 								%>
-								
-								<th scope="row">
-								    카카오페이
-								    <span class="my-payment-label">
-								        <%= ProductView.escape(myPaymentLabel) %>
-								    </span>
+
+								<th scope="row">카카오페이 <span class="my-payment-label">
+										<%=ProductView.escape(myPaymentLabel)%>
+								</span>
 								</th>
 								<td class="money"><%=myMoney.format(myOrder.get("total"))%>원</td>
 							</tr>
@@ -2258,8 +2927,252 @@ document.addEventListener('DOMContentLoaded',function(){
      }
    });
  }
+ const passwordDialog =
+	  document.getElementById('profilePasswordDialog');
+	const openPasswordButton =
+	  document.getElementById('openProfilePasswordDialog');
+	const closePasswordButton =
+	  document.getElementById('closeProfilePasswordDialog');
+	const passwordForm =
+	  document.getElementById('profilePasswordForm');
+	const passwordMessage =
+	  document.getElementById('profilePasswordMessage');
+	const savePasswordButton =
+	  document.getElementById('saveProfilePasswordButton');
+
+	if (
+	  passwordDialog &&
+	  openPasswordButton &&
+	  closePasswordButton &&
+	  passwordForm &&
+	  passwordMessage &&
+	  savePasswordButton
+	) {
+	  openPasswordButton.addEventListener('click', function () {
+	    passwordForm.reset();
+	    passwordMessage.textContent = '';
+	    passwordDialog.showModal();
+	  });
+
+	  closePasswordButton.addEventListener('click', function () {
+	    passwordDialog.close();
+	  });
+
+	  passwordForm.addEventListener('submit', async function (event) {
+	    event.preventDefault();
+
+	    const data = new URLSearchParams(new FormData(passwordForm));
+	    savePasswordButton.disabled = true;
+	    passwordMessage.textContent = '비밀번호를 변경하고 있습니다.';
+
+	    try {
+	      const response = await fetch(
+	        '<%=myContext%>/app/member/profile/password',
+	        { method: 'POST', body: data }
+	      );
+
+	      const result = (await response.text()).trim();
+
+	      if (result === 'OK') {
+	        passwordForm.reset();
+	        passwordMessage.textContent = '비밀번호가 변경되었습니다.';
+	      } else if (result === 'LOGIN_REQUIRED') {
+	        passwordMessage.textContent = '로그인 상태를 확인해 주세요.';
+	      } else {
+	        passwordMessage.textContent = result;
+	      }
+	    } catch (error) {
+	      passwordMessage.textContent = '비밀번호 변경 중 오류가 발생했습니다.';
+	    } finally {
+	      savePasswordButton.disabled = false;
+	    }
+	  });
+	}
  const loginIdText = document.getElementById('profileLoginIdText');
  const toggleLoginId = document.getElementById('toggleProfileLoginId');
+ const emailText = document.getElementById('profileEmailText');
+ const toggleEmail = document.getElementById('toggleProfileEmail');
+
+ if (emailText && toggleEmail) {
+   toggleEmail.addEventListener('click', function () {
+     const isMasked =
+       emailText.textContent.trim() === emailText.dataset.masked;
+
+     emailText.textContent = isMasked
+       ? emailText.dataset.full
+       : emailText.dataset.masked;
+
+     toggleEmail.setAttribute(
+       'aria-label',
+       isMasked ? '이메일 숨기기' : '이메일 보기'
+     );
+   });
+ }
+ 
+ const openEmailEditor = document.getElementById('openProfileEmailEditor');
+ const emailEditor = document.getElementById('profileEmailEditor');
+ const emailLocalInput = document.getElementById('profileEmailLocal');
+ const emailDomainSelect = document.getElementById('profileEmailDomain');
+ const emailCustomDomain = document.getElementById('profileEmailCustomDomain');
+ const checkEmailButton = document.getElementById('checkProfileEmailButton');
+ const saveEmailButton = document.getElementById('saveProfileEmailButton');
+ const emailMessage = document.getElementById('profileEmailMessage');
+ 
+ if (
+		  openEmailEditor &&
+		  emailEditor &&
+		  emailText &&
+		  emailLocalInput &&
+		  emailDomainSelect &&
+		  emailCustomDomain &&
+		  checkEmailButton &&
+		  saveEmailButton &&
+		  emailMessage
+		) {
+
+ let checkedEmail = '';
+
+ function getNewEmail() {
+   const local = emailLocalInput.value.trim();
+   const domain = emailDomainSelect.value === 'custom'
+     ? emailCustomDomain.value.trim()
+     : emailDomainSelect.value;
+
+   if (!local || !domain) {
+     return '';
+   }
+
+   return local + '@' + domain;
+ }
+
+ function resetEmailCheck() {
+   checkedEmail = '';
+   saveEmailButton.disabled = true;
+   emailMessage.textContent = '';
+ }
+
+ if (openEmailEditor && emailEditor) {
+   openEmailEditor.addEventListener('click', function () {
+     emailEditor.hidden = false;
+
+     const currentEmail = emailText.dataset.full || '';
+     const atIndex = currentEmail.lastIndexOf('@');
+
+     if (atIndex > 0) {
+       emailLocalInput.value = currentEmail.substring(0, atIndex);
+
+       const currentDomain = currentEmail.substring(atIndex + 1);
+       const domainOption = Array.from(emailDomainSelect.options)
+         .find(function (option) {
+           return option.value === currentDomain;
+         });
+
+       if (domainOption) {
+         emailDomainSelect.value = currentDomain;
+         emailCustomDomain.hidden = true;
+       } else {
+         emailDomainSelect.value = 'custom';
+         emailCustomDomain.hidden = false;
+         emailCustomDomain.value = currentDomain;
+       }
+     }
+
+     emailLocalInput.focus();
+   });
+ }
+
+ emailDomainSelect.addEventListener('change', function () {
+   const isCustom = emailDomainSelect.value === 'custom';
+   emailCustomDomain.hidden = !isCustom;
+   resetEmailCheck();
+
+   if (isCustom) {
+     emailCustomDomain.focus();
+   }
+ });
+
+ [emailLocalInput, emailCustomDomain].forEach(function (input) {
+   input.addEventListener('input', resetEmailCheck);
+ });
+
+ checkEmailButton.addEventListener('click', async function () {
+   const email = getNewEmail();
+
+   if (!email) {
+     emailMessage.textContent = '이메일을 입력해 주세요.';
+     resetEmailCheck();
+     return;
+   }
+
+   const data = new URLSearchParams();
+   data.set('email', email);
+
+   checkEmailButton.disabled = true;
+   emailMessage.textContent = '중복 확인 중입니다.';
+
+   try {
+     const response = await fetch(
+       '<%=myContext%>/app/member/profile/email/check',
+       { method: 'POST', body: data }
+     );
+     const result = (await response.text()).trim();
+
+     if (result === 'available') {
+       checkedEmail = email;
+       saveEmailButton.disabled = false;
+       emailMessage.textContent = '사용할 수 있는 이메일입니다.';
+       emailMessage.style.color = '#16834a';
+     } else if (result === 'duplicate') {
+       resetEmailCheck();
+       emailMessage.textContent = '이미 사용 중인 이메일입니다.';
+     } else if (result === 'LOGIN_REQUIRED') {
+       resetEmailCheck();
+       emailMessage.textContent = '로그인 상태를 확인해 주세요.';
+     } else {
+       resetEmailCheck();
+       emailMessage.textContent = '이메일 형식을 확인해 주세요.';
+     }
+   } catch (error) {
+     resetEmailCheck();
+     emailMessage.textContent = '중복 확인 중 오류가 발생했습니다.';
+   } finally {
+     checkEmailButton.disabled = false;
+   }
+ });
+
+ saveEmailButton.addEventListener('click', async function () {
+   const email = getNewEmail();
+
+   if (!email || email !== checkedEmail) {
+     resetEmailCheck();
+     emailMessage.textContent = '이메일 중복확인을 다시 해주세요.';
+     return;
+   }
+
+   const data = new URLSearchParams();
+   data.set('email', email);
+
+   saveEmailButton.disabled = true;
+
+   try {
+     const response = await fetch(
+       '<%=myContext%>/app/member/profile/email',
+       { method: 'POST', body: data }
+     );
+     const result = (await response.text()).trim();
+
+     if (result === 'OK') {
+       location.reload();
+     } else {
+       emailMessage.textContent = result;
+       saveEmailButton.disabled = false;
+     }
+   } catch (error) {
+     emailMessage.textContent = '이메일 저장 중 오류가 발생했습니다.';
+     saveEmailButton.disabled = false;
+   }
+ });
+ }
 
  if (loginIdText && toggleLoginId) {
    toggleLoginId.addEventListener('click', function () {
@@ -2276,8 +3189,64 @@ document.addEventListener('DOMContentLoaded',function(){
      );
    });
  }
+ const linkGoogleButton = document.getElementById('linkGoogleAccount');
 
+ if (linkGoogleButton) {
+   linkGoogleButton.addEventListener('click', function () {
+     location.href =
+       '<%=myContext%>/app/member/oauth/google/start?mode=link';
+   });
+ }
+ const linkNaverButton = document.getElementById('linkNaverAccount');
+
+ if (linkNaverButton) {
+   linkNaverButton.addEventListener('click', function () {
+     location.href =
+       '<%=myContext%>/app/member/oauth/naver/start?mode=link';
+   });
+ }
+ const linkKakaoButton = document.getElementById('linkKakaoAccount');
+
+ if (linkKakaoButton) {
+   linkKakaoButton.addEventListener('click', function () {
+     location.href =
+       '<%=myContext%>/app/member/oauth/kakao/start';
+   });
+ }
  const toggleOtherSocial = document.getElementById('toggleOtherSocial');
+ document.querySelectorAll('[data-social-unlink]').forEach(function (button) {
+	  button.addEventListener('click', async function () {
+	    const provider = button.dataset.socialUnlink;
+
+	    if (!confirm(provider + ' 계정 연동을 해제할까요?')) {
+	      return;
+	    }
+
+	    const data = new URLSearchParams();
+	    data.set('provider', provider);
+	    button.disabled = true;
+
+	    try {
+	      const response = await fetch(
+	        '<%=myContext%>/app/member/profile/social/unlink',
+	        { method: 'POST', body: data }
+	      );
+
+	      const result = (await response.text()).trim();
+
+	      if (result === 'OK') {
+	        alert('SNS 연동이 해제되었습니다.');
+	        location.reload();
+	      } else {
+	        alert(result);
+	      }
+	    } catch (error) {
+	      alert('SNS 연동 해제 중 오류가 발생했습니다.');
+	    } finally {
+	      button.disabled = false;
+	    }
+	  });
+	});
  const otherSocialButtons = document.getElementById('otherSocialButtons');
 
  if (toggleOtherSocial && otherSocialButtons) {

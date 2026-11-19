@@ -146,6 +146,30 @@ public class MemberService {
         return !memberDAO.existsByEmail(email);
     }
     
+    public boolean isEmailAvailableForChange(
+            String memberId, String email) throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("로그인 상태를 확인해 주세요.");
+        }
+
+        if (email == null) {
+            throw new IllegalArgumentException("이메일을 입력해 주세요.");
+        }
+
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+        if (!normalizedEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new IllegalArgumentException("이메일 형식이 올바르지 않습니다.");
+        }
+
+        MemberLoginInfo emailOwner = memberDAO.findByEmail(normalizedEmail);
+
+        // 기존 본인 이메일이면 사용 가능으로 처리
+        return emailOwner == null
+                || memberId.trim().equals(emailOwner.getMemberId());
+    }
+    
     public MemberLoginInfo login(String loginIdOrEmail, String password)
             throws Exception {
 
@@ -182,6 +206,8 @@ public class MemberService {
 
         return memberDAO.findProfileByMemberId(memberId.trim());
     }
+    
+    
     
     public void updateBasicProfile(
             String memberId,
@@ -235,6 +261,120 @@ public class MemberService {
         if (!updated) {
             throw new IllegalArgumentException("회원정보를 변경하지 못했습니다.");
         }
+    }
+    
+    public java.util.Set<String> findLinkedSocialProviders(String memberId)
+            throws Exception {
+        return memberDAO.findSocialProvidersByMemberId(memberId);
+    }
+    
+    public void unlinkSocialAccount(String memberId, String provider)
+            throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("로그인 상태를 확인해 주세요.");
+        }
+
+        memberId = memberId.trim();
+
+        String normalizedProvider = provider == null
+                ? ""
+                : provider.trim().toUpperCase(java.util.Locale.ROOT);
+
+        if (!"KAKAO".equals(normalizedProvider)
+                && !"NAVER".equals(normalizedProvider)
+                && !"GOOGLE".equals(normalizedProvider)) {
+            throw new IllegalArgumentException("지원하지 않는 SNS 계정입니다.");
+        }
+
+        String loginId = memberDAO.findLoginIdByMemberId(memberId);
+
+        if (loginId == null) {
+            throw new IllegalArgumentException("회원 정보를 찾을 수 없습니다.");
+        }
+
+        java.util.Set<String> linkedProviders =
+                memberDAO.findSocialProvidersByMemberId(memberId);
+
+        if (!linkedProviders.contains(normalizedProvider)) {
+            throw new IllegalArgumentException("연동된 SNS 계정이 아닙니다.");
+        }
+
+        int linkedCount =
+                memberDAO.countSocialAccountsByMemberId(memberId);
+
+       
+
+        boolean socialOnlyAccount =
+                loginId.startsWith("kakao_")
+                || loginId.startsWith("naver_")
+                || loginId.startsWith("google_");
+
+        if (socialOnlyAccount && linkedCount <= 1) {
+            throw new IllegalArgumentException(
+                    "마지막 SNS 계정은 해제할 수 없습니다. 다른 로그인 방법을 먼저 준비해 주세요."
+            );
+        }
+
+        int deleted = memberDAO.deleteSocialMemberLink(
+                normalizedProvider,
+                memberId
+        );
+
+        if (deleted == 0) {
+            throw new IllegalArgumentException("SNS 연동 해제에 실패했습니다.");
+        }
+    }
+    
+    public void linkSocialAccount(
+            String memberId,
+            String provider,
+            String providerUserId) throws Exception {
+
+        memberId = memberId == null ? "" : memberId.trim();
+        provider = provider == null
+                ? ""
+                : provider.trim().toUpperCase(java.util.Locale.ROOT);
+        providerUserId = providerUserId == null
+                ? ""
+                : providerUserId.trim();
+
+        if (memberId.isEmpty()) {
+            throw new IllegalArgumentException("로그인 상태를 확인해 주세요.");
+        }
+
+        if (!"KAKAO".equals(provider)
+                && !"NAVER".equals(provider)
+                && !"GOOGLE".equals(provider)) {
+            throw new IllegalArgumentException("지원하지 않는 SNS 계정입니다.");
+        }
+
+        if (providerUserId.isEmpty()) {
+            throw new IllegalArgumentException("SNS 회원 정보를 받지 못했습니다.");
+        }
+
+        if (memberDAO.findLoginIdByMemberId(memberId) == null) {
+            throw new IllegalArgumentException("회원 정보를 찾을 수 없습니다.");
+        }
+
+        String linkedMemberId =
+                memberDAO.findSocialAccountMemberId(provider, providerUserId);
+
+        if (memberId.equals(linkedMemberId)) {
+            throw new IllegalArgumentException("이미 현재 계정에 연동되어 있습니다.");
+        }
+
+        if (linkedMemberId != null) {
+            throw new IllegalArgumentException(
+                    "이미 다른 회원 계정에 연동된 SNS입니다."
+            );
+        }
+
+        memberDAO.insertSocialMemberLink(
+                provider,
+                providerUserId,
+                memberId
+        );
     }
     
     public MemberLoginInfo loginWithKakao(
@@ -451,6 +591,45 @@ public class MemberService {
         );
     }
     
+    public String changeEmail(String memberId, String newEmail)
+            throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("로그인 상태를 확인해 주세요.");
+        }
+        
+        memberId = memberId.trim();
+
+        if (newEmail == null) {
+            throw new IllegalArgumentException("이메일을 입력해 주세요.");
+        }
+
+        String email = newEmail.trim().toLowerCase(Locale.ROOT);
+
+        if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new IllegalArgumentException("이메일 형식이 올바르지 않습니다.");
+        }
+
+        MemberLoginInfo emailOwner = memberDAO.findByEmail(email);
+
+        if (emailOwner != null
+                && !memberId.equals(emailOwner.getMemberId())) {
+            throw new IllegalArgumentException(
+                    "이미 다른 회원이 사용 중인 이메일입니다."
+            );
+        }
+
+        int updatedRows = memberDAO.updateEmail(memberId, email);
+
+        if (updatedRows != 1) {
+            throw new IllegalArgumentException(
+                    "이메일을 변경하지 못했습니다. 다시 로그인해 주세요."
+            );
+        }
+
+        return email;
+    }
+    
     public MemberLoginInfo loginWithGoogle(
             GoogleOAuthClient.GoogleProfile profile) throws Exception {
 
@@ -594,6 +773,69 @@ public class MemberService {
         }
 
         return hex.toString();
+    }
+    
+    public void changePassword(
+            String memberId,
+            String currentPassword,
+            String newPassword,
+            String confirmPassword) throws Exception {
+
+        memberId = memberId == null ? "" : memberId.trim();
+
+        if (memberId.isEmpty()) {
+            throw new IllegalArgumentException("로그인 상태를 확인해 주세요.");
+        }
+
+        if (currentPassword == null || currentPassword.isEmpty()
+                || newPassword == null || newPassword.isEmpty()
+                || confirmPassword == null || confirmPassword.isEmpty()) {
+            throw new IllegalArgumentException("모든 비밀번호 항목을 입력해 주세요.");
+        }
+
+        if (newPassword.length() < 8 || newPassword.length() > 16
+                || !newPassword.matches(
+                        "(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*")) {
+            throw new IllegalArgumentException(
+                    "새 비밀번호는 영문, 숫자, 특수문자를 포함해 8~16자로 입력해 주세요."
+            );
+        }
+
+        if (!newPassword.equals(confirmPassword)) {
+            throw new IllegalArgumentException(
+                    "새 비밀번호와 비밀번호 확인이 일치하지 않습니다."
+            );
+        }
+
+        MemberLoginInfo member = memberDAO.findLoginInfoByMemberId(memberId);
+
+        if (member == null) {
+            throw new IllegalArgumentException("회원 정보를 확인할 수 없습니다.");
+        }
+
+        if (!verifyPassword(currentPassword, member.getPasswordHash())) {
+            throw new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다.");
+        }
+
+        if (verifyPassword(newPassword, member.getPasswordHash())) {
+            throw new IllegalArgumentException(
+                    "새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요."
+            );
+        }
+
+        String newPasswordHash = hashPassword(newPassword);
+
+        int updatedRows = memberDAO.updatePasswordByMemberId(
+                memberId,
+                newPasswordHash
+        );
+
+        if (updatedRows != 1) {
+            throw new IllegalArgumentException("비밀번호를 변경하지 못했습니다.");
+        }
+
+        // 기존 자동 로그인 토큰을 모두 무효화
+        memberDAO.deleteRememberTokensByMember(memberId);
     }
     
     public void resetPassword(

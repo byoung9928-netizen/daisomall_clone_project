@@ -26,7 +26,11 @@ public class KakaoOAuthClient {
 
     private static final String USER_INFO_URL =
             "https://kapi.kakao.com/v2/user/me";
-
+    
+    public String getRestApiKey() throws Exception {
+        return getEnvironmentValue("kakaoRestApiKey");
+    }
+    
     public KakaoProfile getProfile(String authorizationCode)
             throws Exception {
 

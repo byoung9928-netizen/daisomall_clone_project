@@ -70,6 +70,20 @@ public class FrontControllerServlet extends HttpServlet {
 			    response.sendRedirect(target);
 			    return;
 			}
+			if (result != null
+			        && result.startsWith(
+			                "redirect:https://nid.naver.com/oauth2.0/authorize?")) {
+			    String target = result.substring("redirect:".length());
+			    response.sendRedirect(target);
+			    return;
+			}
+			if (result != null
+			        && result.startsWith(
+			                "redirect:https://kauth.kakao.com/oauth/authorize?")) {
+			    String target = result.substring("redirect:".length());
+			    response.sendRedirect(target);
+			    return;
+			}
 			if (result != null && result.startsWith("redirect:/")) {
 				String target = result.substring("redirect:".length());
 				String url = request.getContextPath() + request.getServletPath() + target;

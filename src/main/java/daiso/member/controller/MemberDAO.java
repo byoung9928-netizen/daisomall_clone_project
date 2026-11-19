@@ -101,6 +101,24 @@ public class MemberDAO {
             }
         }
     }
+    public int updateEmail(String memberId, String email)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE members "
+                + "SET email = ? "
+                + "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, email);
+            statement.setString(2, memberId);
+
+            return statement.executeUpdate();
+        }
+    }
+    
     
     public MemberLoginInfo findByLoginIdOrEmail(String value)
             throws NamingException, SQLException {
@@ -116,6 +134,37 @@ public class MemberDAO {
 
             statement.setString(1, value);
             statement.setString(2, value);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new MemberLoginInfo(
+                        result.getString("member_id"),
+                        result.getString("email"),
+                        result.getString("password_hash"),
+                        result.getString("name"),
+                        result.getString("role"),
+                        result.getString("status")
+                );
+            }
+        }
+    }
+    
+    public MemberLoginInfo findLoginInfoByMemberId(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT member_id, email, password_hash, name, role, status " +
+                "FROM members " +
+                "WHERE member_id = ? AND status = 'ACTIVE' " +
+                "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
 
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
@@ -210,6 +259,30 @@ public class MemberDAO {
         }
     }
     
+    public java.util.Set<String> findSocialProvidersByMemberId(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT provider FROM member_social_accounts " +
+                "WHERE member_id = ?";
+
+        java.util.Set<String> providers = new java.util.HashSet<>();
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    providers.add(result.getString("provider"));
+                }
+            }
+        }
+
+        return providers;
+    }
+    
     public MemberLoginInfo findBySocialAccount(
             String provider, String providerUserId)
             throws NamingException, SQLException {
@@ -248,6 +321,28 @@ public class MemberDAO {
             }
         }
     }
+    
+    public String findSocialAccountMemberId(
+            String provider, String providerUserId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT member_id FROM member_social_accounts " +
+                "WHERE provider = ? AND provider_user_id = ? " +
+                "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, provider);
+            statement.setString(2, providerUserId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getString("member_id") : null;
+            }
+        }
+    }
+    
     //이미 가입한 회원과 네이버 계정을 연결할 때 사용
     public void insertSocialMemberLink(
             String provider,
@@ -267,6 +362,60 @@ public class MemberDAO {
             statement.setString(2, providerUserId);
             statement.setString(3, memberId);
             statement.executeUpdate();
+        }
+    }
+    
+    public int countSocialAccountsByMemberId(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT COUNT(*) FROM member_social_accounts " +
+                "WHERE member_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
+        }
+    }
+
+    public String findLoginIdByMemberId(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT login_id FROM members " +
+                "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getString("login_id") : null;
+            }
+        }
+    }
+
+    public int deleteSocialMemberLink(String provider, String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "DELETE FROM member_social_accounts " +
+                "WHERE provider = ? AND member_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, provider);
+            statement.setString(2, memberId);
+
+            return statement.executeUpdate();
         }
     }
     
@@ -510,6 +659,23 @@ public class MemberDAO {
             statement.setString(4, phone);
 
             return statement.executeUpdate() > 0;
+        }
+    }
+    
+    public int updatePasswordByMemberId(String memberId, String passwordHash)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE members SET password_hash = ? " +
+                "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, passwordHash);
+            statement.setString(2, memberId);
+
+            return statement.executeUpdate();
         }
     }
     

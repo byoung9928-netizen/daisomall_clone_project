@@ -213,74 +213,202 @@ public class UserController {
         }
     }
     
+    @DaisoGetMapping("/member/oauth/kakao/start")
+    public String kakaoStart(HttpServletRequest request) {
+        try {
+            HttpSession session = request.getSession(false);
+
+            if (session == null || session.getAttribute("member_id") == null) {
+                return "redirect:/member/login";
+            }
+
+            String memberId = String.valueOf(session.getAttribute("member_id"));
+            String state = UUID.randomUUID().toString();
+
+            session.setAttribute("kakaoOAuthLinkMemberId", memberId);
+            session.setAttribute("kakaoOAuthState", state);
+
+            String redirectUri =
+                    "http://localhost:8080/daisomall/app/member/oauth/kakao/callback";
+
+            String authUrl =
+                    "https://kauth.kakao.com/oauth/authorize"
+                    + "?client_id=" + java.net.URLEncoder.encode(
+                            new KakaoOAuthClient().getRestApiKey(), "UTF-8")
+                    + "&redirect_uri=" + java.net.URLEncoder.encode(
+                            redirectUri, "UTF-8")
+                    + "&response_type=code"
+                    + "&state=" + java.net.URLEncoder.encode(state, "UTF-8");
+
+            return "redirect:" + authUrl;
+
+        } catch (Exception e) {
+            request.getServletContext().log("카카오 계정 연동 시작 실패", e);
+            return "redirect:/order/mypage?section=profile&social=failed";
+        }
+    }
+    
     @DaisoGetMapping("/member/oauth/kakao/callback")
     public String kakaoCallback(
             HttpServletRequest request,
             HttpServletResponse response) {
-        String error = request.getParameter("error");
 
-        if (error != null) {
-            request.setAttribute(
-                    "loginError",
-                    "카카오 로그인이 취소되었거나 실패했습니다."
-            );
-            return "member/login";
+        HttpSession oauthSession = request.getSession(false);
+
+        String linkingMemberId = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("kakaoOAuthLinkMemberId");
+
+        String savedState = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("kakaoOAuthState");
+
+        boolean linkMode = linkingMemberId != null;
+
+        if (linkMode && oauthSession != null) {
+            oauthSession.removeAttribute("kakaoOAuthLinkMemberId");
+            oauthSession.removeAttribute("kakaoOAuthState");
+        }
+
+        String state = request.getParameter("state");
+
+        if (linkMode
+                && (savedState == null || state == null || !savedState.equals(state))) {
+            return "redirect:/order/mypage?section=profile&social=stateError";
+        }
+
+        if (request.getParameter("error") != null) {
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=cancelled"
+                    : "redirect:/member/login";
         }
 
         String code = request.getParameter("code");
 
         if (code == null || code.trim().isEmpty()) {
-            request.setAttribute(
-                    "loginError",
-                    "카카오 인증 코드를 받지 못했습니다."
-            );
-            return "member/login";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=failed"
+                    : "redirect:/member/login";
         }
 
         try {
             KakaoOAuthClient.KakaoProfile profile =
                     new KakaoOAuthClient().getProfile(code);
 
+            if (linkMode) {
+                HttpSession currentSession = request.getSession(false);
+                String currentMemberId = currentSession == null
+                        ? null
+                        : (String) currentSession.getAttribute("member_id");
+
+                if (currentMemberId == null
+                        || !linkingMemberId.equals(currentMemberId)) {
+                    return "redirect:/member/login";
+                }
+
+                memberService.linkSocialAccount(
+                        currentMemberId,
+                        "KAKAO",
+                        profile.getId()
+                );
+
+                return "redirect:/order/mypage?section=profile&social=linked";
+            }
+
             MemberLoginInfo member = memberService.loginWithKakao(
                     profile.getId(),
                     profile.getNickname(),
                     profile.getEmail()
             );
-            
+
             String oldToken = findCookieValue(request, REMEMBER_COOKIE);
 
             if (oldToken != null) {
                 try {
                     memberService.deleteRememberToken(oldToken);
-                   
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    request.getServletContext().log(
+                            "기존 자동 로그인 토큰 삭제 실패",
+                            e
+                    );
                 }
-            }		
+            }
 
             expireRememberCookie(request, response);
 
-            HttpSession session = request.getSession();
+            HttpSession memberSession = request.getSession();
             request.changeSessionId();
 
-            session.setAttribute("member_id", member.getMemberId());
-            session.setAttribute("email", member.getEmail());
-            session.setAttribute("name", member.getName());
-            session.setAttribute("role", member.getRole());
+            memberSession.setAttribute("member_id", member.getMemberId());
+            memberSession.setAttribute("email", member.getEmail());
+            memberSession.setAttribute("name", member.getName());
+            memberSession.setAttribute("role", member.getRole());
 
             return "redirect:/home";
-            
+
         } catch (IllegalArgumentException e) {
+            if (linkMode) {
+                return "redirect:/order/mypage?section=profile&social=failed";
+            }
+
             request.setAttribute("loginError", e.getMessage());
-            return "member/login"; 
+            return "member/login";
 
         } catch (Exception e) {
-            e.printStackTrace();
-            request.setAttribute(
-                    "loginError",
-                    "카카오 로그인 처리 중 오류가 발생했습니다."
-            );
-            return "member/login";
+            request.getServletContext().log("카카오 로그인/연동 처리 실패", e);
+
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=failed"
+                    : "redirect:/member/login";
+        }
+    }
+    
+    @DaisoGetMapping("/member/oauth/naver/start")
+    public String naverStart(HttpServletRequest request) {
+        try {
+            HttpSession session = request.getSession(true);
+            boolean linkMode = "link".equals(request.getParameter("mode"));
+
+            if (linkMode) {
+                Object memberId = session.getAttribute("member_id");
+
+                if (memberId == null) {
+                    return "redirect:/member/login";
+                }
+
+                session.setAttribute(
+                        "naverOAuthLinkMemberId",
+                        String.valueOf(memberId)
+                );
+            } else {
+                session.removeAttribute("naverOAuthLinkMemberId");
+            }
+
+            String state = UUID.randomUUID().toString();
+            session.setAttribute("naverOAuthState", state);
+
+            String redirectUri =
+                    "http://localhost:8080/daisomall/app/member/oauth/naver/callback";
+
+            String authUrl =
+                    "https://nid.naver.com/oauth2.0/authorize"
+                    + "?response_type=code"
+                    + "&client_id=" + java.net.URLEncoder.encode(
+                            new NaverOAuthClient().getClientId(), "UTF-8")
+                    + "&redirect_uri=" + java.net.URLEncoder.encode(
+                            redirectUri, "UTF-8")
+                    + "&state=" + java.net.URLEncoder.encode(state, "UTF-8");
+
+            return "redirect:" + authUrl;
+
+        } catch (Exception e) {
+            request.getServletContext().log("네이버 로그인/연동 시작 실패", e);
+
+            if ("link".equals(request.getParameter("mode"))) {
+                return "redirect:/order/mypage?section=profile&social=failed";
+            }
+
+            return "redirect:/member/login?naver=failed";
         }
     }
     
@@ -295,28 +423,60 @@ public class UserController {
         String savedState = oauthSession == null
                 ? null
                 : (String) oauthSession.getAttribute("naverOAuthState");
+       
+        String linkingMemberId = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("naverOAuthLinkMemberId");
 
         if (oauthSession != null) {
             oauthSession.removeAttribute("naverOAuthState");
+            oauthSession.removeAttribute("naverOAuthLinkMemberId");
         }
+        boolean linkMode = linkingMemberId != null;
 
         if (savedState == null || state == null || !savedState.equals(state)) {
-            return "redirect:/member/login?naver=stateError";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=stateError"
+                    : "redirect:/member/login?naver=stateError";
         }
 
         if (request.getParameter("error") != null) {
-            return "redirect:/member/login?naver=cancelled";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=cancelled"
+                    : "redirect:/member/login?naver=cancelled";
         }
 
         String code = request.getParameter("code");
 
         if (code == null || code.trim().isEmpty()) {
-            return "redirect:/member/login?naver=failed";
+        	return linkMode
+        	        ? "redirect:/order/mypage?section=profile&social=failed"
+        	        : "redirect:/member/login?naver=failed";
         }
 
         try {
             NaverOAuthClient.NaverProfile profile =
                     new NaverOAuthClient().getProfile(code, state);
+
+            if (linkMode) {
+                HttpSession currentSession = request.getSession(false);
+                String currentMemberId = currentSession == null
+                        ? null
+                        : (String) currentSession.getAttribute("member_id");
+
+                if (currentMemberId == null
+                        || !linkingMemberId.equals(currentMemberId)) {
+                    return "redirect:/member/login";
+                }
+
+                memberService.linkSocialAccount(
+                        currentMemberId,
+                        "NAVER",
+                        profile.getId()
+                );
+
+                return "redirect:/order/mypage?section=profile&social=linked";
+            }
 
             MemberLoginInfo member =
                     memberService.loginWithNaver(profile);
@@ -348,7 +508,9 @@ public class UserController {
 
         } catch (Exception e) {
             request.getServletContext().log("네이버 로그인 처리 실패", e);
-            return "redirect:/member/login?naver=failed";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=failed"
+                    : "redirect:/member/login?naver=failed";
         }
     }
     
@@ -357,42 +519,72 @@ public class UserController {
             HttpServletRequest request,
             HttpServletResponse response) {
 
-        String state = request.getParameter("state");
-
         HttpSession oauthSession = request.getSession(false);
+
+        String state = request.getParameter("state");
         String savedState = oauthSession == null
                 ? null
                 : (String) oauthSession.getAttribute("googleOAuthState");
 
+        String linkingMemberId = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("googleOAuthLinkMemberId");
+
         if (oauthSession != null) {
             oauthSession.removeAttribute("googleOAuthState");
+            oauthSession.removeAttribute("googleOAuthLinkMemberId");
         }
 
-        if (savedState == null
-                || state == null
-                || !savedState.equals(state)) {
-            return "redirect:/member/login?google=stateError";
+        boolean linkMode = linkingMemberId != null;
+
+        if (savedState == null || state == null || !savedState.equals(state)) {
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=stateError"
+                    : "redirect:/member/login?google=stateError";
         }
 
         if (request.getParameter("error") != null) {
-            return "redirect:/member/login?google=cancelled";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=cancelled"
+                    : "redirect:/member/login?google=cancelled";
         }
 
         String code = request.getParameter("code");
 
         if (code == null || code.trim().isEmpty()) {
-            return "redirect:/member/login?google=failed";
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=failed"
+                    : "redirect:/member/login?google=failed";
         }
 
         try {
             GoogleOAuthClient.GoogleProfile profile =
                     GoogleOAuthClient.getProfile(code);
 
+            if (linkMode) {
+                HttpSession currentSession = request.getSession(false);
+                String currentMemberId = currentSession == null
+                        ? null
+                        : (String) currentSession.getAttribute("member_id");
+
+                if (currentMemberId == null
+                        || !linkingMemberId.equals(currentMemberId)) {
+                    return "redirect:/member/login";
+                }
+
+                memberService.linkSocialAccount(
+                        currentMemberId,
+                        "GOOGLE",
+                        profile.getId()
+                );
+
+                return "redirect:/order/mypage?section=profile&social=linked";
+            }
+
             MemberLoginInfo member =
                     memberService.loginWithGoogle(profile);
 
-            String oldToken =
-                    findCookieValue(request, REMEMBER_COOKIE);
+            String oldToken = findCookieValue(request, REMEMBER_COOKIE);
 
             if (oldToken != null) {
                 try {
@@ -418,14 +610,35 @@ public class UserController {
             return "redirect:/home";
 
         } catch (Exception e) {
-            request.getServletContext().log("Google 로그인 처리 실패", e);
-            return "redirect:/member/login?google=failed";
+            request.getServletContext().log("Google 로그인/연동 처리 실패", e);
+
+            return linkMode
+                    ? "redirect:/order/mypage?section=profile&social=failed"
+                    : "redirect:/member/login?google=failed";
         }
     }
     
     @DaisoGetMapping("/member/oauth/google/start")
     public String googleStart(HttpServletRequest request) {
         try {
+            HttpSession session = request.getSession(true);
+            boolean linkMode = "link".equals(request.getParameter("mode"));
+
+            if (linkMode) {
+                Object memberId = session.getAttribute("member_id");
+
+                if (memberId == null) {
+                    return "redirect:/member/login";
+                }
+
+                session.setAttribute(
+                        "googleOAuthLinkMemberId",
+                        String.valueOf(memberId)
+                );
+            } else {
+                session.removeAttribute("googleOAuthLinkMemberId");
+            }
+
             byte[] stateBytes = new byte[32];
             new java.security.SecureRandom().nextBytes(stateBytes);
 
@@ -433,8 +646,7 @@ public class UserController {
                     .withoutPadding()
                     .encodeToString(stateBytes);
 
-            request.getSession(true)
-                    .setAttribute("googleOAuthState", state);
+            session.setAttribute("googleOAuthState", state);
 
             String redirectUri =
                     "http://localhost:8080/daisomall/app/member/oauth/google/callback";
@@ -452,10 +664,12 @@ public class UserController {
             return "redirect:" + authUrl;
 
         } catch (Exception e) {
-            request.getServletContext().log(
-                    "Google 로그인 시작 실패",
-                    e
-            );
+            request.getServletContext().log("Google 로그인/연동 시작 실패", e);
+
+            if ("link".equals(request.getParameter("mode"))) {
+                return "redirect:/order/mypage?section=profile&social=failed";
+            }
+
             return "redirect:/member/login?google=configError";
         }
     }
@@ -739,5 +953,127 @@ public class UserController {
         }
 
         return contextPath + "/";
+    }
+    @DaisoPostMapping("/member/profile/email")
+    @DaisoResponseBody
+    public String updateProfileEmail(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+
+        if (session == null || session.getAttribute("member_id") == null) {
+            return "로그인 상태를 확인해 주세요.";
+        }
+
+        String memberId = String.valueOf(session.getAttribute("member_id"));
+        String newEmail = request.getParameter("email");
+
+        try {
+            String updatedEmail = memberService.changeEmail(memberId, newEmail);
+
+            // 다음 요청에서도 변경된 이메일을 사용하도록 세션 갱신
+            session.setAttribute("email", updatedEmail);
+
+            return "OK";
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        } catch (Exception e) {
+            request.getServletContext().log("이메일 변경 실패", e);
+            return "이메일 변경 중 오류가 발생했습니다.";
+        }
+    }
+    @DaisoPostMapping("/member/profile/email/check")
+    @DaisoResponseBody
+    public String checkProfileEmail(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+
+        if (session == null || session.getAttribute("member_id") == null) {
+            return "LOGIN_REQUIRED";
+        }
+
+        String memberId = String.valueOf(session.getAttribute("member_id"));
+        String email = request.getParameter("email");
+
+        try {
+            return memberService.isEmailAvailableForChange(memberId, email)
+                    ? "available"
+                    : "duplicate";
+        } catch (IllegalArgumentException e) {
+            return "invalid";
+        } catch (Exception e) {
+            request.getServletContext().log("이메일 중복 확인 실패", e);
+            return "error";
+        }
+    }
+    @DaisoPostMapping("/member/profile/password")
+    @DaisoResponseBody
+    public String updateProfilePassword(
+            HttpServletRequest request,
+            HttpServletResponse response)
+            throws java.io.UnsupportedEncodingException {
+
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+
+        if (session == null || session.getAttribute("member_id") == null) {
+            return "LOGIN_REQUIRED";
+        }
+
+        String memberId = String.valueOf(session.getAttribute("member_id"));
+        String currentPassword = request.getParameter("currentPassword");
+        String newPassword = request.getParameter("newPassword");
+        String confirmPassword = request.getParameter("confirmPassword");
+
+        try {
+            memberService.changePassword(
+                    memberId,
+                    currentPassword,
+                    newPassword,
+                    confirmPassword
+            );
+
+            // DB에서 기존 자동 로그인 토큰을 지웠으므로 브라우저 쿠키도 만료
+            expireRememberCookie(request, response);
+
+            return "OK";
+
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+
+        } catch (Exception e) {
+            request.getServletContext().log("비밀번호 변경 실패", e);
+            return "비밀번호 변경 중 오류가 발생했습니다.";
+        }
+    }
+    @DaisoPostMapping("/member/profile/social/unlink")
+    @DaisoResponseBody
+    public String unlinkProfileSocialAccount(HttpServletRequest request)
+            throws java.io.UnsupportedEncodingException {
+
+        request.setCharacterEncoding("UTF-8");
+
+        HttpSession session = request.getSession(false);
+
+        if (session == null || session.getAttribute("member_id") == null) {
+            return "LOGIN_REQUIRED";
+        }
+
+        String memberId = String.valueOf(session.getAttribute("member_id"));
+        String provider = request.getParameter("provider");
+
+        try {
+            memberService.unlinkSocialAccount(memberId, provider);
+            return "OK";
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        } catch (Exception e) {
+            request.getServletContext().log("SNS 연동 해제 실패", e);
+            return "SNS 연동 해제 중 오류가 발생했습니다.";
+        }
     }
 }
