@@ -163,7 +163,7 @@ public class KakaoPayController {
 
             // orders·order_items에 결제 대기 상태로 저장
             OrderDAO orderDAO = new OrderDAO();
-            long orderId = orderDAO.createOrder(order);
+            long orderId = orderDAO.createOrder(order);      
             
             kakaoPayClient client = new kakaoPayClient();
 
@@ -292,6 +292,25 @@ public class KakaoPayController {
 
         try {
             String tid = (String) pending.get("tid");
+            OrderDAO approvalDAO = new OrderDAO();
+
+            boolean started = approvalDAO.beginPaymentApproval(
+                memberId, orderNo, tid
+            );
+
+            if (!started) {
+                synchronized (pending) {
+                    pending.put("status", "CHECK_REQUIRED");
+                }
+
+                request.setAttribute(
+                    "paymentMessage",
+                    "취소되었거나 이미 처리 중인 주문입니다. "
+                    + "새로운 승인 요청을 보내지 않았습니다."
+                );
+
+                return paymentResult(request);
+            }
 
             kakaoPayClient client = new kakaoPayClient();
 
