@@ -668,3 +668,37 @@ input, select, textarea {
     font-weight: 700;
     margin-left: 2px;
 }
+.gsi-material-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 56px !important;
+    height: 56px !important;
+    min-width: 56px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: #f1f3f4 !important;
+    cursor: pointer;
+}
+
+.gsi-material-button-state {
+    display: none !important;
+}
+
+.gsi-material-button-content-wrapper {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.gsi-material-button-icon,
+.gsi-material-button-icon svg {
+    display: block !important;
+    width: 44px !important;
+    height: 44px !important;
+}
+
+.gsi-material-button-contents {
+    display: none !important;
+}
