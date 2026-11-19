@@ -1,8 +1,11 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView" %>
+<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView,daiso.product.dto.ProductReviewPage,java.math.RoundingMode" %>
 <%
     String context = request.getContextPath();
     ProductDTO product = (ProductDTO) request.getAttribute("product");
+    ProductReviewPage detailReviews = (ProductReviewPage) request.getAttribute("detailReviews");
+    String detailAverage = detailReviews == null || detailReviews.average == null ? ""
+            : detailReviews.average.setScale(1, RoundingMode.HALF_UP).toPlainString();
     if (product == null) response.setStatus(404);
 %>
 <!DOCTYPE html>
@@ -11,6 +14,8 @@
     <%@ include file="../common/head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js" defer></script>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
 </head>
 <body>
@@ -38,7 +43,7 @@
                     <p class="eyebrow" data-product="brand"><%= ProductView.escape(product.getBrand()) %></p>
                     <h1 class="page-title" data-product="name"><%= ProductView.escape(product.getName()) %></h1>
                     <p class="detail-price" data-product="price"><%= ProductView.money(product.getPrice()) %></p>
-                    <p data-product="rating">★ <%= String.format(java.util.Locale.ROOT, "%.1f", product.getRating()) %> · 리뷰 <%= product.getReviewCount() %></p>
+                    <p data-product="rating"><a class="pd-review-jump" href="#product-reviews"><%= detailAverage.isEmpty() ? "" : "★ " + detailAverage + " · " %>리뷰<%= detailReviews == null ? "" : " " + detailReviews.total + "개" %></a></p>
                     <% if (product.getSourceNote() != null && !product.getSourceNote().isBlank()) { %>
                         <p class="source-note" data-product="source"><%= ProductView.escape(product.getSourceNote()) %></p>
                     <% } %>
@@ -78,15 +83,11 @@
                     
                 </section>
             </div>
-            <section class="product-description">
-                <h2>상품 설명</h2>
-                <p data-product-description><%= product.getDescription() == null || product.getDescription().isBlank()
-                    ? "등록된 상품 설명이 없습니다." : ProductView.escape(product.getDescription()) %></p>
-                <details>
-                    <summary>상품 정보 및 반품 안내</summary>
-                    <p>제조·인증·반품 정책은 이 학습용 상품 데이터에 포함되어 있지 않습니다.</p>
-                </details>
-            </section>
+            <nav class="pd-detail-links" aria-label="상품 상세 바로가기">
+                <a href="#product-description">상품 설명</a>
+                <a href="#product-reviews">상품 리뷰<%= detailReviews == null ? "" : " " + detailReviews.total + "개" %></a>
+            </nav>
+            <%@ include file="official-description.jspf" %>
             <% if (!related.isEmpty()) { %>
                 <section class="product-section" id="related-products">
                     <h2 class="section-title">함께 둘러볼 상품</h2>
@@ -96,8 +97,9 @@
                         <% } %>
                     </div>
                 </section>
-            <% }
-           } %>
+            <% } %>
+            <%@ include file="detail-reviews.jspf" %>
+        <% } %>
     </main>
     <%@ include file="../common/footer.jspf" %>
     <% if (product != null) { %>
