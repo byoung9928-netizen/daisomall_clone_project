@@ -1,5 +1,16 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%
+javax.servlet.http.HttpSession adminSession = request.getSession(false);
+
+if (adminSession == null
+        || adminSession.getAttribute("member_id") == null
+        || !"ADMIN".equalsIgnoreCase(
+                String.valueOf(adminSession.getAttribute("role")))) {
+    response.sendRedirect(
+            request.getContextPath() + "/app/member/login");
+    return;
+}
+
     String adminSection = request.getParameter("view");
     if (adminSection == null) {
         adminSection = "dashboard";
