@@ -13,8 +13,16 @@ import java.util.List;
 import java.util.OptionalLong;
 
 public final class ProductReviewDAO {
-    private static final String ACTIVE = " FROM product_reviews WHERE product_id = ? AND deleted_at IS NULL";
-    private static final String FIELDS = "SELECT review_id, rating, content, created_at, version";
+    private static final String ACTIVE = " FROM product_reviews rv WHERE rv.product_id = ? AND rv.deleted_at IS NULL";
+    // 리뷰 작성 당시 연결한 주문상품의 전액 환불 완료 여부를 조회한다.
+    private static final String FIELDS = "SELECT review_id, rating, content, created_at, version, "
+            + "EXISTS (SELECT 1 FROM order_items i JOIN orders o ON o.order_id = i.order_id "
+            + "JOIN payment_attempts p ON p.order_id = o.order_id "
+            + "WHERE i.order_item_id = rv.order_item_id "
+            + "AND i.product_id = rv.product_id AND o.member_id = rv.member_id "
+            + "AND o.status = 'CANCELLED' AND o.canceled_at IS NOT NULL "
+            + "AND p.method = 'KAKAOPAY' AND p.status = 'CANCELLED' AND p.approved_at IS NOT NULL "
+            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount) AS refunded";
     private static final String PURCHASE = "SELECT i.order_item_id FROM order_items i "
             + "JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
@@ -50,7 +58,7 @@ public final class ProductReviewDAO {
     }
 
     public Summary summarize(Connection connection, String productId) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*), AVG(rating)" + ACTIVE)) {
+        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*), AVG(rating)" + ACTIVE + ReviewVisibility.PUBLISHED)) {
             query.setString(1, productId);
             try (ResultSet rows = query.executeQuery()) {
                 rows.next();
@@ -61,7 +69,7 @@ public final class ProductReviewDAO {
 
     public List<ProductReview> list(Connection connection, String productId, String memberId,
             Sort sort, int limit, long offset) throws SQLException {
-        String sql = FIELDS + ", (member_id = ?) AS owned" + ACTIVE
+        String sql = FIELDS + ", (member_id = ?) AS owned" + ACTIVE + ReviewVisibility.PUBLISHED
                 + " ORDER BY " + sort.sql + " LIMIT ? OFFSET ?";
         List<ProductReview> items = new ArrayList<>();
         try (PreparedStatement query = connection.prepareStatement(sql)) {
@@ -139,6 +147,7 @@ public final class ProductReviewDAO {
 
     private static ProductReview review(ResultSet rows, boolean owner) throws SQLException {
         return new ProductReview(rows.getLong("review_id"), rows.getInt("rating"), rows.getString("content"),
-                rows.getObject("created_at", LocalDateTime.class), owner, rows.getLong("version"));
+                rows.getObject("created_at", LocalDateTime.class), owner, rows.getLong("version"),
+                rows.getBoolean("refunded"));
     }
 }

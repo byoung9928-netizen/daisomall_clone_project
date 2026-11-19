@@ -19,6 +19,10 @@ public final class ProductView {
     }
 
     public static String url(String context, String path, Map<String, String> params) {
+        return escape(rawUrl(context, path, params));
+    }
+
+    static String rawUrl(String context, String path, Map<String, String> params) {
         StringJoiner query = new StringJoiner("&");
         params.forEach((name, value) -> {
             if (value != null && !value.isEmpty()) {
@@ -26,7 +30,7 @@ public final class ProductView {
                         + URLEncoder.encode(value, StandardCharsets.UTF_8));
             }
         });
-        return escape(context + path + (query.length() == 0 ? "" : "?" + query));
+        return context + path + (query.length() == 0 ? "" : "?" + query);
     }
 
     public static Map<String, String> with(Map<String, String> params, String name, String value) {

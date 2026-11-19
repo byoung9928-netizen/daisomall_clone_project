@@ -36,7 +36,11 @@
                             <span class="pd-reviews__stars" aria-label="별점 <%= review.rating %>점">
                                 <span aria-hidden="true"><%= "★".repeat(review.rating) %><span class="pd-reviews__stars-empty"><%= "★".repeat(5 - review.rating) %></span></span>
                             </span>
-                            <span class="pd-reviews__badge">구매 인증</span>
+                            <% if (review.refunded) { %>
+                                <span class="pd-reviews__badge pd-reviews__badge--refunded">환불한 구매자</span>
+                            <% } else { %>
+                                <span class="pd-reviews__badge">구매 인증</span>
+                            <% } %>
                             <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
                         </div>
                         <p class="pd-reviews__body"><%= ProductView.escape(review.content) %></p>
