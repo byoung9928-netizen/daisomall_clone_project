@@ -8,6 +8,7 @@ import daiso.common.annotation.DaisoPostMapping;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 import daiso.common.annotation.DaisoResponseBody;
+import java.util.UUID;
 
 @DaisoController
 public class UserController {
@@ -128,7 +129,32 @@ public class UserController {
     @DaisoGetMapping("/member/login")
     public String loginForm(HttpServletRequest request) {
         if ("success".equals(request.getParameter("passwordReset"))) {
-            request.setAttribute("loginNotice", "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요.");
+            request.setAttribute(
+                    "loginNotice",
+                    "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요."
+            );
+        }
+        String naverStatus = request.getParameter("naver");
+
+        if ("cancelled".equals(naverStatus)) {
+            request.setAttribute("loginError", "네이버 로그인을 취소했습니다.");
+        } else if ("stateError".equals(naverStatus)) {
+            request.setAttribute("loginError", "네이버 로그인 확인에 실패했습니다. 다시 시도해 주세요.");
+        } else if ("failed".equals(naverStatus)) {
+            request.setAttribute("loginError", "네이버 로그인 처리 중 오류가 발생했습니다.");
+        }
+
+        String state = UUID.randomUUID().toString();
+        request.getSession().setAttribute("naverOAuthState", state);
+        request.setAttribute("naverOAuthState", state);
+
+        try {
+            request.setAttribute(
+                    "naverClientId",
+                    new NaverOAuthClient().getClientId()
+            );
+        } catch (Exception e) {
+            request.getServletContext().log("네이버 Client ID 설정을 읽지 못했습니다.", e);
         }
 
         return "member/login";
@@ -258,6 +284,186 @@ public class UserController {
         }
     }
     
+    @DaisoGetMapping("/member/oauth/naver/callback")
+    public String naverCallback(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        String state = request.getParameter("state");
+        HttpSession oauthSession = request.getSession(false);
+
+        String savedState = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("naverOAuthState");
+
+        if (oauthSession != null) {
+            oauthSession.removeAttribute("naverOAuthState");
+        }
+
+        if (savedState == null || state == null || !savedState.equals(state)) {
+            return "redirect:/member/login?naver=stateError";
+        }
+
+        if (request.getParameter("error") != null) {
+            return "redirect:/member/login?naver=cancelled";
+        }
+
+        String code = request.getParameter("code");
+
+        if (code == null || code.trim().isEmpty()) {
+            return "redirect:/member/login?naver=failed";
+        }
+
+        try {
+            NaverOAuthClient.NaverProfile profile =
+                    new NaverOAuthClient().getProfile(code, state);
+
+            MemberLoginInfo member =
+                    memberService.loginWithNaver(profile);
+
+            String oldToken = findCookieValue(request, REMEMBER_COOKIE);
+
+            if (oldToken != null) {
+                try {
+                    memberService.deleteRememberToken(oldToken);
+                } catch (Exception e) {
+                    request.getServletContext().log(
+                            "기존 자동 로그인 토큰 삭제 실패",
+                            e
+                    );
+                }
+            }
+
+            expireRememberCookie(request, response);
+
+            HttpSession memberSession = request.getSession();
+            request.changeSessionId();
+
+            memberSession.setAttribute("member_id", member.getMemberId());
+            memberSession.setAttribute("email", member.getEmail());
+            memberSession.setAttribute("name", member.getName());
+            memberSession.setAttribute("role", member.getRole());
+
+            return "redirect:/home";
+
+        } catch (Exception e) {
+            request.getServletContext().log("네이버 로그인 처리 실패", e);
+            return "redirect:/member/login?naver=failed";
+        }
+    }
+    
+    @DaisoGetMapping("/member/oauth/google/callback")
+    public String googleCallback(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        String state = request.getParameter("state");
+
+        HttpSession oauthSession = request.getSession(false);
+        String savedState = oauthSession == null
+                ? null
+                : (String) oauthSession.getAttribute("googleOAuthState");
+
+        if (oauthSession != null) {
+            oauthSession.removeAttribute("googleOAuthState");
+        }
+
+        if (savedState == null
+                || state == null
+                || !savedState.equals(state)) {
+            return "redirect:/member/login?google=stateError";
+        }
+
+        if (request.getParameter("error") != null) {
+            return "redirect:/member/login?google=cancelled";
+        }
+
+        String code = request.getParameter("code");
+
+        if (code == null || code.trim().isEmpty()) {
+            return "redirect:/member/login?google=failed";
+        }
+
+        try {
+            GoogleOAuthClient.GoogleProfile profile =
+                    GoogleOAuthClient.getProfile(code);
+
+            MemberLoginInfo member =
+                    memberService.loginWithGoogle(profile);
+
+            String oldToken =
+                    findCookieValue(request, REMEMBER_COOKIE);
+
+            if (oldToken != null) {
+                try {
+                    memberService.deleteRememberToken(oldToken);
+                } catch (Exception e) {
+                    request.getServletContext().log(
+                            "기존 자동 로그인 토큰 삭제 실패",
+                            e
+                    );
+                }
+            }
+
+            expireRememberCookie(request, response);
+
+            HttpSession memberSession = request.getSession();
+            request.changeSessionId();
+
+            memberSession.setAttribute("member_id", member.getMemberId());
+            memberSession.setAttribute("email", member.getEmail());
+            memberSession.setAttribute("name", member.getName());
+            memberSession.setAttribute("role", member.getRole());
+
+            return "redirect:/home";
+
+        } catch (Exception e) {
+            request.getServletContext().log("Google 로그인 처리 실패", e);
+            return "redirect:/member/login?google=failed";
+        }
+    }
+    
+    @DaisoGetMapping("/member/oauth/google/start")
+    public String googleStart(HttpServletRequest request) {
+        try {
+            byte[] stateBytes = new byte[32];
+            new java.security.SecureRandom().nextBytes(stateBytes);
+
+            String state = java.util.Base64.getUrlEncoder()
+                    .withoutPadding()
+                    .encodeToString(stateBytes);
+
+            request.getSession(true)
+                    .setAttribute("googleOAuthState", state);
+
+            String redirectUri =
+                    "http://localhost:8080/daisomall/app/member/oauth/google/callback";
+
+            String authUrl =
+                    "https://accounts.google.com/o/oauth2/v2/auth"
+                    + "?client_id=" + googleUrlEncode(
+                            GoogleOAuthClient.getClientId())
+                    + "&redirect_uri=" + googleUrlEncode(redirectUri)
+                    + "&response_type=code"
+                    + "&scope=" + googleUrlEncode("openid email profile")
+                    + "&state=" + googleUrlEncode(state)
+                    + "&prompt=select_account";
+
+            return "redirect:" + authUrl;
+
+        } catch (Exception e) {
+            request.getServletContext().log(
+                    "Google 로그인 시작 실패",
+                    e
+            );
+            return "redirect:/member/login?google=configError";
+        }
+    }
+
+    private String googleUrlEncode(String value) throws Exception {
+        return java.net.URLEncoder.encode(value, "UTF-8");
+    }
+    
     @DaisoGetMapping("/member/find-id")
     public String findIdForm() {
         return "member/find-id";
@@ -271,15 +477,15 @@ public class UserController {
             String name = request.getParameter("name");
             String phone = request.getParameter("phone");
 
-            String email = memberService.findEmail(name, phone);
+            String loginId = memberService.findLoginId(name, phone);
 
-            if (email == null) {
+            if (loginId == null) {
                 request.setAttribute(
                         "findIdError",
                         "입력한 정보와 일치하는 회원을 찾을 수 없습니다."
                 );
             } else {
-                request.setAttribute("findIdResult", "찾은 아이디: " + email);
+                request.setAttribute("findIdResult", "찾은 아이디: " + loginId);
             }
 
             return "member/find-id";

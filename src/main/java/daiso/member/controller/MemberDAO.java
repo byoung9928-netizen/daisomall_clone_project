@@ -51,23 +51,22 @@ public class MemberDAO {
         }
     }
     
-    public String findEmailByNameAndPhone(String name, String phone)
+    public String findLoginIdByNameAndPhone(String name, String phone)
             throws NamingException, SQLException {
         String sql =
-                "SELECT email FROM members " +
+                "SELECT login_id FROM members " +
                 "WHERE name = ? AND phone = ? AND status = 'ACTIVE' " +
                 "LIMIT 1";
 
         try (Connection connection = getConnection();
-             PreparedStatement statement =
-                     connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setString(1, name);
             statement.setString(2, phone);
 
             try (ResultSet result = statement.executeQuery()) {
                 if (result.next()) {
-                    return result.getString("email");
+                    return result.getString("login_id");
                 }
                 return null;
             }
@@ -249,6 +248,27 @@ public class MemberDAO {
             }
         }
     }
+    //이미 가입한 회원과 네이버 계정을 연결할 때 사용
+    public void insertSocialMemberLink(
+            String provider,
+            String providerUserId,
+            String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "INSERT INTO member_social_accounts " +
+                "(provider, provider_user_id, member_id) " +
+                "VALUES (?, ?, ?)";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, provider);
+            statement.setString(2, providerUserId);
+            statement.setString(3, memberId);
+            statement.executeUpdate();
+        }
+    }
     
     public void updateKakaoMemberLink(String kakaoId, String memberId)
             throws NamingException, SQLException {
@@ -345,6 +365,133 @@ public class MemberDAO {
                 "ACTIVE"
         );
     }
+    
+    public MemberLoginInfo createNaverMember(
+            String memberId,
+            String loginId,
+            String naverId,
+            String email,
+            String passwordHash,
+            String name,
+            String phone,
+            java.sql.Date birthDate,
+            String gender)
+            throws NamingException, SQLException {
+
+        String memberSql =
+                "INSERT INTO members " +
+                "(member_id, login_id, email, password_hash, name, " +
+                "phone, birth_date, gender) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        String socialSql =
+                "INSERT INTO member_social_accounts " +
+                "(provider, provider_user_id, member_id) " +
+                "VALUES ('NAVER', ?, ?)";
+
+        try (Connection connection = getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement statement =
+                             connection.prepareStatement(memberSql)) {
+                    statement.setString(1, memberId);
+                    statement.setString(2, loginId);
+                    statement.setString(3, email);
+                    statement.setString(4, passwordHash);
+                    statement.setString(5, name);
+                    statement.setString(6, phone);
+                    statement.setDate(7, birthDate);
+                    statement.setString(8, gender);
+                    statement.executeUpdate();
+                }
+
+                try (PreparedStatement statement =
+                             connection.prepareStatement(socialSql)) {
+                    statement.setString(1, naverId);
+                    statement.setString(2, memberId);
+                    statement.executeUpdate();
+                }
+
+                connection.commit();
+
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+
+        return new MemberLoginInfo(
+                memberId,
+                email,
+                passwordHash,
+                name,
+                "MEMBER",
+                "ACTIVE"
+        );
+    }
+    
+    public MemberLoginInfo createGoogleMember(
+            String memberId,
+            String loginId,
+            String googleId,
+            String email,
+            String passwordHash,
+            String name)
+            throws NamingException, SQLException {
+
+        String memberSql =
+                "INSERT INTO members " +
+                "(member_id, login_id, email, password_hash, name, " +
+                "phone, birth_date, gender) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        String socialSql =
+                "INSERT INTO member_social_accounts " +
+                "(provider, provider_user_id, member_id) " +
+                "VALUES ('GOOGLE', ?, ?)";
+
+        try (Connection connection = getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement statement =
+                             connection.prepareStatement(memberSql)) {
+                    statement.setString(1, memberId);
+                    statement.setString(2, loginId);
+                    statement.setString(3, email);
+                    statement.setString(4, passwordHash);
+                    statement.setString(5, name);
+                    statement.setString(6, null);
+                    statement.setDate(7, null);
+                    statement.setString(8, null);
+                    statement.executeUpdate();
+                }
+
+                try (PreparedStatement statement =
+                             connection.prepareStatement(socialSql)) {
+                    statement.setString(1, googleId);
+                    statement.setString(2, memberId);
+                    statement.executeUpdate();
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+
+        return new MemberLoginInfo(
+                memberId,
+                email,
+                passwordHash,
+                name,
+                "MEMBER",
+                "ACTIVE"
+        );
+    }
+    
     public boolean updatePasswordByVerifiedInfo(
             String email, String name, String phone, String passwordHash)
             throws NamingException, SQLException {
