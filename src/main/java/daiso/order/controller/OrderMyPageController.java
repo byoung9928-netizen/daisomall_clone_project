@@ -15,6 +15,14 @@ import daiso.common.annotation.DaisoGetMapping;
 import daiso.member.controller.MemberProfileInfo;
 import daiso.member.controller.MemberService;
 import daiso.order.db.OrderDAO;
+import java.io.IOException;
+import java.util.UUID;
+
+import com.google.gson.JsonObject;
+
+import daiso.common.annotation.DaisoPostMapping;
+import daiso.common.annotation.DaisoResponseBody;
+import daiso.order.payment.kakaoPayClient;
 
 @DaisoController
 public class OrderMyPageController {
@@ -29,7 +37,18 @@ public class OrderMyPageController {
         if (memberId == null || memberId.isBlank()) {
             return "redirect:/member/login";
         }
+        // 주문내역 삭제 요청을 확인하기 위한 토큰
+        if (session.getAttribute("myOrderDeleteCsrf") == null) {
+            session.setAttribute(
+                "myOrderDeleteCsrf",
+                UUID.randomUUID().toString()
+            );
+        }
 
+        request.setAttribute(
+            "myOrderDeleteCsrf",
+            session.getAttribute("myOrderDeleteCsrf")
+        );
         OrderDAO dao = new OrderDAO();
 
         // DB에서 본인의 최근 주문 목록 조회
@@ -214,6 +233,164 @@ public class OrderMyPageController {
                 return "결제실패";
             default:
                 return "상태 확인 필요";
+        }
+    }
+    @DaisoPostMapping("/order/pending/delete")
+    @DaisoResponseBody
+    public String deletePendingOrder(HttpServletRequest request) {
+
+        HttpSession session = request.getSession(false);
+
+        String memberId = session == null
+            ? null : (String) session.getAttribute("member_id");
+
+        if (memberId == null || memberId.isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+
+        // 다른 곳에서 임의로 보낸 요청인지 검사
+        Object savedToken =
+            session.getAttribute("myOrderDeleteCsrf");
+
+        String csrfToken = request.getParameter("csrfToken");
+
+        if (!(savedToken instanceof String)
+                || !savedToken.equals(csrfToken)) {
+            return "화면을 새로고침한 후 다시 시도해 주세요.";
+        }
+
+        String orderNo = request.getParameter("orderNo");
+
+        if (orderNo == null || orderNo.isBlank()
+                || orderNo.length() > 100) {
+            return "주문번호를 확인해 주세요.";
+        }
+
+        try {
+            OrderDAO dao = new OrderDAO();
+
+            Map<String, Object> order =
+                dao.getPendingOrder(memberId, orderNo);
+
+            if (order == null) {
+                return "삭제할 결제대기 주문을 찾을 수 없습니다.";
+            }
+
+            String tid = (String) order.get("tid");
+
+            if (tid == null || tid.isBlank()) {
+                return "결제 번호가 없어 상태 확인이 필요합니다.";
+            }
+
+            if (!"PENDING".equals(order.get("paymentStatus"))) {
+                return "결제 상태가 변경되었습니다. 새로고침해 주세요.";
+            }
+
+            // DB 상태뿐 아니라 카카오페이의 실제 상태도 조회
+            JsonObject payment =
+                new kakaoPayClient().getPayment(tid);
+
+            boolean matches =
+                kakaoPayClient.CID.equals(
+                    payment.get("cid").getAsString())
+                && tid.equals(
+                    payment.get("tid").getAsString())
+                && orderNo.equals(
+                    payment.get("partner_order_id").getAsString())
+                && memberId.equals(
+                    payment.get("partner_user_id").getAsString())
+                && ((Number) order.get("total")).intValue()
+                    == payment.getAsJsonObject("amount")
+                        .get("total").getAsInt();
+
+            if (!matches) {
+                return "조회한 결제정보가 주문과 일치하지 않습니다.";
+            }
+
+            String status = payment.get("status").getAsString();
+
+            if ("SUCCESS_PAYMENT".equals(status)) {
+
+                if (!payment.has("approved_at")
+                        || payment.get("approved_at").isJsonNull()) {
+                    return "승인 시각을 확인할 수 없어 복구하지 않았습니다.";
+                }
+
+                Timestamp approvedAt = Timestamp.valueOf(
+                    java.time.LocalDateTime.parse(
+                        payment.get("approved_at").getAsString(),
+                        DateTimeFormatter.ISO_DATE_TIME
+                    )
+                );
+
+                long orderId =
+                    ((Number) order.get("orderId")).longValue();
+
+                int amount = payment.getAsJsonObject("amount")
+                    .get("total").getAsInt();
+
+                // 다른 승인·취소 요청과 겹치지 않도록 먼저 상태 변경
+                boolean started = dao.beginPaymentApproval(
+                    memberId, orderNo, tid
+                );
+
+                if (!started) {
+                    return "주문 상태가 변경되었습니다. 새로고침해 주세요.";
+                }
+
+                // 이미 받은 승인 결과를 DB에 반영
+                // 카카오페이에 승인을 다시 요청하는 것이 아님
+                dao.approvePayment(
+                    memberId, orderId, tid, amount, approvedAt
+                );
+
+                return "이미 결제된 주문이라 결제완료로 복구했습니다. "
+                    + "화면을 새로고침해 주세요.";
+            }
+
+            if ("PART_CANCEL_PAYMENT".equals(status)
+                    || "CANCEL_PAYMENT".equals(status)) {
+                return "취소 이력이 있는 결제입니다. "
+                    + "결제정보 확인이 필요합니다.";
+            }
+
+            // 결제 중단 또는 승인 실패가 확인된 경우만 숨김 처리
+         // 아직 결제되지 않은 주문만 취소 가능
+            boolean canCancel =
+                "READY".equals(status)
+                || "SEND_TMS".equals(status)
+                || "OPEN_PAYMENT".equals(status)
+                || "SELECT_METHOD".equals(status)
+                || "ARS_WAITING".equals(status)
+                || "AUTH_PASSWORD".equals(status)
+                || "FAIL_AUTH_PASSWORD".equals(status)
+                || "QUIT_PAYMENT".equals(status)
+                || "FAIL_PAYMENT".equals(status);
+
+            if (!canCancel) {
+                return "취소 가능한 결제대기 상태가 아닙니다.";
+            }
+
+            boolean cancelled =
+            	    dao.cancelPendingOrder(memberId, orderNo, tid);
+
+            	return cancelled
+            	    ? "OK"
+            	    : "이미 승인이 시작되었거나 주문 상태가 변경되었습니다. "
+            	        + "새로고침해 주세요.";
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "결제 상태 조회가 중단되었습니다. 삭제하지 않았습니다.";
+
+        } catch (IOException e) {
+            return "카카오페이 상태 조회에 실패했습니다. 삭제하지 않았습니다.";
+
+        } catch (SQLException e) {
+            return "주문내역 삭제 처리 중 DB 오류가 발생했습니다.";
+
+        } catch (RuntimeException e) {
+            return "결제정보를 확인하지 못했습니다. 삭제하지 않았습니다.";
         }
     }
 }

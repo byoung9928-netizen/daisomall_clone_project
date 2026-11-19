@@ -1079,7 +1079,15 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					</form>
 				</section>
 			</aside>
-			<div class="my-content"><div class="cancel-done"><h1 class="visually-hidden">주문취소 결과</h1><div class="cancel-done-tabs"><strong>취소</strong><span>교환</span><span>반품</span></div><section class="cancel-done-message"><% if(request.getAttribute("cancelCompleteError")==null){ %><div class="cancel-done-icon" aria-hidden="true">✓</div><p role="status">취소신청이 완료되었습니다.</p><% }else{ %><p role="alert"><%= ProductView.escape(request.getAttribute("cancelCompleteError")) %></p><% } %><a href="${pageContext.request.contextPath}/app/order/mypage">내역 확인하기</a></section></div></div>
+			<div class="my-content"><div class="cancel-done"><h1 class="visually-hidden">주문취소 결과</h1><div class="cancel-done-tabs"><strong>취소</strong><span>교환</span>
+			<span>반품</span></div><section class="cancel-done-message"><% if(request.getAttribute("cancelCompleteError")==null){ %><div class="cancel-done-icon" aria-hidden="true">✓</div><p role="status">취소신청이 완료되었습니다.</p>
+			<% if (request.getAttribute("cancelCartMessage") != null) { %>
+    <p role="status">
+        <%= ProductView.escape(
+            request.getAttribute("cancelCartMessage")) %>
+    </p>
+<% } %>
+			<% }else{ %><p role="alert"><%= ProductView.escape(request.getAttribute("cancelCompleteError")) %></p><% } %><a href="${pageContext.request.contextPath}/app/order/mypage">내역 확인하기</a></section></div></div>
 		</div>
 		
 	</main>

@@ -1127,12 +1127,88 @@ document.addEventListener('DOMContentLoaded',function(){
  document.addEventListener('keydown',function(event){if(event.key==='Escape')closeReasons();});
  document.getElementById('cancel-apply').addEventListener('click',function(){if(!reason){error.textContent='취소 사유를 선택해 주세요.';toggle.focus();return;}if(reason==='기타'&&!other.value.trim()){error.textContent='기타 취소 사유를 입력해 주세요.';other.focus();return;}error.textContent='';document.getElementById('cancel-submit-error').textContent='';dialog.showModal();});
  document.getElementById('cancel-confirm-close').addEventListener('click',function(){dialog.close();});document.getElementById('cancel-confirm-back').addEventListener('click',function(){dialog.close();});
- document.getElementById('cancel-confirm-submit').addEventListener('click',function(){
-  // 다음 단계에서 이 위치에 서버의 취소 요청을 연결합니다.
-  // 실제 API 취소와 DB 반영 전에는 완료 화면으로 이동하지 않습니다.
-  document.getElementById('cancel-submit-error').textContent='취소 처리 기능 연결 전입니다. 아직 취소되지 않았습니다.';
+ const submitCancel =
+	    document.getElementById('cancel-confirm-submit');
+
+	submitCancel.addEventListener('click', async function () {
+	    if (submitCancel.disabled) return;
+
+	    const submitError =
+	        document.getElementById('cancel-submit-error');
+
+	    submitError.textContent = '';
+
+	    if (!reason) {
+	        submitError.textContent = '취소 사유를 선택해 주세요.';
+	        return;
+	    }
+
+	    if (reason === '기타' && !other.value.trim()) {
+	        submitError.textContent = '기타 취소 사유를 입력해 주세요.';
+	        return;
+	    }
+
+	    const orderNo =
+	        document.getElementById('cancel-order-no').value;
+
+	    const data = new URLSearchParams();
+
+	    data.set('orderNo', orderNo);
+	    data.set(
+	        'csrfToken',
+	        document.getElementById('cancel-csrf').value
+	    );
+	    data.set('reason', reason);
+	    data.set(
+	        'reasonDetail',
+	        reason === '기타' ? other.value.trim() : ''
+	    );
+	    data.set(
+	        'restoreCart',
+	        String(document.getElementById('cancel-restore-cart').checked)
+	    );
+
+	    submitCancel.disabled = true;
+	    submitCancel.textContent = '처리 중…';
+
+	    try {
+	        const response = await fetch(
+	            '<%= cancelContext %>/app/order/cancel/request',
+	            {
+	                method: 'POST',
+	                body: data
+	            }
+	        );
+
+	        if (!response.ok) {
+	            throw new Error(
+	                '취소 처리 결과를 확인하지 못했습니다. '
+	                + '주문내역을 확인해 주세요.'
+	            );
+	        }
+
+	        const result = (await response.text()).trim();
+
+	        if (result !== 'OK') {
+	            submitError.textContent = result;
+	            return;
+	        }
+
+	        window.location.assign(
+	            '<%= cancelContext %>/app/order/cancel/complete'
+	            + '?orderNo=' + encodeURIComponent(orderNo)
+	        );
+
+	    } catch (error) {
+	        submitError.textContent = error.message;
+
+	    } finally {
+	        submitCancel.disabled = false;
+	        submitCancel.textContent = '확인';
+	    }
+	});
  });
-});
+
 </script>
 </body>
 </html>
