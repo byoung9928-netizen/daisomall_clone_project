@@ -275,8 +275,8 @@ public class OrderDAO {
 		                return;
 		            }
 
-		            if (!"PENDING".equals(orderStatus)
-		                    || !"PENDING".equals(paymentStatus)) {
+		            if (!"APPROVING".equals(orderStatus)
+		                    || !"APPROVING".equals(paymentStatus)) {
 		                throw new SQLException(
 		                    "승인 처리할 수 없는 주문 상태입니다."
 		                );
@@ -286,7 +286,7 @@ public class OrderDAO {
 		                "UPDATE payment_attempts "
 		                + "SET status = 'APPROVED', approved_at = ? "
 		                + "WHERE order_id = ? AND tid = ? "
-		                + "AND status = 'PENDING'";
+		                + "AND status = 'APPROVING'";
 
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(paymentSql)) {
@@ -305,7 +305,7 @@ public class OrderDAO {
 		            String orderSql =
 		                "UPDATE orders SET status = 'PAID' "
 		                + "WHERE order_id = ? AND member_id = ? "
-		                + "AND status = 'PENDING'";
+		                + "AND status = 'APPROVING'";
 
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(orderSql)) {
@@ -364,6 +364,7 @@ public class OrderDAO {
 		        + "WHERE p2.order_id = o.order_id"
 		        + ") "
 		        + "WHERE o.member_id = ? "
+		        + "AND o.hidden_at IS NULL "
 		        + "ORDER BY o.created_at DESC, o.order_id DESC "
 		        + "LIMIT 50";
 
@@ -393,6 +394,7 @@ public class OrderDAO {
 
 		    return orders;
 		}
+		
 		public Map<String, Object> getMyOrderDetail(
 		        String memberId, String orderNo) throws SQLException {
 
@@ -406,7 +408,9 @@ public class OrderDAO {
 		        + "FROM payment_attempts p2 "
 		        + "WHERE p2.order_id = o.order_id"
 		        + ") "
-		        + "WHERE o.member_id = ? AND o.order_no = ?";
+		        + "WHERE o.member_id = ? AND o.order_no = ? "
+		        + "AND o.hidden_at IS NULL";
+		       
 
 		    try (Connection con = ds.getConnection()) {
 		        Map<String, Object> order = new HashMap<>();
@@ -523,5 +527,397 @@ public class OrderDAO {
 		        return order;
 		    }
 		}
+		
+		// 삭제 요청 전에 본인의 결제대기 주문인지 확인
+		public Map<String, Object> getPendingOrder(
+		        String memberId, String orderNo) throws SQLException {
+
+		    String sql =
+		        "SELECT o.order_id, o.order_no, o.total_amount, "
+		        + "p.payment_id, p.tid, p.status AS payment_status "
+		        + "FROM orders o "
+		        + "LEFT JOIN payment_attempts p "
+		        + "ON p.payment_id = ("
+		        + "SELECT MAX(p2.payment_id) "
+		        + "FROM payment_attempts p2 "
+		        + "WHERE p2.order_id = o.order_id"
+		        + ") "
+		        + "WHERE o.member_id = ? "
+		        + "AND o.order_no = ? "
+		        + "AND o.status = 'PENDING' "
+		        + "AND o.hidden_at IS NULL";
+
+		    try (
+		        Connection con = ds.getConnection();
+		        PreparedStatement pstmt = con.prepareStatement(sql)
+		    ) {
+		        pstmt.setString(1, memberId);
+		        pstmt.setString(2, orderNo);
+
+		        try (ResultSet rs = pstmt.executeQuery()) {
+		            if (!rs.next()) {
+		                return null;
+		            }
+
+		            Map<String, Object> order = new HashMap<>();
+
+		            order.put("orderId", rs.getLong("order_id"));
+		            order.put("orderNo", rs.getString("order_no"));
+		            order.put("total", rs.getInt("total_amount"));
+
+		            // 결제 준비 기록이 없으면 null
+		            order.put("paymentId", rs.getObject("payment_id"));
+		            order.put("tid", rs.getString("tid"));
+		            order.put(
+		                "paymentStatus",
+		                rs.getString("payment_status")
+		            );
+
+		            return order;
+		        }
+		    }
+		}
+		
+		
+		// 결제대기 주문을 취소하고 주문내역에서 제외
+		public boolean cancelPendingOrder(
+		        String memberId,
+		        String orderNo,
+		        String tid) throws SQLException {
+
+		    String sql =
+		        "UPDATE orders o "
+		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + "SET o.status = 'CANCELLED', "
+		        + "o.canceled_at = CURRENT_TIMESTAMP, "
+		        + "o.hidden_at = CURRENT_TIMESTAMP, "
+		        + "p.status = 'CANCELLED' "
+		        + "WHERE o.member_id = ? "
+		        + "AND o.order_no = ? "
+		        + "AND p.tid = ? "
+		        + "AND o.status = 'PENDING' "
+		        + "AND p.status = 'PENDING'";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            int updated;
+
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(sql)) {
+
+		                pstmt.setString(1, memberId);
+		                pstmt.setString(2, orderNo);
+		                pstmt.setString(3, tid);
+
+		                updated = pstmt.executeUpdate();
+		            }
+
+		            con.commit();
+
+		            // 두 테이블을 변경하므로 1이 아닌 양수인지 검사
+		            return updated > 0;
+
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
+		// 대기 주문을 승인 처리 중으로 변경
+		// 취소가 먼저 끝났다면 변경하지 못하므로 승인 요청을 보내지 않음
+		public boolean beginPaymentApproval(
+		        String memberId,
+		        String orderNo,
+		        String tid) throws SQLException {
+
+		    String sql =
+		        "UPDATE orders o "
+		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + "SET o.status = 'APPROVING', "
+		        + "p.status = 'APPROVING' "
+		        + "WHERE o.member_id = ? "
+		        + "AND o.order_no = ? "
+		        + "AND p.tid = ? "
+		        + "AND o.status = 'PENDING' "
+		        + "AND p.status = 'PENDING'";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            int updated;
+
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(sql)) {
+
+		                pstmt.setString(1, memberId);
+		                pstmt.setString(2, orderNo);
+		                pstmt.setString(3, tid);
+
+		                updated = pstmt.executeUpdate();
+		            }
+
+		            con.commit();
+		            return updated > 0;
+
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
+		public Map<String, Object> beginPaidOrderCancellation(
+		        String memberId, String orderNo) throws SQLException {
+
+		    String selectSql =
+		        "SELECT o.order_id, o.total_amount, "
+		        + "o.status AS order_status, "
+		        + "p.payment_id, p.tid, p.amount, "
+		        + "p.status AS payment_status "
+		        + "FROM orders o "
+		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + "WHERE o.member_id = ? AND o.order_no = ? "
+		        + "ORDER BY p.payment_id DESC "
+		        + "LIMIT 1 FOR UPDATE";
+
+		    String updateSql =
+		        "UPDATE orders o "
+		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + "SET o.status = 'CANCELLING', "
+		        + "p.status = 'CANCELLING' "
+		        + "WHERE o.order_id = ? "
+		        + "AND o.member_id = ? "
+		        + "AND p.payment_id = ? "
+		        + "AND o.status = 'PAID' "
+		        + "AND p.status = 'APPROVED'";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            Map<String, Object> order = new HashMap<>();
+
+		            // 주문과 결제 행을 잠그고 본인 주문·상태 확인
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(selectSql)) {
+
+		                pstmt.setString(1, memberId);
+		                pstmt.setString(2, orderNo);
+
+		                try (ResultSet rs = pstmt.executeQuery()) {
+		                    if (!rs.next()) {
+		                        throw new IllegalArgumentException(
+		                            "본인의 주문을 찾을 수 없습니다."
+		                        );
+		                    }
+
+		                    if (!"PAID".equals(rs.getString("order_status"))
+		                            || !"APPROVED".equals(
+		                                rs.getString("payment_status"))) {
+
+		                        throw new IllegalArgumentException(
+		                            "이미 처리 중이거나 취소 가능한 주문이 아닙니다."
+		                        );
+		                    }
+
+		                    String tid = rs.getString("tid");
+		                    int total = rs.getInt("total_amount");
+
+		                    if (tid == null || tid.isBlank()
+		                            || total <= 0
+		                            || total != rs.getInt("amount")) {
+
+		                        throw new IllegalArgumentException(
+		                            "결제 번호와 금액을 확인해 주세요."
+		                        );
+		                    }
+
+		                    order.put("orderId", rs.getLong("order_id"));
+		                    order.put("paymentId", rs.getLong("payment_id"));
+		                    order.put("tid", tid);
+		                    order.put("total", total);
+		                }
+		            }
+
+		            // 확인한 결제만 취소 처리 중으로 변경
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(updateSql)) {
+
+		                pstmt.setLong(
+		                    1, ((Number) order.get("orderId")).longValue()
+		                );
+		                pstmt.setString(2, memberId);
+		                pstmt.setLong(
+		                    3, ((Number) order.get("paymentId")).longValue()
+		                );
+
+		                if (pstmt.executeUpdate() <= 0) {
+		                    throw new SQLException(
+		                        "취소 처리 중 상태로 변경하지 못했습니다."
+		                    );
+		                }
+		            }
+
+		            con.commit();
+
+		            return order;
+
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
+		// 카카오페이 취소 성공을 확인한 뒤에만 호출
+		public void completePaidOrderCancellation(
+		        String memberId,
+		        long orderId,
+		        long paymentId,
+		        String tid,
+		        int amount,
+		        Timestamp canceledAt) throws SQLException {
+
+		    if (canceledAt == null) {
+		        throw new IllegalArgumentException(
+		            "결제 취소 시각이 없습니다."
+		        );
+		    }
+
+		    String checkSql =
+		        "SELECT o.status AS order_status, o.total_amount, "
+		        + "p.status AS payment_status, p.amount "
+		        + "FROM orders o "
+		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + "WHERE o.member_id = ? "
+		        + "AND o.order_id = ? "
+		        + "AND p.payment_id = ? "
+		        + "AND p.tid = ? FOR UPDATE";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(checkSql)) {
+
+		                pstmt.setString(1, memberId);
+		                pstmt.setLong(2, orderId);
+		                pstmt.setLong(3, paymentId);
+		                pstmt.setString(4, tid);
+
+		                try (ResultSet rs = pstmt.executeQuery()) {
+		                    if (!rs.next()) {
+		                        throw new SQLException(
+		                            "취소할 주문과 결제정보를 찾을 수 없습니다."
+		                        );
+		                    }
+
+		                    if (amount <= 0
+		                            || rs.getInt("total_amount") != amount
+		                            || rs.getInt("amount") != amount) {
+		                        throw new SQLException(
+		                            "취소 금액과 주문 금액이 다릅니다."
+		                        );
+		                    }
+
+		                    String orderStatus =
+		                        rs.getString("order_status");
+
+		                    String paymentStatus =
+		                        rs.getString("payment_status");
+
+		                    // 이미 반영한 취소 결과는 중복 변경하지 않음
+		                    if ("CANCELLED".equals(orderStatus)
+		                            && "CANCELLED".equals(paymentStatus)) {
+		                        con.commit();
+		                        return;
+		                    }
+
+		                    if (!"CANCELLING".equals(orderStatus)
+		                            || !"CANCELLING".equals(paymentStatus)) {
+		                        throw new SQLException(
+		                            "취소완료로 변경할 수 없는 상태입니다."
+		                        );
+		                    }
+		                }
+		            }
+
+		            String paymentSql =
+		                "UPDATE payment_attempts "
+		                + "SET status = 'CANCELLED' "
+		                + "WHERE payment_id = ? AND order_id = ? "
+		                + "AND tid = ? AND status = 'CANCELLING'";
+
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(paymentSql)) {
+
+		                pstmt.setLong(1, paymentId);
+		                pstmt.setLong(2, orderId);
+		                pstmt.setString(3, tid);
+
+		                if (pstmt.executeUpdate() != 1) {
+		                    throw new SQLException(
+		                        "결제 취소 상태를 저장하지 못했습니다."
+		                    );
+		                }
+		            }
+
+		            String orderSql =
+		                "UPDATE orders "
+		                + "SET status = 'CANCELLED', canceled_at = ?, "
+		                + "hidden_at = NULL "
+		                + "WHERE order_id = ? AND member_id = ? "
+		                + "AND status = 'CANCELLING'";
+
+		            try (PreparedStatement pstmt =
+		                    con.prepareStatement(orderSql)) {
+
+		                pstmt.setTimestamp(1, canceledAt);
+		                pstmt.setLong(2, orderId);
+		                pstmt.setString(3, memberId);
+
+		                if (pstmt.executeUpdate() != 1) {
+		                    throw new SQLException(
+		                        "주문 취소 상태를 저장하지 못했습니다."
+		                    );
+		                }
+		            }
+
+		            con.commit();
+
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
+		
 }
+
 

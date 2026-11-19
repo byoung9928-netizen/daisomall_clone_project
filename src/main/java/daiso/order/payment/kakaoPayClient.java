@@ -31,7 +31,8 @@ public class kakaoPayClient {
 			throws IOException, InterruptedException{
 		if(!"ready".equals(action)
 				&&!"approve".equals(action)
-				&&!"cancel".equals(action)) {
+				&&!"cancel".equals(action)
+				&&!"order".equals(action)) {
 			throw new IllegalArgumentException(
 					"지원하지 않는 결제 요청입니다."
 					);
@@ -118,6 +119,55 @@ public class kakaoPayClient {
 	    data.addProperty("pg_token", pgToken);
 
 	    String response = request("approve", data.toString());
+
+	    return JsonParser.parseString(response).getAsJsonObject();
+	}
+	
+	// 결제 번호로 카카오페이의 실제 결제 상태 조회
+	public JsonObject getPayment(String tid)
+	        throws IOException, InterruptedException {
+
+	    if (tid == null || tid.isBlank()) {
+	        throw new IllegalArgumentException(
+	            "조회할 결제 번호가 없습니다."
+	        );
+	    }
+
+	    JsonObject data = new JsonObject();
+
+	    data.addProperty("cid", CID);
+	    data.addProperty("tid", tid);
+
+	    String response = request("order", data.toString());
+
+	    return JsonParser.parseString(response).getAsJsonObject();
+	}
+	// 승인된 결제의 전체 또는 일부 금액 취소 요청
+	public JsonObject cancelPayment(String tid, int cancelAmount)
+	        throws IOException, InterruptedException {
+
+	    if (tid == null || tid.isBlank()) {
+	        throw new IllegalArgumentException(
+	            "취소할 결제 번호가 없습니다."
+	        );
+	    }
+
+	    if (cancelAmount <= 0) {
+	        throw new IllegalArgumentException(
+	            "취소 금액을 확인해 주세요."
+	        );
+	    }
+
+	    JsonObject data = new JsonObject();
+
+	    data.addProperty("cid", CID);
+	    data.addProperty("tid", tid);
+	    data.addProperty("cancel_amount", cancelAmount);
+
+	    // 기존 결제 준비 때 비과세 금액을 0으로 설정했음
+	    data.addProperty("cancel_tax_free_amount", 0);
+
+	    String response = request("cancel", data.toString());
 
 	    return JsonParser.parseString(response).getAsJsonObject();
 	}

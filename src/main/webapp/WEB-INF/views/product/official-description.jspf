@@ -1,0 +1,52 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.OfficialProductDetails.Entry" %>
+<%
+    Entry officialDetail = (Entry) request.getAttribute("officialProductDetails");
+%>
+<section id="product-description" class="pd-description pd-official" aria-labelledby="product-description-title">
+    <h2 id="product-description-title">상품 설명</h2>
+    <% if (officialDetail == null) { %>
+        <p class="pd-official__empty"><%= "GENERATED".equals(product.getSourceKind())
+                ? "학습용 상품으로 공식 상세 정보가 없습니다." : "이 상품의 공식 상세 정보는 아직 확인되지 않았습니다." %></p>
+    <% } else {
+        List<String> detailPhotos = officialDetail.getDetailPhotos();
+        boolean descriptive = !detailPhotos.isEmpty();
+        List<String> visiblePhotos = descriptive ? detailPhotos : officialDetail.getRepresentativePhotos();
+    %>
+        <details class="pd-official__expand">
+            <summary>
+                <% if (!visiblePhotos.isEmpty()) { %>
+                    <span class="pd-official__preview <%= descriptive ? "" : "pd-official__preview--representative" %>">
+                        <img src="<%= ProductView.escape(visiblePhotos.get(0)) %>" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">
+                    </span>
+                <% } %>
+                <span class="pd-official__toggle">
+                    <span class="pd-official__more">상품 설명 더보기</span>
+                    <span class="pd-official__less">상품 설명 접기</span>
+                </span>
+            </summary>
+            <div class="pd-official__content">
+                <% if (!visiblePhotos.isEmpty()) { %>
+                    <div class="pd-official__photos <%= descriptive ? "" : "pd-official__photos--representative" %>">
+                    <% for (int photoIndex = 0; photoIndex < visiblePhotos.size(); photoIndex++) { %>
+                        <img src="<%= ProductView.escape(visiblePhotos.get(photoIndex)) %>"
+                             alt="<%= ProductView.escape(product.getName()) %> <%= descriptive ? "공식 상세 이미지 " : "공식 대표 사진 " %><%= photoIndex + 1 %>"
+                             loading="lazy" decoding="async" referrerpolicy="no-referrer">
+                    <% } %>
+                    </div>
+                <% } %>
+                <h3>상품 정보</h3>
+                <dl class="pd-official__facts">
+                    <div><dt>공식 품번</dt><dd><%= ProductView.escape(officialDetail.getSku()) %></dd></div>
+                    <% for (Map.Entry<String, String> fact : officialDetail.getFacts().entrySet()) { %>
+                        <div><dt><%= ProductView.escape(fact.getKey()) %></dt><dd><%= ProductView.escape(fact.getValue()) %></dd></div>
+                    <% } %>
+                </dl>
+                <% if (!officialDetail.getSource().isEmpty()) { %>
+                    <a class="pd-official__source" href="<%= ProductView.escape(officialDetail.getSource()) %>"
+                       target="_blank" rel="noopener noreferrer">공식 상품 정보 확인 (새 창)</a>
+                <% } %>
+            </div>
+        </details>
+    <% } %>
+</section>

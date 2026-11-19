@@ -3348,6 +3348,62 @@ if (pickupForm) {
     }
   });
 }
+
+(function () {
+    const deleteButton =
+        document.getElementById("delete-pending-order");
+
+    if (!deleteButton) return;
+
+    deleteButton.addEventListener("click", async function () {
+        if (deleteButton.disabled) return;
+
+        if (!window.confirm(
+                "결제 상태를 확인한 뒤 주문내역에서 삭제할까요?")) {
+            return;
+        }
+
+        deleteButton.disabled = true;
+
+        try {
+            const data = new URLSearchParams();
+
+            data.set("orderNo", deleteButton.dataset.orderNo);
+            data.set("csrfToken", deleteButton.dataset.csrf);
+
+            const response = await fetch(
+                "<%= myContext %>/app/order/pending/delete",
+                {
+                    method: "POST",
+                    body: data
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("삭제 요청 처리에 실패했습니다.");
+            }
+
+            const result = (await response.text()).trim();
+
+            if (result !== "OK") {
+                window.alert(result);
+                return;
+            }
+
+            // 삭제한 주문번호를 주소에서 빼고 목록으로 이동
+            window.location.assign(
+                "<%= myContext %>/app/order/mypage"
+            );
+
+        } catch (error) {
+            window.alert(error.message);
+
+        } finally {
+            deleteButton.disabled = false;
+        }
+    });
+})();
+
 </script>
 </body>
 </html>
