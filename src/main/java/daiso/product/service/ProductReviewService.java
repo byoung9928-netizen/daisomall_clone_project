@@ -102,6 +102,14 @@ public final class ProductReviewService {
         }
     }
 
+    public byte[] privatePhoto(long id, String memberId, boolean administrator) throws SQLException, NamingException {
+        try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
+            byte[] photo = extras.available(connection) ? extras.privatePhoto(connection, id, memberId, administrator) : null;
+            connection.commit();
+            return photo;
+        }
+    }
+
     private List<ReviewQuestion> questions(Connection connection, String productId) throws SQLException {
         return ReviewQuestions.forPath(extras.categoryPath(connection, productId));
     }

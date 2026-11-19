@@ -8,5 +8,10 @@
 <nav class="admin-sidebar" aria-label="관리 메뉴">
     <% for (String[] entry : adminMenu) { %>
         <a href="${pageContext.request.contextPath}/admin/?view=<%= entry[0] %>" data-admin-link="<%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("adminSection"))) { %> aria-current="page"<% } %>><%= entry[1] %></a>
+        <% if ("products".equals(entry[0]) && ("products".equals(request.getAttribute("adminSection"))
+                || "product-reviews".equals(request.getAttribute("adminSection")))) { %>
+            <a class="admin-sidebar-subitem" href="${pageContext.request.contextPath}/app/admin/products/reviews"
+               <% if ("product-reviews".equals(request.getAttribute("adminSection"))) { %>aria-current="page"<% } %>>리뷰 관리</a>
+        <% } %>
     <% } %>
 </nav>
