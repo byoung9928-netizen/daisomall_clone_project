@@ -179,6 +179,10 @@ public class OrderMyPageController {
 		    request.setAttribute("orderCsrf", csrfToken);
 
 		    try {
+		    	request.setAttribute(
+		    	        "linkedSocialProviders",
+		    	        memberService.findLinkedSocialProviders(memberId)
+		    	);
 		        MemberProfileInfo profile =
 		                memberService.findProfileByMemberId(memberId);
 
