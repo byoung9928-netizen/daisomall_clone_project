@@ -30,6 +30,22 @@ public class OrderBean {
 	    private Timestamp createdAt;
 	    private String productSummary;
 	    
+	    //배송
+	    private String carrierId;
+	    private String trackingNumber;
+	    
+		public String getCarrierId() {
+			return carrierId;
+		}
+		public void setCarrierId(String carrierId) {
+			this.carrierId = carrierId;
+		}
+		public String getTrackingNumber() {
+			return trackingNumber;
+		}
+		public void setTrackingNumber(String trackingNumber) {
+			this.trackingNumber = trackingNumber;
+		}
 		public long getOrderId() {
 			return orderId;
 		}
