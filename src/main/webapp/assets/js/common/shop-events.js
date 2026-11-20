@@ -10,11 +10,11 @@
     });
     document.querySelectorAll("[data-navigation-key]").forEach((item) => {
         const key = item.dataset.navigationKey;
-        const choices = { new: "newest", ranking: "recommended", rating: "rating", exhibitions: "recommended", "open-run": "newest", season: "newest", "selling-out": "recommended", beauty: "recommended", health: "recommended" };
+        const choices = { season: "newest" };
         if (choices[key]) {
             item.removeAttribute("data-unavailable");
             item.addEventListener("click", () => {
-                location.href = app.url("list.jsp", { sort: choices[key], category: key === "beauty" ? "CTGR_01050" : undefined, collection: key });
+                location.href = app.url("list.jsp", { sort: choices[key], collection: key });
             });
         }
     });

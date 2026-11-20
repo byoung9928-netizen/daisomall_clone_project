@@ -1,16 +1,15 @@
 (() => {
     "use strict";
 
-    const config = document.querySelector("[data-wishlist-config]");
-    if (!config) return;
-    const feedback = config.querySelector("[data-wishlist-feedback]");
+    const configFor = button => button.closest('[data-wishlist-config]')
+        || document.querySelector('[data-wishlist-config]');
     const pending = new Set();
 
-    function notice(message) {
-        feedback.textContent = message;
+    function notice(config, message) {
+        config.querySelector("[data-wishlist-feedback]").textContent = message;
     }
 
-    function login() {
+    function login(config) {
         if (window.confirm("로그인이 필요한 기능입니다. 로그인 화면으로 이동할까요?")) {
             location.assign(config.dataset.loginUrl);
         }
@@ -25,9 +24,11 @@
     document.addEventListener("click", async event => {
         const button = event.target.closest("[data-wishlist-product]");
         if (!button || button.disabled) return;
+        const config = configFor(button);
+        if (!config) return;
         event.preventDefault();
         if (config.dataset.loggedIn !== "true") {
-            login();
+            login(config);
             return;
         }
 
@@ -49,20 +50,20 @@
             });
             const code = (await response.text()).trim();
             if (response.status === 401) {
-                notice("로그인이 만료되었습니다. 다시 로그인해 주세요.");
-                login();
+                notice(config, "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+                login(config);
                 return;
             }
             if (response.status === 403) {
-                notice("보안 확인에 실패했습니다. 화면을 새로고침한 후 다시 시도해 주세요.");
+                notice(config, "보안 확인에 실패했습니다. 화면을 새로고침한 후 다시 시도해 주세요.");
                 return;
             }
             if (code === "STORAGE_NOT_READY") {
-                notice("찜 DB 테이블이 아직 적용되지 않아 사용할 수 없습니다.");
+                notice(config, "찜 DB 테이블이 아직 적용되지 않아 사용할 수 없습니다.");
                 return;
             }
             if (!response.ok || code !== (selected ? "ADDED" : "REMOVED")) {
-                notice(response.status === 400
+                notice(config, response.status === 400
                     ? "상품 정보를 확인해 주세요."
                     : "저장 결과를 확인하지 못했습니다. 새로고침 후 찜 상태를 확인해 주세요.");
                 return;
@@ -76,10 +77,10 @@
                     control.dataset.wishlistName + (selected ? " 관심상품 해제" : " 관심상품 등록"));
                 control.querySelector("[data-wishlist-label]").textContent = selected ? "찜 해제" : "찜";
             });
-            notice(selected ? "관심상품에 등록했습니다." : "관심상품에서 해제했습니다.");
+            notice(config, selected ? "관심상품에 등록했습니다." : "관심상품에서 해제했습니다.");
             if (!selected && config.dataset.wishlistPage === "true") location.reload();
         } catch (error) {
-            notice("저장 결과를 확인하지 못했습니다. 새로고침 후 찜 상태를 확인해 주세요.");
+            notice(config, "저장 결과를 확인하지 못했습니다. 새로고침 후 찜 상태를 확인해 주세요.");
         } finally {
             pending.delete(productId);
             buttonsFor(productId).forEach(control => {
@@ -91,6 +92,6 @@
 
     // 뒤로 가기로 복원된 화면은 현재 로그인 회원의 DB 상태로 다시 조회
     window.addEventListener("pageshow", event => {
-        if (event.persisted) location.reload();
+        if (event.persisted && document.querySelector("[data-wishlist-config]")) location.reload();
     });
 })();

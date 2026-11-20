@@ -23,10 +23,11 @@ import daiso.product.service.ProductReviewService;
 @DaisoController
 public class ProductController {
     private static final int PAGE_SIZE = 30;
-    private static final Map<String, String> COLLECTIONS = Map.of(
-            "new", "신상발견", "ranking", "랭킹", "rating", "별점 5점",
-            "selling-out", "품절임박", "open-run", "판매 예정", "brand", "브랜드 상품",
-            "store", "매장 상품 찾기", "exhibitions", "기획전", "exhibition", "기획전");
+    private static final Map<String, String> COLLECTIONS = Map.ofEntries(
+            Map.entry("new", "신상발견"), Map.entry("ranking", "랭킹"), Map.entry("rating", "별점 5점"),
+            Map.entry("selling-out", "품절임박"), Map.entry("open-run", "오픈런"), Map.entry("brand", "브랜드 상품"),
+            Map.entry("store", "매장 상품 찾기"), Map.entry("exhibitions", "기획전"), Map.entry("exhibition", "기획전"),
+            Map.entry("beauty", "뷰티"), Map.entry("health", "건강식품"));
 
     private final ProductDAO dao = new ProductDAO();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
@@ -54,6 +55,13 @@ public class ProductController {
 
     @DaisoGetMapping("/products")
     public String products(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        return catalog(request, response, "list");
+    }
+
+    @DaisoGetMapping("/products/selling-out")
+    public String sellingOut(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        request.setAttribute("stockWatch", true);
+        request.setAttribute("activeNavigation", "selling-out");
         return catalog(request, response, "list");
     }
 
@@ -106,6 +114,7 @@ public class ProductController {
         }
         ProductDTO product = (ProductDTO) request.getAttribute("product");
         if (product != null) {
+            ProductActivityController.remember(request, product.getProductId());
             request.setAttribute("officialProductDetails", officialDetails.find(request.getServletContext(), product));
             prepareDetailReviews(request, product.getProductId());
         }
@@ -135,9 +144,11 @@ public class ProductController {
     }
 
     private String catalog(HttpServletRequest request, HttpServletResponse response, String view) throws SQLException, NamingException {
-        String collection = request.getParameter("collection");
+        boolean stockWatch = Boolean.TRUE.equals(request.getAttribute("stockWatch"));
+        String collection = stockWatch ? "selling-out" : request.getParameter("collection");
         collection = collection == null ? "" : collection;
         String title = COLLECTIONS.get(collection);
+        ProductCollection collectionPage = ProductCollection.forKey(collection);
         CatalogFilter filter;
         int page;
         try {
@@ -150,18 +161,31 @@ public class ProductController {
         }
 
         if (ProductQueries.text(request, "sort", 20).isEmpty()) {
-            if ("new".equals(collection) || "open-run".equals(collection)) filter.sort = "newest";
+            if (stockWatch || "new".equals(collection) || "open-run".equals(collection)) filter.sort = "newest";
             if ("rating".equals(collection)) filter.sort = "rating";
         }
-        if ("open-run".equals(collection) && filter.status.isEmpty()) filter.status = "SCHEDULED";
-        filter.lowStock = "selling-out".equals(collection);
-        filter.topRated = "rating".equals(collection);
+        filter.lowStock = !stockWatch && "selling-out".equals(collection);
+        filter.stockWatch = stockWatch;
+        if (stockWatch) {
+            if (!List.of("newest", "stockDesc", "recommended").contains(filter.sort)) filter.sort = "newest";
+            filter.status = "";
+            filter.maxPrice = null;
+            filter.recentOnly = "true".equals(request.getParameter("recent"));
+            filter.watchRank = "new".equals(request.getParameter("rank")) ? "new" : "popular";
+        }
+        filter.topRated = false;
+        if (collectionPage != null) collectionPage.configure(request, filter);
         filter.offset = (page - 1) * PAGE_SIZE;
         filter.limit = PAGE_SIZE;
 
         try (Connection conn = ProductQueries.connect()) {
             List<Category> categories = dao.findVisibleCategories(conn);
             List<Category> path = categoryPath(categories, filter.category);
+            if (collectionPage != null && !collectionPage.root.isEmpty()
+                    && path.stream().noneMatch(category -> category.id.equals(collectionPage.root))) {
+                filter.category = collectionPage.root;
+                path = categoryPath(categories, filter.category);
+            }
             request.setAttribute("productCategories", categories);
             if (!filter.category.isEmpty() && path.isEmpty()) {
                 request.setAttribute("catalogError", "존재하지 않는 카테고리입니다.");
@@ -183,10 +207,21 @@ public class ProductController {
                 // 현재 페이지의 찜 상태를 상품별 반복 조회 없이 준비
                 List<String> wishlistIds = new ArrayList<>();
                 for (ProductDTO item : result.products) wishlistIds.add(item.getProductId());
+                if (stockWatch) {
+                    Map<String, Integer> counts = dao.stockWatchCounts(conn);
+                    CatalogFilter rank = selection("new".equals(filter.watchRank) ? "newest" : "recommended", "", 6);
+                    rank.lowStock = true;
+                    List<ProductDTO> ranked = dao.findCatalog(conn, rank).products;
+                    for (ProductDTO item : ranked) wishlistIds.add(item.getProductId());
+                    request.setAttribute("stockWatchHero", new StockWatchView(request.getContextPath(), filter, counts,
+                            categories, ranked));
+                }
                 WishlistController.prepare(request, response, conn, wishlistIds);
-                request.setAttribute("activeNavigation", collection);
+                request.setAttribute("activeNavigation", collectionPage == null ? collection : collectionPage.key);
                 request.setAttribute("categoryPath", path);
-                request.setAttribute("catalog", new ProductCatalogView(request.getContextPath(), "/" + view + ".jsp",
+                String route = stockWatch ? StockWatchView.ROUTE
+                        : collectionPage != null ? "/app/products" : "/" + view + ".jsp";
+                request.setAttribute("catalog", new ProductCatalogView(request.getContextPath(), route,
                         title, collection, filter, categories, result, page, pages));
             }
             conn.commit();

@@ -1,0 +1,22 @@
+<%@ page pageEncoding="UTF-8" %>
+<header class="collection-heading">
+    <h1><%= ProductView.escape(catalog.title) %></h1>
+    <p><%= ProductView.escape(catalog.collectionDescription) %></p>
+</header>
+<% if (!catalog.modes.isEmpty()) { %>
+    <nav class="collection-modes" aria-label="<%= ProductView.escape(catalog.title) %> 보기 방식">
+        <% for (ProductCatalogView.CollectionLink mode : catalog.modes) { %>
+            <a href="<%= mode.url %>" <%= mode.current ? "aria-current=\"page\"" : "" %>><%= ProductView.escape(mode.title) %></a>
+        <% } %>
+    </nav>
+<% } %>
+<% if (!catalog.themes.isEmpty()) { %>
+    <nav class="collection-themes" aria-label="테마별 기획전">
+        <% for (ProductCatalogView.CollectionLink theme : catalog.themes) { %>
+            <a href="<%= theme.url %>" <%= theme.current ? "aria-current=\"page\"" : "" %>>
+                <img src="<%= ProductView.escape(theme.image) %>" alt="" width="320" height="160">
+                <span><%= ProductView.escape(theme.title) %></span>
+            </a>
+        <% } %>
+    </nav>
+<% } %>
