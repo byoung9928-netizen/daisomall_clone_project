@@ -37,6 +37,10 @@
         <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1">
             <h1 class="page-title">상품 관리</h1>
+            <% if (filters != null && !filters.getOrDefault("filterCategory", "").isEmpty()) { %>
+                <p><a href="<%= ProductView.url(request.getContextPath(), "/app/admin/categories",
+                        Map.of("edit", filters.get("filterCategory"))) %>#category-detail">선택한 카테고리 관리로 돌아가기</a></p>
+            <% } %>
             <% if (!discontinuationEnabled && blocked == null) { %>
                 <p class="source-note">판매 종료 전환은 결제 승인 단계의 상품 상태 확인이 준비될 때까지 보류됩니다.</p>
             <% } %>
