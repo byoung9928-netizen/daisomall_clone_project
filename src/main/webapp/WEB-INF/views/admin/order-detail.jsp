@@ -289,44 +289,71 @@ DateTimeFormatter dateFormat =
     const form =
         document.getElementById("admin-tracking-form");
 
-    if (!form || !saveButton) return;
+    if (!form) return;
 
     const resultBox =
         document.getElementById("admin-tracking-result");
 
-    saveButton.addEventListener("click", async function () {
-        if (saveButton.disabled) return;
-        if (!form.reportValidity()) return;
+    const submitButton =
+        form.querySelector('button[type="submit"]');
 
-        saveButton.disabled = true;
-        resultBox.textContent = "운송장을 저장하고 있습니다.";
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (submitButton.disabled) return;
+
+        submitButton.disabled = true;
+        resultBox.textContent = "현재 배송 상태를 조회하고 있습니다.";
 
         try {
             const data =
                 new URLSearchParams(new FormData(form));
 
-            const response = await fetch(
-                "${pageContext.request.contextPath}/app/admin/orders/tracking/save",
-                {
-                    method: "POST",
-                    body: data
-                }
-            );
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: data
+            });
 
             if (!response.ok) {
-                throw new Error("운송장 저장 요청에 실패했습니다.");
+                throw new Error("배송조회 요청에 실패했습니다.");
             }
 
             const result = await response.json();
 
-            resultBox.textContent =
-                result.message || "저장 결과를 확인하지 못했습니다.";
+            if (!result.success) {
+                resultBox.textContent =
+                    result.message || "배송정보를 조회하지 못했습니다.";
+                return;
+            }
+
+            const tracking = result.tracking;
+            const lastEvent = tracking.lastEvent;
+            const status = lastEvent.status;
+            const statusLabels = {
+            	    INFORMATION_RECEIVED: "배송 준비중",
+            	    AT_PICKUP: "상품 인수중",
+            	    IN_TRANSIT: "배송중",
+            	    OUT_FOR_DELIVERY: "배송 출발",
+            	    DELIVERED: "배송완료",
+            	    ATTEMPT_FAIL: "배송 시도 실패",
+            	    ERROR: "배송 오류",
+            	    UNKNOWN: "배송 상태 확인중"
+            	};
+
+            	const statusText =
+            	    statusLabels[status.code] || "배송 상태 확인중";
+            resultBox.textContent = [
+                "운송장: " + tracking.trackingNumber,
+                "현재 상태: " +statusText,
+                lastEvent.time,
+                lastEvent.description
+            ].filter(Boolean).join(" / ");
 
         } catch (error) {
             resultBox.textContent = error.message;
 
         } finally {
-            saveButton.disabled = false;
+            submitButton.disabled = false;
         }
     });
 })();

@@ -214,8 +214,12 @@ public class OrderDAO {
 		        long orderId,
 		        String tid,
 		        int amount,
-		        Timestamp approvedAt) throws SQLException {
-
+		        Timestamp approvedAt,
+		        String trackingNumber) throws SQLException {
+			if(trackingNumber == null || trackingNumber.isBlank()||trackingNumber.length()>200) {
+				throw new IllegalArgumentException(
+						"자동 배정할 운송장 번호가 없습니다.");
+			}
 		    if (approvedAt == null) {
 		        throw new IllegalArgumentException(
 		            "결제 승인 시각이 없습니다."
@@ -303,15 +307,18 @@ public class OrderDAO {
 		            }
 
 		            String orderSql =
-		                "UPDATE orders SET status = 'PAID' "
-		                + "WHERE order_id = ? AND member_id = ? "
-		                + "AND status = 'APPROVING'";
-
+		            		 "UPDATE orders "
+		            			+ "SET status = 'PAID', hidden_at = NULL, "
+		            			+ "carrier_id = 'dev.track.dummy', "
+		            			+ "tracking_number = ? "
+		            			+ "WHERE order_id = ? AND member_id = ? "
+		            			+ "AND status = 'APPROVING'";
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(orderSql)) {
 
-		                pstmt.setLong(1, orderId);
-		                pstmt.setString(2, memberId);
+		                pstmt.setString(1, trackingNumber);
+		                pstmt.setLong(2, orderId);
+		                pstmt.setString(3, memberId);
 
 		                if (pstmt.executeUpdate() != 1) {
 		                    throw new SQLException(
@@ -433,19 +440,13 @@ public class OrderDAO {
 		                order.put("orderId", orderId);
 		                order.put("orderNo", rs.getString("order_no"));
 		                order.put("status", rs.getString("status"));
-		                order.put(
-		                    "paymentStatus",
-		                    rs.getString("payment_status")
-		                );
-
-		                order.put(
-		                    "subtotal", rs.getInt("subtotal_amount")
-		                );
+		                order.put("carrierId", rs.getString("carrier_id"));
+		                order.put("trackingNumber", rs.getString("tracking_number"));
+		                order.put("paymentStatus", rs.getString("payment_status"));
+		                order.put("subtotal", rs.getInt("subtotal_amount"));
 		                order.put("shipping", rs.getInt("shipping_fee"));
 		                order.put("total", rs.getInt("total_amount"));
-		                order.put(
-		                    "message", rs.getString("delivery_message")
-		                );
+		                order.put("message", rs.getString("delivery_message"));
 
 		                // 배송정보
 		                Map<String, String> address = new HashMap<>();

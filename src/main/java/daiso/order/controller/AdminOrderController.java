@@ -192,6 +192,29 @@ public class AdminOrderController {
     	DeliveryTrackerClient client = new DeliveryTrackerClient();
     	
     	JsonObject tracking = client.track(carrierId,trackingNumber);
+    	String deliveryCode = tracking
+    		    .getAsJsonObject("lastEvent")
+    		    .getAsJsonObject("status")
+    		    .get("code").getAsString();
+
+    		String nextStatus = null;
+
+    		if ("DELIVERED".equals(deliveryCode)) {
+    		    nextStatus = "DELIVERED";
+
+    		} else if ("IN_TRANSIT".equals(deliveryCode)
+    		        || "OUT_FOR_DELIVERY".equals(deliveryCode)) {
+    		    nextStatus = "SHIPPED";
+    		}
+
+    		if (nextStatus != null) {
+    		    dao.updateDeliveryStatus(
+    		        orderNo,
+    		        carrierId,
+    		        trackingNumber,
+    		        nextStatus
+    		    );
+    		}
     	result.addProperty("success", true);
         result.add("tracking", tracking);
 

@@ -1,5 +1,6 @@
 package daiso.order.controller;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -8,20 +9,23 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
-import daiso.common.annotation.DaisoController;
-import daiso.common.annotation.DaisoGetMapping;
-import daiso.member.controller.MemberProfileInfo;
-import daiso.member.controller.MemberService;
-import daiso.order.db.OrderDAO;
-import java.io.IOException;
-import java.util.UUID;
 
 import com.google.gson.JsonObject;
 
+import daiso.common.annotation.DaisoController;
+import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.common.annotation.DaisoResponseBody;
+import daiso.member.controller.MemberProfileInfo;
+import daiso.member.controller.MemberService;
+import daiso.order.db.AdminOrderDAO;
+import daiso.order.db.OrderDAO;
+import daiso.order.delivery.DeliveryTrackerClient;
+import daiso.order.delivery.DemoTrackingNumber;
 import daiso.order.payment.kakaoPayClient;
 
 @DaisoController
@@ -345,7 +349,7 @@ public class OrderMyPageController {
                 // 이미 받은 승인 결과를 DB에 반영
                 // 카카오페이에 승인을 다시 요청하는 것이 아님
                 dao.approvePayment(
-                    memberId, orderId, tid, amount, approvedAt
+                    memberId, orderId, tid, amount, approvedAt, DemoTrackingNumber.create()
                 );
 
                 return "이미 결제된 주문이라 결제완료로 복구했습니다. "
@@ -395,6 +399,118 @@ public class OrderMyPageController {
 
         } catch (RuntimeException e) {
             return "결제정보를 확인하지 못했습니다. 삭제하지 않았습니다.";
+        }
+    }
+    @DaisoPostMapping("/order/tracking")
+    @DaisoResponseBody
+    public String tracking(HttpServletRequest request) {
+
+        HttpSession session = request.getSession(false);
+
+        String memberId = session == null
+            ? null : (String) session.getAttribute("member_id");
+
+        if (memberId == null || memberId.isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+
+        // 마이페이지에서 이미 발급한 요청 확인 토큰 사용
+        Object savedToken =
+            session.getAttribute("myOrderDeleteCsrf");
+
+        if (!(savedToken instanceof String)
+                || !savedToken.equals(
+                    request.getParameter("csrfToken"))) {
+            return "마이페이지를 새로고침한 뒤 다시 시도해 주세요.";
+        }
+
+        String orderNo = request.getParameter("orderNo");
+
+        if (orderNo == null || orderNo.isBlank()
+                || orderNo.length() > 100) {
+            return "주문번호를 확인해 주세요.";
+        }
+
+        try {
+            OrderDAO dao = new OrderDAO();
+
+            // 회원번호까지 함께 검사하므로 본인 주문만 조회됨
+            Map<String, Object> order =
+                dao.getMyOrderDetail(memberId, orderNo);
+
+            if (order == null) {
+                return "본인의 주문을 찾을 수 없습니다.";
+            }
+
+            String status = (String) order.get("status");
+
+            boolean canTrack =
+                "PAID".equals(status)
+                || "PREPARING".equals(status)
+                || "SHIPPED".equals(status)
+                || "DELIVERED".equals(status);
+
+            if (!canTrack
+                    || !"APPROVED".equals(order.get("paymentStatus"))) {
+                return "현재 배송조회가 가능한 주문이 아닙니다.";
+            }
+
+            String carrierId = (String) order.get("carrierId");
+            String trackingNumber =
+                (String) order.get("trackingNumber");
+
+            if (carrierId == null || carrierId.isBlank()
+                    || trackingNumber == null
+                    || trackingNumber.isBlank()) {
+                return "아직 운송장이 배정되지 않았습니다.";
+            }
+
+            DeliveryTrackerClient client =
+                new DeliveryTrackerClient();
+
+            JsonObject tracking =
+                client.track(carrierId, trackingNumber);
+
+            String deliveryCode = tracking
+                .getAsJsonObject("lastEvent")
+                .getAsJsonObject("status")
+                .get("code").getAsString();
+
+            String nextStatus;
+
+            if ("DELIVERED".equals(deliveryCode)) {
+                nextStatus = "DELIVERED";
+
+            } else if ("IN_TRANSIT".equals(deliveryCode)
+                    || "OUT_FOR_DELIVERY".equals(deliveryCode)) {
+                nextStatus = "SHIPPED";
+
+            } else {
+                return "아직 배송중·배송완료 상태가 확인되지 않았습니다.";
+            }
+
+            // 관리자 배송조회와 같은 DB 갱신 메서드 재사용
+            new AdminOrderDAO().updateDeliveryStatus(
+                orderNo, carrierId, trackingNumber, nextStatus
+            );
+
+            return "OK";
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "배송조회 요청이 중단되었습니다.";
+
+        } catch (IOException e) {
+            return e.getMessage();
+
+        } catch (SQLException e) {
+            request.getServletContext().log(
+                "고객 주문 배송조회 실패", e
+            );
+            return "배송정보 조회·저장 중 DB 오류가 발생했습니다.";
+
+        } catch (RuntimeException e) {
+            return "배송조회 설정 또는 응답을 확인해 주세요.";
         }
     }
 }
