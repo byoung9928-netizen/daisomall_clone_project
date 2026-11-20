@@ -235,6 +235,39 @@ public class MemberService {
         return memberDAO.findAdminMemberConsent(memberId.trim());
     }
     
+    public void saveMemberConsentSettings(
+            String memberId,
+            boolean marketingSms,
+            boolean marketingEmail,
+            boolean marketingPersonalInfo,
+            boolean locationTerms,
+            String retentionPeriod) throws Exception {
+
+        memberId = memberId == null ? "" : memberId.trim();
+        retentionPeriod = retentionPeriod == null
+                ? ""
+                : retentionPeriod.trim().toUpperCase(Locale.ROOT);
+
+        if (memberId.isEmpty()) {
+            throw new IllegalArgumentException("회원 정보를 확인해 주세요.");
+        }
+
+        if (!"WITHDRAWAL".equals(retentionPeriod)
+                && !"5_YEARS".equals(retentionPeriod)
+                && !"3_YEARS".equals(retentionPeriod)) {
+            throw new IllegalArgumentException("개인정보 보관 기간을 확인해 주세요.");
+        }
+
+        memberDAO.saveMemberConsentSettings(
+                memberId,
+                marketingSms,
+                marketingEmail,
+                marketingPersonalInfo,
+                locationTerms,
+                retentionPeriod
+        );
+    }
+    
     public boolean updateAdminMemberStatus(
             String actingAdminId,
             String memberId,

@@ -37,6 +37,17 @@ public class OrderMyPageController {
         if (memberId == null || memberId.isBlank()) {
             return "redirect:/member/login";
         }
+        if (session.getAttribute("memberConsentCsrf") == null) {
+            session.setAttribute(
+                    "memberConsentCsrf",
+                    UUID.randomUUID().toString()
+            );
+        }
+
+        request.setAttribute(
+                "memberConsentCsrf",
+                session.getAttribute("memberConsentCsrf")
+        );
         // 주문내역 삭제 요청을 확인하기 위한 토큰
         if (session.getAttribute("myOrderDeleteCsrf") == null) {
             session.setAttribute(
@@ -212,6 +223,21 @@ public class OrderMyPageController {
 		                "회원정보를 불러오지 못했습니다."
 		        );
 		    }
+            try {
+                request.setAttribute(
+                        "profileConsentSettings",
+                        memberService.findAdminMemberConsent(memberId)
+                );
+            } catch (Exception consentError) {
+                request.getServletContext().log(
+                        "회원 동의 설정 조회 실패",
+                        consentError
+                );
+                request.setAttribute(
+                        "profileConsentError",
+                        "동의 설정 정보를 불러오지 못했습니다."
+                );
+            }
 		}
 		return "order/mypage-detail";
     }
@@ -237,6 +263,61 @@ public class OrderMyPageController {
                 return "결제실패";
             default:
                 return "상태 확인 필요";
+        }
+    }
+    @DaisoPostMapping("/order/profile/consent")
+    @DaisoResponseBody
+    public String saveMemberConsentSettings(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+
+        String memberId = session == null
+                ? null
+                : (String) session.getAttribute("member_id");
+
+        if (memberId == null || memberId.isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+
+        Object savedToken = session.getAttribute("memberConsentCsrf");
+        String submittedToken = request.getParameter("csrfToken");
+
+        if (!(savedToken instanceof String)
+                || !savedToken.equals(submittedToken)) {
+            return "화면을 새로고침한 뒤 다시 시도해 주세요.";
+        }
+
+        String selectedRetention =
+                request.getParameter("profileRetention");
+        String retentionPeriod;
+
+        if ("withdrawal".equals(selectedRetention)) {
+            retentionPeriod = "WITHDRAWAL";
+        } else if ("5years".equals(selectedRetention)) {
+            retentionPeriod = "5_YEARS";
+        } else if ("3years".equals(selectedRetention)) {
+            retentionPeriod = "3_YEARS";
+        } else {
+            return "개인정보 보관 기간을 선택해 주세요.";
+        }
+
+        try {
+            memberService.saveMemberConsentSettings(
+                    memberId,
+                    Boolean.parseBoolean(request.getParameter("marketingSms")),
+                    Boolean.parseBoolean(request.getParameter("marketingEmail")),
+                    Boolean.parseBoolean(request.getParameter("marketingPersonalInfo")),
+                    Boolean.parseBoolean(request.getParameter("locationTerms")),
+                    retentionPeriod
+            );
+            return "OK";
+        } catch (IllegalArgumentException error) {
+            return error.getMessage();
+        } catch (Exception error) {
+            request.getServletContext().log(
+                    "회원 동의 설정 저장 실패",
+                    error
+            );
+            return "동의 설정을 저장하지 못했습니다. 다시 시도해 주세요.";
         }
     }
     @DaisoPostMapping("/order/pending/delete")

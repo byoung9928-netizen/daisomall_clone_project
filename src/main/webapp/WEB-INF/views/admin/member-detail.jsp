@@ -1,5 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.List,java.util.Collections,java.text.NumberFormat,java.time.format.DateTimeFormatter,daiso.member.controller.AdminMemberDetailInfo,daiso.order.db.OrderBean,daiso.product.controller.ProductView" %>
+<%@ page import="java.util.List,java.util.Collections,java.text.NumberFormat,java.time.format.DateTimeFormatter,daiso.member.controller.AdminMemberDetailInfo,daiso.member.controller.AdminMemberConsentInfo,daiso.order.db.OrderBean,daiso.product.controller.ProductView" %>
 <%
     request.setAttribute("adminSection", "users");
 
@@ -26,6 +26,33 @@
 
     String socialError =
             (String) request.getAttribute("adminMemberSocialError");
+    AdminMemberConsentInfo consent =
+            (AdminMemberConsentInfo) request.getAttribute(
+                    "adminMemberConsent"
+            );
+    String consentError =
+            (String) request.getAttribute("adminMemberConsentError");
+
+    String retentionPeriodLabel = "-";
+    String consentUpdatedAt = "-";
+
+    if (consent != null) {
+        String retentionPeriod = consent.getRetentionPeriod();
+
+        if ("WITHDRAWAL".equals(retentionPeriod)) {
+            retentionPeriodLabel = "회원 탈퇴 시까지";
+        } else if ("5_YEARS".equals(retentionPeriod)) {
+            retentionPeriodLabel = "5년";
+        } else if ("3_YEARS".equals(retentionPeriod)) {
+            retentionPeriodLabel = "3년";
+        }
+
+        if (consent.getUpdatedAt() != null) {
+            consentUpdatedAt =
+                    new java.text.SimpleDateFormat("yyyy.MM.dd HH:mm")
+                            .format(consent.getUpdatedAt());
+        }
+    }
     NumberFormat money = NumberFormat.getIntegerInstance();
     DateTimeFormatter orderDateFormat =
             DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm");
@@ -247,6 +274,54 @@
                                 </li>
                             <% } %>
                         </ul>
+                    <% } %>
+                </section>
+                                <section class="admin-panel"
+                         aria-labelledby="member-consent-heading">
+                    <h2 id="member-consent-heading">수신 동의 및 개인정보 설정</h2>
+
+                    <% if (consentError != null) { %>
+                        <p class="error-message" role="alert">
+                            <%= ProductView.escape(consentError) %>
+                        </p>
+                    <% } else if (consent == null) { %>
+                        <p>저장된 동의 설정이 없습니다.</p>
+                    <% } else { %>
+                        <div class="admin-table-scroll"
+                             role="region"
+                             aria-label="회원 수신 동의 및 개인정보 설정">
+                            <table class="admin-table">
+                                <caption class="visually-hidden">
+                                    회원 수신 동의 및 개인정보 설정
+                                </caption>
+                                <tbody>
+                                    <tr>
+                                        <th scope="row">마케팅 문자 수신</th>
+                                        <td><%= consent.isMarketingSms() ? "동의" : "미동의" %></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">마케팅 이메일 수신</th>
+                                        <td><%= consent.isMarketingEmail() ? "동의" : "미동의" %></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">마케팅 개인정보 활용</th>
+                                        <td><%= consent.isMarketingPersonalInfo() ? "동의" : "미동의" %></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">위치기반 서비스 약관</th>
+                                        <td><%= consent.isLocationTerms() ? "동의" : "미동의" %></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">개인정보 보유 기간</th>
+                                        <td><%= ProductView.escape(retentionPeriodLabel) %></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">최종 수정일</th>
+                                        <td><%= ProductView.escape(consentUpdatedAt) %></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     <% } %>
                 </section>
             <% } %>
