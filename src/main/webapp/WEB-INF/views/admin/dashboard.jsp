@@ -72,7 +72,6 @@
         const { link, button, money } = app.ui;
         const { field, selectField, formFeedback, addRow, openEditor } = app.admin;
         app.ready.then(function (repository) {
-            if (!app.admin.requireAdmin(root, repository)) return;
 
         const orders = repository.getAllOrders();
         const products = repository.getProducts();

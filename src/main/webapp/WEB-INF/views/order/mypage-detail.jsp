@@ -2631,10 +2631,28 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				}
 				%>
 				<div class="my-order-actions">
-					<a class="my-outline-button"
-						style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none;"
-						href="<%=myContext%>/app/order/cancel/form?orderNo=<%=java.net.URLEncoder.encode((String) myOrder.get("orderNo"), "UTF-8")%>">주문취소</a>
-					<button class="my-outline-button" type="button" data-my-unavailable>문의하기</button>
+					<% if ("PENDING".equals(myOrder.get("status"))) { %>
+						<button class="my-outline-button"
+								type="button"
+								id="delete-pending-order"
+								data-order-no="<%= ProductView.escape(myOrder.get("orderNo")) %>"
+								data-csrf="<%= ProductView.escape(request.getAttribute("myOrderDeleteCsrf")) %>">
+							결제대기 주문 삭제
+						</button>
+					<% } else if ("PAID".equals(myOrder.get("status"))
+							&& "APPROVED".equals(myOrder.get("paymentStatus"))) { %>
+						<a class="my-outline-button"
+						   style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;"
+						   href="<%= myContext %>/app/order/cancel/form?orderNo=<%= java.net.URLEncoder.encode(
+							   (String) myOrder.get("orderNo"), "UTF-8") %>">
+							주문취소
+						</a>
+					<% } %>
+					<button class="my-outline-button"
+							type="button"
+							data-my-unavailable>
+						문의하기
+					</button>
 				</div>
 				<section class="my-section" aria-labelledby="my-delivery-title">
 					<div class="my-section-heading">

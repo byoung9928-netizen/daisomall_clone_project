@@ -112,6 +112,11 @@
     font-weight: 700;
 }
 
+.pd-reviews__badge--refunded {
+    background: #e8edf4;
+    color: #33465f;
+}
+
 .pd-reviews__meta time {
     margin-inline-start: auto;
     color: #505a65;
@@ -305,5 +310,10 @@ body:has(.review-dialog:modal) { overflow: hidden; }
 @media (max-width: 560px) {
     .pd-reviews, .pd-description { scroll-margin-top: 4rem; }
     .pd-reviews__toolbar { justify-content: flex-start; }
-    .pd-reviews__meta time { margin-inline-start: 0; }
+    .pd-reviews__badge--refunded {
+    background: #e8edf4;
+    color: #33465f;
+}
+
+.pd-reviews__meta time { margin-inline-start: 0; }
 }

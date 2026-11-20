@@ -3,6 +3,7 @@ package daiso.order.db;
 import java.util.List;
 
 import daiso.cart.db.CartBean;
+import java.sql.Timestamp;
 
 public class OrderBean {
 	 	private String orderNo;
@@ -21,6 +22,44 @@ public class OrderBean {
 	    private int totalAmount;
 	    
 	    private List<CartBean> items;
+	    
+	    //관리자
+	    private long orderId;
+	    private String status;
+	    private String paymentStatus;
+	    private Timestamp createdAt;
+	    private String productSummary;
+	    
+		public long getOrderId() {
+			return orderId;
+		}
+		public void setOrderId(long orderId) {
+			this.orderId = orderId;
+		}
+		public String getStatus() {
+			return status;
+		}
+		public void setStatus(String status) {
+			this.status = status;
+		}
+		public String getPaymentStatus() {
+			return paymentStatus;
+		}
+		public void setPaymentStatus(String paymentStatus) {
+			this.paymentStatus = paymentStatus;
+		}
+		public Timestamp getCreatedAt() {
+			return createdAt;
+		}
+		public void setCreatedAt(Timestamp createdAt) {
+			this.createdAt = createdAt;
+		}
+		public String getProductSummary() {
+			return productSummary;
+		}
+		public void setProductSummary(String productSummary) {
+			this.productSummary = productSummary;
+		}
 		public String getOrderNo() {
 			return orderNo;
 		}

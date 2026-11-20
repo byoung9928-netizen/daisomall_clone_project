@@ -73,14 +73,30 @@ public final class ReviewExtrasDAO {
                 + "UNION ALL SELECT c.category_id FROM categories c JOIN visible v "
                 + "ON c.parent_id = v.category_id WHERE c.is_visible = 1) "
                 + "SELECT ph.photo_bytes FROM product_review_photos ph "
-                + "JOIN product_reviews r ON r.review_id = ph.review_id AND r.deleted_at IS NULL "
-                + "JOIN products p ON p.product_id = r.product_id "
-                + "JOIN visible v ON v.category_id = p.category_id WHERE ph.photo_id = ?";
+                + "JOIN product_reviews rv ON rv.review_id = ph.review_id AND rv.deleted_at IS NULL "
+                + "JOIN products p ON p.product_id = rv.product_id "
+                + "JOIN visible v ON v.category_id = p.category_id WHERE ph.photo_id = ?" + ReviewVisibility.PUBLISHED;
         try (PreparedStatement query = connection.prepareStatement(sql)) {
             query.setLong(1, photoId);
-            try (ResultSet rows = query.executeQuery()) {
-                return rows.next() ? rows.getBytes(1) : null;
-            }
+            return readPhoto(query);
+        }
+    }
+
+    public byte[] privatePhoto(Connection connection, long photoId, String memberId, boolean administrator) throws SQLException {
+        String sql = "SELECT ph.photo_bytes FROM product_review_photos ph "
+                + "JOIN product_reviews rv ON rv.review_id = ph.review_id AND rv.deleted_at IS NULL "
+                + "WHERE ph.photo_id = ? AND (? OR rv.member_id = ?)";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setLong(1, photoId);
+            query.setBoolean(2, administrator);
+            query.setString(3, memberId);
+            return readPhoto(query);
+        }
+    }
+
+    private static byte[] readPhoto(PreparedStatement query) throws SQLException {
+        try (ResultSet rows = query.executeQuery()) {
+            return rows.next() ? rows.getBytes(1) : null;
         }
     }
 

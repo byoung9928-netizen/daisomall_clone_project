@@ -8,7 +8,8 @@
             event.preventDefault();
             location.assign(close.href);
         });
-        editor.querySelector('#product-editor-title').focus();
+        const focus = location.hash === '#product-status' ? '#product-status' : '#product-editor-title';
+        editor.querySelector(focus).focus();
     }
 
     const form = document.querySelector('[data-code-check]');
@@ -123,6 +124,108 @@
         price.addEventListener('input', updatePriceFeedback);
         price.addEventListener('invalid', updatePriceFeedback);
         updatePriceFeedback();
+        setupDetailPreview(form, preview);
+    }
+
+    function setupDetailPreview(form, imagePreview) {
+        const detail = form.querySelector('[data-admin-product-preview]');
+        if (!detail) return;
+        const image = detail.querySelector('[data-preview-image]');
+        const fallback = image.dataset.fallbackImage;
+        const priceFormat = new Intl.NumberFormat('ko-KR');
+        const displayedValues = new Map(Array.from(detail.querySelectorAll('[data-preview-value]'),
+            element => [element.dataset.previewValue, element]));
+        const set = (name, value) => { displayedValues.get(name).textContent = value; };
+
+        function update() {
+            if (!detail.open) return;
+            const fields = form.elements;
+            const quantity = fields.stock.valueAsNumber;
+            const status = fields.status.value === 'SCHEDULED' ? '판매 예정'
+                : fields.status.value === 'AVAILABLE' && quantity > 0 ? '구매 가능' : '품절';
+            set('brand', fields.brand.value.trim());
+            set('name', fields.name.value.trim() || '상품명');
+            set('price', Number.isFinite(fields.price.valueAsNumber) ? priceFormat.format(fields.price.valueAsNumber) + '원' : '—');
+            set('code', '품번 ' + (fields.code.value.trim() || '—'));
+            set('stock', status + ' · 온라인 재고 ' + (Number.isFinite(quantity) ? quantity : '—') + '개');
+            set('description', fields.description.value.trim() || '등록한 상품 설명이 없습니다.');
+            const source = imagePreview.hidden ? fallback : imagePreview.src;
+            if (image.getAttribute('src') !== source) image.src = source;
+        }
+
+        image.addEventListener('error', () => {
+            if (image.getAttribute('src') !== fallback) image.src = fallback;
+        });
+        detail.addEventListener('toggle', update);
+        form.addEventListener('input', update);
+        form.addEventListener('change', update);
+        imagePreview.addEventListener('load', update);
+        imagePreview.addEventListener('error', update);
+    }
+
+    const stockFilter = document.querySelector('[name="filterStock"]');
+    if (stockFilter) {
+        const quantity = stockFilter.form.elements.stockQuantity;
+        const quantityField = quantity.closest('[data-stock-quantity]');
+        const updateStockFilter = () => {
+            const needsQuantity = stockFilter.value === 'AT_LEAST' || stockFilter.value === 'AT_MOST';
+            quantityField.hidden = !needsQuantity;
+            quantity.disabled = !needsQuantity;
+            quantity.required = needsQuantity;
+        };
+        stockFilter.addEventListener('change', updateStockFilter);
+        updateStockFilter();
+    }
+
+    const bulk = document.querySelector('#product-bulk');
+    if (bulk) {
+        // 상품 체크박스는 표 안에 있으며 form 속성으로 일괄 변경 폼에 연결된다.
+        const checkboxes = Array.from(bulk.elements).filter(input => input.name === 'selectedProduct');
+        const selectAll = document.querySelector('[data-bulk-select-all]');
+        const heading = document.querySelector('[data-bulk-select-heading]');
+        const count = bulk.querySelector('[data-bulk-count]');
+        const submit = bulk.querySelector('button[type="submit"]');
+        const confirmDialog = document.querySelector('#product-bulk-confirm');
+        const selectedCount = () => checkboxes.filter(input => input.checked).length;
+        const updateSelection = () => {
+            const total = selectedCount();
+            count.textContent = total + '개 선택';
+            selectAll.checked = total === checkboxes.length;
+            selectAll.indeterminate = total > 0 && total < checkboxes.length;
+            submit.disabled = total === 0;
+        };
+        selectAll.hidden = false;
+        heading.hidden = true;
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(input => { input.checked = selectAll.checked; });
+            updateSelection();
+        });
+        checkboxes.forEach(input => input.addEventListener('change', updateSelection));
+        updateSelection();
+
+        let confirmed = false;
+        bulk.addEventListener('submit', (event) => {
+            if (confirmed) {
+                confirmed = false;
+                return;
+            }
+            const status = bulk.elements.targetStatus.selectedOptions[0].textContent;
+            const message = selectedCount() + '개 상품의 판매 상태를 ‘' + status + '’(으)로 변경할까요?';
+            if (typeof confirmDialog.showModal !== 'function') {
+                if (!window.confirm(message)) event.preventDefault();
+                return;
+            }
+            event.preventDefault();
+            confirmDialog.querySelector('[data-bulk-message]').textContent = message;
+            confirmDialog.returnValue = '';
+            confirmDialog.showModal();
+        });
+        confirmDialog.addEventListener('close', () => {
+            if (confirmDialog.returnValue === 'apply') {
+                confirmed = true;
+                bulk.requestSubmit(submit);
+            }
+        });
     }
 
     const dialog = document.querySelector('#product-delete-dialog');
