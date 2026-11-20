@@ -21,6 +21,11 @@ DateTimeFormatter dateFormat =
 
 Object query = request.getAttribute("adminOrderQuery");
 Object error = request.getAttribute("adminOrderError");
+int orderPage = 
+	request.getAttribute("adminOrderPage") instanceof Number
+		?((Number) request.getAttribute("adminOrderPage")).intValue()
+		:1;
+boolean hasNext = Boolean.TRUE.equals(request.getAttribute("adminOrderHasNext"));
 %>
 
 <!DOCTYPE html>
@@ -68,8 +73,7 @@ Object error = request.getAttribute("adminOrderError");
         <% } else { %>
 
             <p class="admin-count" role="status">
-                조회 결과 <%= orders.size() %>건
-                · 최근 주문 최대 50건 표시
+                <%=orderPage %>페이지 · 현재<%=orders.size() %>건
             </p>
 
             <div class="admin-table-scroll"
@@ -103,8 +107,9 @@ Object error = request.getAttribute("adminOrderError");
                             for (OrderBean order : orders) {
                         %>
                             <tr>
-                                <td><%= ProductView.escape(
-                                    order.getOrderNo()) %></td>
+                                <td><a href="${pageContext.request.contextPath}/app/admin/orders/detail?orderNo=<%=java.net.URLEncoder.encode(order.getOrderNo(),"UTF-8")%>">
+                                <%= ProductView.escape(
+                                    order.getOrderNo()) %></a></td>
                                 <td><%= ProductView.escape(
                                 	order.getProductSummary()) %></td>
 
@@ -139,6 +144,35 @@ Object error = request.getAttribute("adminOrderError");
                     </tbody>
                 </table>
             </div>
+            <nav aria-label="주문 목록 페이지"
+            	style="dispaly:flex;justify-content:center; align-items:center; gap:16px; margin-top:24px;">
+            	<%if(orderPage>1){ %>
+            		<form method="get"
+            				action="${pageContext.request.contextPath}/app/admin/orders">
+            				<input type="hidden" name="query"
+            						value="<%=ProductView.escape(query) %>">
+            				<input type="hidden" name="page"
+            						value="<%=orderPage -1 %>">
+            				<button class="button secondary" type="submit">
+            					이전
+            				</button>
+            		</form>
+            		<%} %>
+            		<span aria-current="page"><%=orderPage %>페이지</span>
+            		<% if(hasNext){ %>
+            		<form method="get">
+            			action="${pageContext.request.contextPath }/app/admin/orders"
+            			<input type="hidden" name="query"
+            				value="<%=ProductView.escape(query) %>">
+            				
+            			<input type="hidden" name="page"
+            				value="<%=orderPage+1L %>">
+            			<button class ="button secondary" type="submit">
+            				다음
+            			</button>
+            		</form>
+            		<%} %>
+            	</nav>
         <% } %>
     </main>
 </div>
