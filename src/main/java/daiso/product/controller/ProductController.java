@@ -30,6 +30,7 @@ public class ProductController {
 
     private final ProductDAO dao = new ProductDAO();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
+    private final ProductDetailImages detailImages = new ProductDetailImages();
     private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/products/home")
@@ -83,6 +84,7 @@ public class ProductController {
                 List<Category> categories = dao.findVisibleCategories(conn);
                 List<Category> path = categoryPath(categories, product.getCategoryId());
                 request.setAttribute("product", product);
+                request.setAttribute("productDetailImages", List.copyOf(detailImages.list(conn, product.getProductId()).values()));
                 request.setAttribute("productCategories", categories);
                 request.setAttribute("categoryPath", path);
                 Category group = path.get(Math.max(0, path.size() - 2));

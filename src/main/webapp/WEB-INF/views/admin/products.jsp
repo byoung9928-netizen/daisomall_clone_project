@@ -24,7 +24,9 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-wizard.js" defer></script>
 </head>
 <body class="admin-body">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
@@ -115,54 +117,102 @@
                               data-code-check="${pageContext.request.contextPath}/app/admin/products/check-code">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
                             <input type="hidden" name="id" value="<%= ProductView.escape(productForm.get("id")) %>">
-                            <label class="field">상품명
+                            <input type="hidden" name="previewConfirmed" value="0">
+                            <input type="hidden" name="detailImageOrder">
+                            <input type="hidden" name="detailImageBaseline" value="<%= ProductView.escape(request.getAttribute("adminDetailImageBaseline")) %>">
+                            <div data-product-input-step>
+                                <label class="field">상품명
                                 <input name="name" required maxlength="255" value="<%= ProductView.escape(productForm.get("name")) %>">
-                            </label>
-                            <label class="field">품번
+                                </label>
+                                <label class="field">품번
                                 <input name="code" required maxlength="100" aria-describedby="product-code-feedback"
                                        value="<%= ProductView.escape(productForm.get("code")) %>">
-                            </label>
-                            <p class="product-field-feedback" id="product-code-feedback" role="status"></p>
-                            <label class="field">브랜드
+                                </label>
+                                <p class="product-field-feedback" id="product-code-feedback" role="status"></p>
+                                <label class="field">브랜드
                                 <input name="brand" maxlength="100" value="<%= ProductView.escape(productForm.get("brand")) %>">
-                            </label>
-                            <label class="field">카테고리 (최하위)
+                                </label>
+                                <label class="field">카테고리 (최하위)
                                 <select name="category" required>
                                     <option value="">카테고리를 선택해 주세요</option>
                                     <% for (Map.Entry<String, String> category : categories.entrySet()) { %>
                                         <option value="<%= ProductView.escape(category.getKey()) %>" <%= category.getKey().equals(productForm.get("category")) ? "selected" : "" %>><%= ProductView.escape(category.getValue()) %></option>
                                     <% } %>
                                 </select>
-                            </label>
-                            <label class="field">가격 (원)
+                                </label>
+                                <label class="field">가격 (원)
                                 <input name="price" type="number" min="${adminMinPrice}" max="${adminMaxPrice}" step="1" required
                                        aria-describedby="product-price-feedback" value="<%= ProductView.escape(productForm.get("price")) %>">
-                            </label>
-                            <p class="product-field-feedback" id="product-price-feedback" role="status">${adminPriceRange}</p>
-                            <label class="field">온라인 재고
+                                </label>
+                                <p class="product-field-feedback" id="product-price-feedback" role="status">${adminPriceRange}</p>
+                                <label class="field">온라인 재고
                                 <input name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>">
-                            </label>
-                            <label class="field">판매 상태
+                                </label>
+                                <label class="field">판매 상태
                                 <select id="product-status" name="status" required>
                                     <% for (String status : statusKeys) { %>
                                         <option value="<%= status %>" <%= status.equals(productForm.get("status")) ? "selected" : "" %>><%= statuses.get(status) %></option>
                                     <% } %>
                                 </select>
-                            </label>
-                            <label class="field">대표 이미지 파일
+                                </label>
+                                <label class="field">대표 이미지 파일
                                 <input name="imageFile" type="file" accept="image/jpeg,image/png" aria-describedby="product-image-feedback">
-                            </label>
-                            <p id="product-image-feedback" class="product-field-feedback" role="status">JPG·PNG, 최대 5MB, 가로·세로 각각 최대 4,096픽셀. 파일을 선택하면 기존 사진을 교체합니다.</p>
-                            <img class="product-image-preview" data-product-image-preview data-image-base="${pageContext.request.contextPath}/"
+                                </label>
+                                <p id="product-image-feedback" class="product-field-feedback" role="status">JPG·PNG, 최대 5MB, 가로·세로 각각 최대 4,096픽셀. 파일을 선택하면 기존 사진을 교체합니다.</p>
+                                <img class="product-image-preview" data-product-image-preview data-image-base="${pageContext.request.contextPath}/"
                                  alt="선택한 상품 대표 이미지 미리보기" hidden>
-                            <label class="field">이미지 경로 또는 HTTPS URL (직접 입력)
+                                <label class="field">이미지 경로 또는 HTTPS URL (직접 입력)
                                 <input name="image" maxlength="1000" placeholder="assets/images/…" value="<%= ProductView.escape(productForm.get("image")) %>">
-                            </label>
-                            <label class="field">상품 설명
+                                </label>
+                                <label class="field">상품 설명
                                 <textarea name="description" maxlength="2000" rows="4"><%= ProductView.escape(productForm.get("description")) %></textarea>
-                            </label>
-                            <details class="admin-product-preview" data-admin-product-preview>
-                                <summary>고객 상세 미리보기</summary>
+                                </label>
+                                <%
+                                Map<Long, String> savedDetailImages = (Map<Long, String>) request.getAttribute("adminDetailImages");
+                                daiso.product.controller.OfficialProductDetails.Entry savedOfficialDetail =
+                                        (daiso.product.controller.OfficialProductDetails.Entry) request.getAttribute("adminOfficialDetail");
+                                %>
+                                <fieldset class="admin-gallery">
+                                <legend>상품 상세 이미지</legend>
+                                <label class="field">상세 이미지 선택
+                                    <input type="file" name="detailImages" accept="image/jpeg,image/png" multiple
+                                           aria-describedby="admin-gallery-help admin-gallery-message">
+                                </label>
+                                <p id="admin-gallery-help">최대 10장 · JPG, PNG · 새로 선택한 대표·상세 이미지 합계 5MB 이하</p>
+                                <p id="admin-gallery-message" role="status" data-gallery-message></p>
+                                <ol class="admin-gallery-list" data-gallery-list></ol>
+                                <template data-gallery-saved>
+                                    <% for (Map.Entry<Long, String> image : savedDetailImages.entrySet()) { %>
+                                        <img data-image-id="<%= image.getKey() %>"
+                                             src="<%= ProductView.escape(request.getContextPath() + "/" + image.getValue()) %>" alt="">
+                                    <% } %>
+                                </template>
+                                <template data-gallery-official data-code="<%= ProductView.escape(request.getAttribute("adminOfficialCode")) %>">
+                                    <% if (savedOfficialDetail != null) {
+                                        java.util.List<String> images = savedOfficialDetail.getDetailPhotos();
+                                        if (images.isEmpty()) images = savedOfficialDetail.getRepresentativePhotos();
+                                        for (String url : images) { %>
+                                            <img src="<%= ProductView.escape(url) %>" alt="">
+                                        <% } %>
+                                        <dl class="pd-official__facts">
+                                            <div><dt>공식 품번</dt><dd><%= ProductView.escape(savedOfficialDetail.getSku()) %></dd></div>
+                                            <% for (Map.Entry<String, String> fact : savedOfficialDetail.getFacts().entrySet()) { %>
+                                                <div><dt><%= ProductView.escape(fact.getKey()) %></dt><dd><%= ProductView.escape(fact.getValue()) %></dd></div>
+                                            <% } %>
+                                        </dl>
+                                        <% if (!savedOfficialDetail.getSource().isEmpty()) { %>
+                                            <p>공식 상품 정보 확인 (새 창)</p>
+                                        <% } %>
+                                    <% } %>
+                                </template>
+                                </fieldset>
+                                <div class="product-editor-actions">
+                                <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                                <button type="button" class="button primary" data-product-preview>미리보기</button>
+                                </div>
+                            </div>
+                            <section class="admin-product-preview" data-product-preview-step hidden aria-labelledby="product-preview-title">
+                                <h2 id="product-preview-title" tabindex="-1">고객 상세 미리보기</h2>
                                 <div class="product-detail-layout admin-product-preview-layout">
                                     <img class="detail-image" data-preview-image
                                          data-fallback-image="${pageContext.request.contextPath}/assets/images/mock-product-0.svg"
@@ -173,15 +223,37 @@
                                         <p class="detail-price" data-preview-value="price"></p>
                                         <p data-preview-value="code"></p>
                                         <p class="stock-status" data-preview-value="stock"></p>
+                                        <button type="button" class="button secondary" disabled>♡ 찜</button>
+                                        <div class="delivery-summary"><strong>택배배송</strong><p>배송비 3,000원 · 상품 30,000원 이상 무료</p></div>
+                                        <button type="button" class="button secondary" disabled>매장 상품 찾기</button>
+                                        <label class="field">수량 <input type="number" value="1" disabled></label>
+                                        <p class="detail-total" data-preview-value="total"></p>
+                                        <button type="button" class="button primary" disabled>장바구니 담기</button>
                                     </div>
                                 </div>
-                                <h3>입력한 상품 설명</h3>
-                                <p class="admin-product-preview-description" data-preview-value="description"></p>
-                            </details>
-                            <div class="product-editor-actions">
-                                <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
-                                <button type="submit" class="button primary">상품 저장</button>
-                            </div>
+                                <section class="pd-description pd-official">
+                                    <h3>상품 설명</h3>
+                                    <p class="pd-product-description" data-preview-value="description" hidden></p>
+                                    <details class="pd-official__expand" data-preview-gallery hidden>
+                                        <summary>
+                                            <span class="pd-official__preview"><img data-preview-first alt=""></span>
+                                            <span class="pd-official__toggle">
+                                                <span class="pd-official__more">상품 설명 더보기</span>
+                                                <span class="pd-official__less">상품 설명 접기</span>
+                                            </span>
+                                        </summary>
+                                        <div class="pd-official__content">
+                                            <div class="pd-official__photos" data-preview-photos></div>
+                                            <div data-preview-facts></div>
+                                        </div>
+                                    </details>
+                                    <p class="pd-official__empty" data-preview-empty>등록된 상세 이미지가 없습니다.</p>
+                                </section>
+                                <div class="product-editor-actions admin-preview-actions">
+                                    <button type="button" class="button secondary" data-product-back>이전</button>
+                                    <button type="submit" class="button primary"><%= productForm.getOrDefault("id", "").isEmpty() ? "등록" : "수정 저장" %></button>
+                                </div>
+                            </section>
                         </form>
                     </dialog>
                 <% } %>
