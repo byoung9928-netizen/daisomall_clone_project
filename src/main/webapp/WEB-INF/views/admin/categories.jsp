@@ -38,7 +38,10 @@
                     <section class="category-browser" aria-labelledby="category-browser-heading">
                         <div class="category-section-heading">
                             <h2 id="category-browser-heading">카테고리 트리</h2>
-                            <a class="button primary" href="<%= categoryPage.newUrl %>#category-detail" data-category-nav>카테고리 등록</a>
+                            <div class="category-actions">
+                                <a class="button primary" href="<%= categoryPage.newUrl %>#category-detail" data-category-nav>카테고리 등록</a>
+                                <a class="button secondary" href="<%= categoryPage.allHistoryUrl %>#category-detail" data-category-nav>전체 카테고리 변경 이력</a>
+                            </div>
                         </div>
                         <form class="category-search" method="get" action="<%= categoryRoute %>" role="search" aria-label="카테고리 검색">
                             <label class="visually-hidden" for="category-search">카테고리명 또는 ID</label>
@@ -57,11 +60,17 @@
                                    while (openLevels >= node.row.level) { %></ul></details></li><% openLevels--; } %>
                                 <li>
                                     <div class="category-tree-row">
-                                        <a href="<%= categoryPage.editUrl(node.row.id) %>#category-detail" data-category-nav data-category-id="<%= ProductView.escape(node.row.id) %>"
-                                           <%= active ? "aria-current=\"true\"" : "" %>>
-                                            <strong><%= ProductView.escape(node.row.name) %></strong>
-                                            <span class="category-tree-count"><%= node.subtreeProducts %>개</span>
-                                        </a>
+                                        <div class="category-tree-links">
+                                            <a class="category-tree-select" href="<%= categoryPage.editUrl(node.row.id) %>#category-detail" data-category-nav data-category-id="<%= ProductView.escape(node.row.id) %>"
+                                               <%= active ? "aria-current=\"true\"" : "" %>>
+                                                <strong><%= ProductView.escape(node.row.name) %></strong>
+                                                <span class="category-tree-count"><%= node.subtreeProducts %>개</span>
+                                            </a>
+                                            <% if (categoryPage.historyReady && node.canParent()) { %>
+                                                <a class="category-tree-add" href="<%= categoryPage.childUrl(node.row.id) %>#category-detail"
+                                                   aria-label="<%= ProductView.escape(node.row.name) %>에 하위 카테고리 추가" data-category-nav>+</a>
+                                            <% } %>
+                                        </div>
                                         <% if (!node.effectiveVisible) { %>
                                             <span class="category-visibility"><span aria-hidden="true">◌</span> <%= node.row.visible ? "상위 비노출" : "비노출" %></span>
                                         <% } %>
@@ -81,7 +90,9 @@
                     <section class="category-detail" id="category-detail" data-category-panel
                              data-selected="<%= categoryPage.selected == null ? "" : ProductView.escape(categoryPage.selected.row.id) %>"
                              aria-labelledby="category-detail-heading">
-                        <% if (categoryPage.form == null) { %>
+                        <% if (request.getAttribute("categoryAllHistory") != null) { %>
+                            <%@ include file="category-all-history.jspf" %>
+                        <% } else if (categoryPage.form == null) { %>
                             <h2 id="category-detail-heading" tabindex="-1">카테고리 상세</h2>
                             <p>트리에서 카테고리를 선택하세요.</p>
                         <% } else {

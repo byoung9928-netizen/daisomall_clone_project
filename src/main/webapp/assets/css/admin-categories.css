@@ -26,8 +26,24 @@
 .category-tree, .category-tree ul { list-style: none; margin: 0; padding: 0; }
 .category-tree ul { margin-inline-start: .55rem; padding-inline-start: .65rem; border-inline-start: 1px solid var(--admin-line); }
 .category-tree li { margin-block: .35rem; }
-.category-tree-row > a {
+.category-tree-links { display: flex; align-items: center; gap: .3rem; }
+.category-tree-add {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--admin-line);
+    border-radius: .35rem;
+    color: #800424;
+    font-weight: 700;
+    text-decoration: none;
+}
+.category-tree-add:hover { background: #fff0f3; }
+.category-tree-select {
     display: flex;
+    flex: 1;
+    min-width: 0;
     justify-content: space-between;
     gap: .45rem;
     min-height: 42px;
@@ -38,8 +54,8 @@
     text-decoration: none;
     overflow-wrap: anywhere;
 }
-.category-tree-row > a:hover { background: #fff6f8; }
-.category-tree-row > a[aria-current="true"] { background: #fff0f3; color: #800424; border-color: #d4899b; }
+.category-tree-select:hover { background: #fff6f8; }
+.category-tree-select[aria-current="true"] { background: #fff0f3; color: #800424; border-color: #d4899b; }
 .category-tree-count { flex: none; font-size: .875rem; }
 .category-tree-row > small, .category-visibility { margin-inline: .55rem; font-size: .825rem; color: #665058; }
 .category-visibility { white-space: nowrap; }
@@ -57,6 +73,10 @@
 .category-history ul { padding: 0; list-style: none; }
 .category-history li { display: grid; gap: .25rem; padding: .55rem 0; border-block-end: 1px solid var(--admin-line); overflow-wrap: anywhere; }
 .category-history small { color: #58535a; }
+.category-history-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+.category-history-filters .field { flex: 1 1 9rem; min-width: 0; }
+.category-history-filters :is(input, select) { min-width: 0; width: 100%; }
+.category-history-deleted { color: #800424; font-weight: 600; }
 .category-admin :is(a, button, input, select, summary):focus-visible { outline: 2px solid #720a24; outline-offset: 2px; }
 @media (min-width: 1001px) {
     .category-browser { position: sticky; top: 1rem; max-height: calc(100dvh - 2rem); overflow: auto; }

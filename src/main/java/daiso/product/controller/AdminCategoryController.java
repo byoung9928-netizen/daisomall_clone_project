@@ -72,6 +72,7 @@ public final class AdminCategoryController {
             String keyword = ProductQueries.text(request, "q", 120);
             String id = ProductQueries.text(request, "id", 100);
             String actor = session.getAttribute("member_id").toString();
+            String moveMessage = "";
             if (intent == null || !List.of("save", "confirm", "up", "down").contains(intent)
                     || create && !"save".equals(intent)) {
                 throw new IllegalArgumentException("실행할 작업을 확인해 주세요.");
@@ -90,6 +91,8 @@ public final class AdminCategoryController {
                         }
                         Collections.swap(siblings, position, target);
                         renumber(connection, siblings, actor);
+                        moveMessage = selected.row.name + " 카테고리가 " + (position + 1) + "번째에서 "
+                                + (target + 1) + "번째로 이동했습니다.";
                     } else {
                         String name = ProductQueries.text(request, "name", 120);
                         String visibility = ProductQueries.text(request, "visible", 1);
@@ -143,7 +146,7 @@ public final class AdminCategoryController {
             }
             if ("confirm".equals(intent)) session.removeAttribute(CONFIRM);
             String message = create ? "카테고리가 등록되었습니다."
-                    : move ? "카테고리 순서가 변경되었습니다." : "카테고리 정보가 수정되었습니다.";
+                    : move ? moveMessage : "카테고리 정보가 수정되었습니다.";
             return savedRedirect(session, keyword, id, message);
         } catch (IllegalArgumentException error) {
             response.setStatus(400);
@@ -179,7 +182,8 @@ public final class AdminCategoryController {
                     if (!history.supportsDeletion(connection)) {
                         throw new IllegalStateException("삭제 이력 마이그레이션을 적용한 뒤 삭제할 수 있습니다.");
                     }
-                    Node selected = requiredNode(new AdminCategoryModel(dao.lockTree(connection)), id);
+                    AdminCategoryModel model = new AdminCategoryModel(dao.lockTree(connection));
+                    Node selected = requiredNode(model, id);
                     if (selected.hasChildren() || dao.hasProducts(connection, id)) {
                         throw new IllegalStateException("하위 카테고리나 연결 상품이 있어 삭제할 수 없습니다. 숨기려면 비노출로 설정해 주세요.");
                     }
@@ -190,9 +194,16 @@ public final class AdminCategoryController {
                                 request.getParameter("confirmation"), selected)) {
                             throw new IllegalStateException("카테고리 정보가 변경됐거나 확인이 만료됐습니다. 삭제 내용을 다시 확인해 주세요.");
                         }
+                        String actor = session.getAttribute("member_id").toString();
                         dao.delete(connection, selected.row);
-                        history.record(connection, selected.row, session.getAttribute("member_id").toString(), Action.DELETE,
-                                selected.row.name + " · " + visibility(selected.row.visible), "삭제");
+                        List<Node> remaining = new ArrayList<>(model.siblings(selected.parent));
+                        remaining.remove(selected);
+                        boolean parentBecameLeaf = selected.parent != null && !selected.parent.row.leaf && remaining.isEmpty();
+                        if (selected.parent != null) dao.updateLeaf(connection, selected.parent.row, remaining.isEmpty());
+                        renumber(connection, remaining, actor);
+                        history.record(connection, selected.row, actor, Action.DELETE,
+                                selected.row.name + " · " + visibility(selected.row.visible),
+                                parentBecameLeaf ? "삭제 · 부모 카테고리를 최하위 분류로 복구" : "삭제");
                     } else {
                         PendingDelete pending = new PendingDelete(selected);
                         session.setAttribute(DELETE_CONFIRM, pending);
@@ -307,10 +318,20 @@ public final class AdminCategoryController {
             boolean ready = history.available(connection);
             boolean deleteReady = ready && history.supportsDeletion(connection);
             int page = ProductQueries.integer(request, "historyPage", 1, 1, 1_000_000);
-            List<Entry> entries = ready && selected != null
+            boolean allHistory = "history".equals(request.getParameter("mode"));
+            if (allHistory) {
+                String historyQuery = ProductQueries.text(request, "historyQuery", 120);
+                String operation = ProductQueries.text(request, "operation", 20);
+                Action action = operation.isEmpty() ? null : Action.valueOf(operation);
+                List<Entry> results = ready ? history.search(connection, historyQuery, action,
+                        HISTORY_SIZE + 1, (page - 1) * HISTORY_SIZE) : List.of();
+                request.setAttribute("categoryAllHistory", new AdminCategoryModel.HistoryPage(request.getContextPath(),
+                        keyword, selected, historyQuery, operation, results, page, HISTORY_SIZE));
+            }
+            List<Entry> entries = !allHistory && ready && selected != null
                     ? history.list(connection, selected.row.id, HISTORY_SIZE + 1, (page - 1) * HISTORY_SIZE) : List.of();
             Entry latest = null;
-            if (ready && selected != null) {
+            if (!allHistory && ready && selected != null) {
                 List<Entry> first = page == 1 ? entries : history.list(connection, selected.row.id, 1, 0);
                 if (!first.isEmpty()) latest = first.get(0);
             }

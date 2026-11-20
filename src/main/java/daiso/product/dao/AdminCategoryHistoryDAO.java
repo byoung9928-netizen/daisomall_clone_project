@@ -64,13 +64,40 @@ public final class AdminCategoryHistoryDAO {
     }
 
     public List<Entry> list(Connection connection, String id, int limit, int offset) throws SQLException {
-        String sql = "SELECT operation, before_value, after_value, administrator_id, changed_at "
-                + "FROM category_admin_changes WHERE category_id = ? ORDER BY history_id DESC LIMIT ? OFFSET ?";
+        return find(connection, id, "", null, limit, offset);
+    }
+
+    public List<Entry> search(Connection connection, String keyword, Action action, int limit, int offset)
+            throws SQLException {
+        return find(connection, null, keyword, action, limit, offset);
+    }
+
+    private List<Entry> find(Connection connection, String id, String keyword, Action action, int limit, int offset)
+            throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT h.category_id, h.category_name, h.operation, h.before_value, "
+                + "h.after_value, h.administrator_id, h.changed_at, c.category_id IS NULL AS deleted "
+                + "FROM category_admin_changes h LEFT JOIN categories c ON c.category_id = h.category_id WHERE 1=1");
+        List<String> parameters = new ArrayList<>();
+        if (id != null) {
+            sql.append(" AND h.category_id=?");
+            parameters.add(id);
+        }
+        if (!keyword.isEmpty()) {
+            sql.append(" AND (LOCATE(?, h.category_name)>0 OR LOCATE(?, h.category_id)>0)");
+            parameters.add(keyword);
+            parameters.add(keyword);
+        }
+        if (action != null) {
+            sql.append(" AND h.operation=?");
+            parameters.add(action.name());
+        }
+        sql.append(" ORDER BY h.history_id DESC LIMIT ? OFFSET ?");
         List<Entry> entries = new ArrayList<>();
-        try (PreparedStatement query = connection.prepareStatement(sql)) {
-            query.setString(1, id);
-            query.setInt(2, limit);
-            query.setInt(3, offset);
+        try (PreparedStatement query = connection.prepareStatement(sql.toString())) {
+            int position = 1;
+            for (String parameter : parameters) query.setString(position++, parameter);
+            query.setInt(position++, limit);
+            query.setInt(position, offset);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) entries.add(new Entry(rows));
             }
@@ -79,6 +106,9 @@ public final class AdminCategoryHistoryDAO {
     }
 
     public static final class Entry {
+        public final String categoryId;
+        public final String categoryName;
+        public final boolean deleted;
         public final String action;
         public final String before;
         public final String after;
@@ -86,6 +116,9 @@ public final class AdminCategoryHistoryDAO {
         public final LocalDateTime time;
 
         private Entry(ResultSet row) throws SQLException {
+            categoryId = row.getString("category_id");
+            categoryName = row.getString("category_name");
+            deleted = row.getBoolean("deleted");
             action = Action.valueOf(row.getString("operation")).label;
             before = row.getString("before_value");
             after = row.getString("after_value");

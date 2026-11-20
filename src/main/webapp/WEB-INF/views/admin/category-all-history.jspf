@@ -1,0 +1,51 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.AdminCategoryModel.HistoryPage,daiso.product.dao.AdminCategoryHistoryDAO.Action" %>
+<% HistoryPage allHistory = (HistoryPage) request.getAttribute("categoryAllHistory");
+   DateTimeFormatter historyTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"); %>
+<div class="category-section-heading">
+    <h2 id="category-detail-heading" tabindex="-1">전체 카테고리 변경 이력</h2>
+    <a class="button secondary" href="<%= categoryPage.resetUrl %>#category-detail" data-category-nav>카테고리 상세로 돌아가기</a>
+</div>
+<% if (!categoryPage.historyReady) { %>
+    <p class="category-guide">이력 테이블을 적용하면 전체 기록을 조회할 수 있습니다.</p>
+<% } else { %>
+    <form class="category-history-filters" method="get" action="<%= categoryRoute %>" role="search" aria-label="카테고리 변경 이력">
+        <input type="hidden" name="mode" value="history">
+        <input type="hidden" name="q" value="<%= ProductView.escape(allHistory.keyword) %>">
+        <input type="hidden" name="edit" value="<%= ProductView.escape(allHistory.selectedId) %>">
+        <label class="field">카테고리명·ID
+            <input name="historyQuery" type="search" maxlength="120" value="<%= ProductView.escape(allHistory.query) %>">
+        </label>
+        <label class="field">작업 유형
+            <select name="operation">
+                <option value="">전체</option>
+                <% for (Action action : Action.values()) { %>
+                    <option value="<%= action.name() %>" <%= action.name().equals(allHistory.operation) ? "selected" : "" %>><%= action.label %></option>
+                <% } %>
+            </select>
+        </label>
+        <button type="submit" class="button primary">조회</button>
+    </form>
+    <section class="category-history" aria-label="전체 변경 기록">
+        <% if (allHistory.entries.isEmpty()) { %><p>조건에 맞는 변경 이력이 없습니다.</p><% } %>
+        <ul>
+            <% for (Entry entry : allHistory.entries) { %>
+                <li>
+                    <strong><%= ProductView.escape(entry.categoryName) %> · <%= ProductView.escape(entry.action) %></strong>
+                    <small><%= ProductView.escape(entry.categoryId) %>
+                        <% if (entry.deleted) { %> · <span class="category-history-deleted">삭제된 카테고리</span><% } %>
+                    </small>
+                    <span><%= entry.before == null ? "—" : ProductView.escape(entry.before) %> → <%= ProductView.escape(entry.after) %></span>
+                    <small><time datetime="<%= entry.time %>"><%= historyTime.format(entry.time) %></time> · 관리자 <%= ProductView.escape(entry.actor) %></small>
+                </li>
+            <% } %>
+        </ul>
+        <% if (allHistory.previous != null || allHistory.next != null) { %>
+            <nav class="category-actions" aria-label="전체 카테고리 변경 이력 페이지">
+                <% if (allHistory.previous != null) { %><a class="button secondary" rel="prev" href="<%= allHistory.previous %>#category-detail" data-category-nav>이전 페이지</a><% } %>
+                <span aria-current="page"><%= allHistory.page %> 페이지</span>
+                <% if (allHistory.next != null) { %><a class="button secondary" rel="next" href="<%= allHistory.next %>#category-detail" data-category-nav>다음 페이지</a><% } %>
+            </nav>
+        <% } %>
+    </section>
+<% } %>

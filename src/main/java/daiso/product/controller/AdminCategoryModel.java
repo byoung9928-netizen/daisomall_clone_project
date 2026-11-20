@@ -129,6 +129,35 @@ public final class AdminCategoryModel {
         }
     }
 
+    public static final class HistoryPage {
+        public final String keyword;
+        public final String selectedId;
+        public final String query;
+        public final String operation;
+        public final List<Entry> entries;
+        public final int page;
+        public final String previous;
+        public final String next;
+
+        HistoryPage(String context, String keyword, Node selected, String query, String operation,
+                List<Entry> entries, int page, int pageSize) {
+            this.keyword = keyword;
+            selectedId = selected == null ? "" : selected.row.id;
+            this.query = query;
+            this.operation = operation;
+            this.entries = List.copyOf(entries.subList(0, Math.min(entries.size(), pageSize)));
+            this.page = page;
+            previous = page > 1 ? url(context, page - 1) : null;
+            next = entries.size() > pageSize ? url(context, page + 1) : null;
+        }
+
+        private String url(String context, int target) {
+            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of(
+                    "mode", "history", "q", keyword, "edit", selectedId, "historyQuery", query,
+                    "operation", operation, "historyPage", Integer.toString(target)));
+        }
+    }
+
     public static final class Page {
         public final String keyword;
         public final Node selected;
@@ -148,6 +177,7 @@ public final class AdminCategoryModel {
         public final Impact impact;
         public final String newUrl;
         public final String childUrl;
+        public final String allHistoryUrl;
         public final String resetUrl;
         public final String productsUrl;
         public final String revision;
@@ -178,8 +208,9 @@ public final class AdminCategoryModel {
             previous = page > 1 && selected != null ? historyUrl(id, page - 1) : null;
             next = history.size() > pageSize ? historyUrl(id, page + 1) : null;
             newUrl = ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "new", "1"));
-            childUrl = selected != null && selected.canParent()
-                    ? ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "new", "1", "parent", id)) : null;
+            childUrl = selected != null && selected.canParent() ? childUrl(id) : null;
+            allHistoryUrl = ProductView.url(context, AdminCategoryController.ROUTE,
+                    Map.of("q", keyword, "edit", id, "mode", "history"));
             resetUrl = editUrl(id);
             productsUrl = selected == null ? null
                     : ProductView.url(context, "/app/admin/products", Map.of("filterCategory", id));
@@ -187,6 +218,10 @@ public final class AdminCategoryModel {
 
         public String editUrl(String id) {
             return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "edit", id));
+        }
+
+        public String childUrl(String parentId) {
+            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "new", "1", "parent", parentId));
         }
 
         private String historyUrl(String id, int page) {

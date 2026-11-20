@@ -72,6 +72,15 @@ public final class AdminCategoryDAO {
         }
     }
 
+    public void updateLeaf(Connection connection, Row category, boolean leaf) throws SQLException {
+        if (category.leaf == leaf) return;
+        try (PreparedStatement query = connection.prepareStatement("UPDATE categories SET is_leaf= ? WHERE category_id= ?")) {
+            query.setBoolean(1, leaf);
+            query.setString(2, category.id);
+            if (query.executeUpdate() != 1) throw new SQLException("Category leaf update failed");
+        }
+    }
+
     public void insert(Connection connection, String id, Row parent, String name, int displayOrder,
             boolean visible) throws SQLException {
         int level = parent == null ? 1 : parent.level + 1;
@@ -80,10 +89,7 @@ public final class AdminCategoryDAO {
             if (hasProducts(connection, parent.id)) {
                 throw new IllegalArgumentException("상품이 연결된 최하위 카테고리에는 하위 카테고리를 추가할 수 없습니다.");
             }
-            try (PreparedStatement query = connection.prepareStatement("UPDATE categories SET is_leaf=0 WHERE category_id=?")) {
-                query.setString(1, parent.id);
-                query.executeUpdate();
-            }
+            updateLeaf(connection, parent, false);
         }
         try (PreparedStatement query = connection.prepareStatement(
                 "INSERT INTO categories (category_id, parent_id, name, level, display_order, is_leaf, is_visible) "
