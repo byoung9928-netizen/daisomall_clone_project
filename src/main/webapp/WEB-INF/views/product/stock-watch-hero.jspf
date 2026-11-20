@@ -1,0 +1,42 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.StockWatchView" %>
+<%
+    StockWatchView stockHero = (StockWatchView) request.getAttribute("stockWatchHero");
+%>
+<% if (stockHero != null) { %>
+    <section class="stock-watch-hero" aria-labelledby="stock-watch-title">
+        <div>
+            <h1 id="stock-watch-title">품절임박</h1>
+            <p>온라인 재고 5개 이하 상품</p>
+        </div>
+        <div class="stock-watch-total">
+            <p><strong><%= stockHero.total %></strong>개</p>
+            <time datetime="<%= stockHero.checkedAtIso %>"><%= stockHero.checkedAt %> 조회</time>
+        </div>
+    </section>
+    <nav class="stock-watch-categories" aria-label="품절임박 카테고리">
+        <a href="<%= stockHero.allUrl %>#stock-watch-catalog">전체 카테고리</a>
+        <% for (Map.Entry<String, String> itemLink : stockHero.categories.entrySet()) { %>
+            <a href="<%= itemLink.getKey() %>#stock-watch-catalog"><%= ProductView.escape(itemLink.getValue()) %></a>
+        <% } %>
+    </nav>
+    <section class="stock-watch-ranking" aria-labelledby="stock-watch-ranking-title" id="stock-watch-ranking">
+        <h2 id="stock-watch-ranking-title">품절임박 랭킹</h2>
+        <nav class="stock-watch-tabs" aria-label="랭킹 정렬">
+            <a href="<%= stockHero.popularUrl %>#stock-watch-ranking" <%= stockHero.newest ? "" : "aria-current=\"page\"" %>>구매 인기</a>
+            <a href="<%= stockHero.newestUrl %>#stock-watch-ranking" <%= stockHero.newest ? "aria-current=\"page\"" : "" %>>요즘 신상</a>
+        </nav>
+        <% if (stockHero.ranked.isEmpty()) { %>
+            <p class="empty-state">판매 중인 품절임박 상품이 없습니다.</p>
+        <% } else { %>
+            <ol class="product-grid stock-watch-rank-grid">
+                <% int rankNumber = 0;
+                   for (ProductDTO item : stockHero.ranked) { %>
+                    <li><span class="stock-watch-position"><%= ++rankNumber %></span>
+                        <%@ include file="card.jspf" %>
+                    </li>
+                <% } %>
+            </ol>
+        <% } %>
+    </section>
+<% } %>

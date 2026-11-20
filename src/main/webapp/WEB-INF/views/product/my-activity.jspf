@@ -1,0 +1,69 @@
+<%@ page pageEncoding="UTF-8" %>
+<%
+    String activityBase = myContext + "/app/order/mypage";
+    Map<String, String> activityLabels = Map.of("wishlist", "찜한 상품", "recent", "최근 본 상품",
+            "frequent", "자주 산 상품", "restock", "상품 입고 알림");
+%>
+<% if ("restock".equals(productActivity)) {
+    boolean stores = "store".equals(request.getParameter("channel"));
+    boolean openRun = !stores && "open-run".equals(request.getParameter("kind"));
+    String restockLink = activityBase + "?productActivity=restock";
+%>
+    <section class="product-activity-section product-restock" aria-labelledby="product-restock-title">
+        <h1 id="product-restock-title">상품 입고 알림</h1>
+        <nav class="product-restock-channels" aria-label="알림 대상">
+            <a href="<%= restockLink %>" <%= stores ? "" : "aria-current=\"page\"" %>>다이소몰</a>
+            <a href="<%= restockLink %>&amp;channel=store" <%= stores ? "aria-current=\"page\"" : "" %>>매장</a>
+        </nav>
+        <nav class="product-restock-options" aria-label="알림 종류">
+            <a href="<%= restockLink %><%= stores ? "&amp;channel=store" : "" %>" <%= openRun ? "" : "aria-current=\"page\"" %>>재입고</a>
+            <% if (!stores) { %>
+                <a href="<%= restockLink %>&amp;kind=open-run" <%= openRun ? "aria-current=\"page\"" : "" %>>오픈런</a>
+            <% } %>
+        </nav>
+        <div class="product-restock-empty">
+            <span aria-hidden="true">!</span>
+            <p>신청 내역이 없습니다.</p>
+        </div>
+        <section class="product-restock-guide">
+            <h2><%= stores ? "매장 재입고 알림 안내" : openRun ? "오픈런 알림 안내" : "다이소몰 재입고 알림 안내" %></h2>
+            <p>아직 알림 신청을 받지 않습니다.</p>
+        </section>
+    </section>
+<% } else {
+    boolean activitySummaryMode = productActivity.isEmpty();
+    if (!activitySummaryMode) {
+%>
+    <header class="product-history-heading">
+        <h1>히스토리</h1>
+        <nav class="product-history-tabs" aria-label="상품 히스토리">
+            <% for (String section : List.of("recent", "wishlist", "frequent")) { %>
+                <a href="<%= ProductView.url(myContext, "/app/order/mypage", Map.of("productActivity", section)) %>"
+                   <%= section.equals(productActivity) ? "aria-current=\"page\"" : "" %>><%= activityLabels.get(section) %></a>
+            <% } %>
+        </nav>
+    </header>
+<%  }
+    List<String> activitySections = activitySummaryMode ? List.of("wishlist", "recent", "frequent") : List.of(productActivity);
+    for (String activity : activitySections) {
+        String title = activityLabels.get(activity);
+        String listUrl = ProductView.url(myContext, "/app/order/mypage", Map.of("productActivity", activity));
+%>
+    <section class="product-activity-section" aria-labelledby="product-activity-<%= activity %>">
+        <% if (activitySummaryMode) { %>
+            <div class="product-activity-heading">
+                <h2 id="product-activity-<%= activity %>"><%= title %></h2>
+                <a href="<%= listUrl %>">전체보기</a>
+            </div>
+        <% } else { %>
+            <h2 class="visually-hidden" id="product-activity-<%= activity %>"><%= title %></h2>
+        <% } %>
+        <div data-product-activity data-url="<%= ProductView.url(myContext, "/app/products/my-activity",
+                Map.of("kind", activity, "summary", activitySummaryMode ? "1" : "",
+                        "page", activitySummaryMode || request.getParameter("activityPage") == null
+                                ? "" : request.getParameter("activityPage"))) %>" aria-busy="true">
+            <p class="product-activity-empty" role="status">상품을 불러오는 중입니다.</p>
+            <noscript><p>목록을 보려면 브라우저에서 JavaScript를 활성화해 주세요.</p></noscript>
+        </div>
+    </section>
+<% } } %>

@@ -13,23 +13,43 @@
     } else {
         ProductCatalogView catalog = (ProductCatalogView) request.getAttribute("catalog");
 %>
-<main id="main-content" class="container shop-page" data-page="catalog" tabindex="-1">
-    <%@ include file="breadcrumbs.jspf" %>
-    <h1 class="page-title"><%= ProductView.escape(catalog.title) %></h1>
+<main id="main-content" class="container shop-page<%= catalog.stockWatch ? " stock-watch-page" : "" %><%= catalog.collectionDescription.isEmpty() ? "" : " product-collection" %>" data-page="catalog" tabindex="-1">
+    <% if (catalog.stockWatch) { %>
+        <%@ include file="stock-watch-hero.jspf" %>
+        <h2 class="stock-watch-list-title" id="stock-watch-catalog">품절임박 상품 목록</h2>
+    <% } else { %>
+        <%@ include file="breadcrumbs.jspf" %>
+        <% if (catalog.collectionDescription.isEmpty()) { %>
+            <h1 class="page-title"><%= ProductView.escape(catalog.title) %></h1>
+        <% } else { %>
+            <%@ include file="collection-header.jspf" %>
+        <% } %>
+    <% } %>
     <% if (catalog.storeSearch) { %>
         <p class="source-note">상품명이나 품번으로 상품을 찾을 수 있습니다. 매장별 재고 정보는 제공되지 않습니다.</p>
     <% } %>
-    <nav class="category-chips" aria-label="하위 카테고리">
+    <% if (!catalog.stockWatch || catalog.hiddenFilters.containsKey("category")) { %>
+    <nav class="category-chips" aria-label="상품 카테고리">
+        <% if (catalog.allCategoriesUrl != null) { %>
+            <a class="category-chip" href="<%= catalog.allCategoriesUrl %>">전체 카테고리</a>
+        <% } %>
         <% for (Map.Entry<String, String> link : catalog.categoryLinks.entrySet()) { %>
             <a class="category-chip" href="<%= link.getKey() %>"><%= ProductView.escape(link.getValue()) %></a>
         <% } %>
     </nav>
+    <% } %>
     <div class="catalog-layout">
         <form class="catalog-filter" id="catalog-filter" method="get" action="<%= catalog.filterAction %>">
             <h2>상품 필터</h2>
             <% for (Map.Entry<String, String> field : catalog.hiddenFilters.entrySet()) { %>
                 <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
             <% } %>
+            <% if (catalog.stockWatch) { %>
+                <label class="check-field">
+                    <input type="checkbox" name="recent" value="true" <%= catalog.recentOnly ? "checked" : "" %>>
+                    <span>최근 30일 등록 상품</span>
+                </label>
+            <% } else { %>
             <label class="field">최대 가격
                 <select name="maxPrice">
                     <% for (ProductCatalogView.Option option : catalog.prices) { %>
@@ -37,9 +57,11 @@
                     <% } %>
                 </select>
             </label>
+            <% } %>
             <label class="field">브랜드
                 <input type="search" name="brand" maxlength="100" placeholder="브랜드명" value="<%= ProductView.escape(catalog.brand) %>">
             </label>
+            <% if (!catalog.stockWatch && !catalog.scheduled) { %>
             <label class="field">판매 상태
                 <select name="status">
                     <% for (ProductCatalogView.Option option : catalog.statuses) { %>
@@ -47,16 +69,20 @@
                     <% } %>
                 </select>
             </label>
+            <% } %>
+            <% if (!catalog.scheduled) { %>
             <label class="check-field">
                 <input type="checkbox" name="available" value="true" <%= catalog.availableOnly ? "checked" : "" %>>
-                <span>구매 가능한 상품만</span>
+                <span><%= catalog.stockWatch ? "품절 제외" : "구매 가능한 상품만" %></span>
             </label>
+            <% } %>
             <button type="submit" class="button secondary">필터 적용</button>
             <a class="text-button" href="<%= catalog.resetUrl %>">필터 초기화</a>
         </form>
         <section class="catalog-products">
             <div class="catalog-toolbar">
                 <p class="result-count" role="status">전체 <%= catalog.resultCount %>개</p>
+                <% if (!catalog.fixedSort) { %>
                 <label class="sort-label">정렬
                     <select name="sort" form="catalog-filter">
                         <% for (ProductCatalogView.Option option : catalog.sorts) { %>
@@ -64,10 +90,17 @@
                         <% } %>
                     </select>
                 </label>
+                <% } %>
             </div>
-            <div class="product-grid catalog-grid">
-                <% for (ProductDTO item : catalog.products) { %>
+            <div class="product-grid catalog-grid<%= catalog.feed ? " collection-feed" : "" %>">
+                <% int position = catalog.firstRank;
+                   for (ProductDTO item : catalog.products) {
+                       if (catalog.ranked) { %>
+                    <div class="collection-ranked-card">
+                        <span class="collection-position" aria-label="순위 <%= position %>"><%= position++ %></span>
+                <%     } %>
                     <%@ include file="card.jspf" %>
+                    <% if (catalog.ranked) { %></div><% } %>
                 <% } %>
                 <% if (catalog.products.isEmpty()) { %>
                     <p class="empty-state">조건에 맞는 상품이 없습니다. 필터나 검색어를 바꿔 보세요.</p>

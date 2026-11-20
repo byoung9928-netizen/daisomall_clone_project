@@ -23,6 +23,18 @@ public final class ProductCatalogView {
 
     public final String title;
     public final boolean storeSearch;
+    public final boolean stockWatch;
+    public final boolean recentOnly;
+    public final String collectionDescription;
+    public final String collectionMode;
+    public final List<CollectionLink> modes;
+    public final List<CollectionLink> themes;
+    public final boolean feed;
+    public final boolean scheduled;
+    public final boolean ranked;
+    public final int firstRank;
+    public final boolean fixedSort;
+    public final String allCategoriesUrl;
     public final List<ProductDTO> products;
     public final Map<String, String> categoryLinks;
     public final Map<String, String> hiddenFilters;
@@ -42,7 +54,18 @@ public final class ProductCatalogView {
     ProductCatalogView(String context, String route, String title, String collection, CatalogFilter filter,
             List<Category> categories, CatalogPage result, int page, int pages) {
         this.title = title;
+        ProductCollection section = ProductCollection.forKey(collection);
+        collectionDescription = section == null ? "" : section.description;
+        collectionMode = filter.collectionMode;
+        scheduled = section == ProductCollection.OPEN_RUN;
+        feed = section == ProductCollection.NEW && "feed".equals(collectionMode);
+        ranked = section == ProductCollection.RANKING || section == ProductCollection.RATING;
+        firstRank = filter.offset + 1;
+        fixedSort = ranked || scheduled || filter.recentOnly && section != null
+                || filter.wishlistRank || filter.salesDays > 0;
         storeSearch = "store".equals(collection);
+        stockWatch = filter.stockWatch;
+        recentOnly = filter.recentOnly;
         products = List.copyOf(result.products);
         brand = filter.brand;
         availableOnly = filter.available;
@@ -51,14 +74,19 @@ public final class ProductCatalogView {
                 new Option("AVAILABLE", "판매 중", "AVAILABLE".equals(filter.status)),
                 new Option("SOLD_OUT", "품절", "SOLD_OUT".equals(filter.status)),
                 new Option("SCHEDULED", "판매 예정", "SCHEDULED".equals(filter.status)));
-        sorts = SORT_OPTIONS.stream()
+        List<Map.Entry<String, String>> sortOptions = stockWatch
+                ? List.of(Map.entry("newest", "최근 등록순"), Map.entry("stockDesc", "재고 많은 순"),
+                        Map.entry("recommended", "구매 인기순")) : SORT_OPTIONS;
+        sorts = sortOptions.stream()
                 .map(entry -> new Option(entry.getKey(), entry.getValue(), entry.getKey().equals(filter.sort)))
                 .collect(Collectors.toUnmodifiableList());
 
         Map<String, String> baseParams = new LinkedHashMap<>();
         baseParams.put("q", filter.keyword);
         baseParams.put("category", filter.category);
-        baseParams.put("collection", collection);
+        if (stockWatch) baseParams.put("rank", filter.watchRank);
+        else baseParams.put("collection", section == null ? collection : section.key);
+        if (section != null) baseParams.put("mode", collectionMode);
         filterAction = ProductView.url(context, route, Map.of());
         resetUrl = ProductView.url(context, route, baseParams);
 
@@ -68,12 +96,27 @@ public final class ProductCatalogView {
 
         Map<String, String> params = new LinkedHashMap<>(baseParams);
         params.put("brand", filter.brand);
-        params.put("status", filter.status);
+        params.put("status", scheduled ? "" : filter.status);
         params.put("sort", filter.sort);
         params.put("maxPrice", filter.maxPrice == null ? "" : filter.maxPrice.toString());
         params.put("available", filter.available ? "true" : "");
+        if (stockWatch) params.put("recent", filter.recentOnly ? "true" : "");
 
         String parentId = filter.category.isEmpty() ? null : filter.category;
+        String root = section == null ? "" : section.root;
+        allCategoriesUrl = section == null || root.equals(filter.category) ? null
+                : ProductView.url(context, route, ProductView.with(params, "category", root));
+        modes = section == null ? List.of() : section.modes.stream()
+                .map(option -> new CollectionLink(option.getValue(),
+                        ProductView.url(context, route, ProductView.with(params, "mode", option.getKey())),
+                        option.getKey().equals(collectionMode), ""))
+                .collect(Collectors.toUnmodifiableList());
+        themes = section == ProductCollection.EXHIBITIONS && "category".equals(collectionMode)
+                ? List.of(
+                    theme(context, route, params, "CTGR_00005", "시즌 상품", "hero-home.jpg"),
+                    theme(context, route, params, "CTGR_00016", "수납·정리", "basket.jpg"),
+                    theme(context, route, params, "CTGR_01050", "뷰티·위생", "concealer.jpg"))
+                : List.of();
         Map<String, String> links = new LinkedHashMap<>();
         for (Category category : categories) {
             if (Objects.equals(category.parentId, parentId)) {
@@ -88,6 +131,27 @@ public final class ProductCatalogView {
         pageLabel = page + " / " + pages;
         previousUrl = page > 1 ? pageUrl(context, route, params, page - 1) : null;
         nextUrl = page < pages ? pageUrl(context, route, params, page + 1) : null;
+    }
+
+    private static CollectionLink theme(String context, String route, Map<String, String> params,
+            String category, String title, String image) {
+        String href = ProductView.url(context, route, ProductView.with(params, "category", category));
+        return new CollectionLink(title, href, category.equals(params.get("category")),
+                context + "/assets/images/home/" + image);
+    }
+
+    public static final class CollectionLink {
+        public final String title;
+        public final String url;
+        public final boolean current;
+        public final String image;
+
+        private CollectionLink(String title, String url, boolean current, String image) {
+            this.title = title;
+            this.url = url;
+            this.current = current;
+            this.image = image;
+        }
     }
 
     private static List<Option> priceOptions(Integer selectedPrice) {

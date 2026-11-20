@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
-
+import java.util.List;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
@@ -187,15 +187,82 @@ public class MemberService {
                 memberDAO.findByLoginIdOrEmail(loginIdOrEmail);
 
         if (member == null
-                || !"ACTIVE".equalsIgnoreCase(member.getStatus())
                 || !verifyPassword(password, member.getPasswordHash())) {
             throw new IllegalArgumentException(
                     "아이디(또는 이메일) 또는 비밀번호가 올바르지 않습니다."
             );
         }
 
+        if (!"ACTIVE".equalsIgnoreCase(member.getStatus())) {
+            throw new IllegalArgumentException(
+                    "이용이 중지된 계정입니다. 고객센터에 문의해 주세요."
+            );
+        }
+
         return member;
     }
+    
+    public List<AdminMemberInfo> findAdminMembers(
+            String keyword,
+            String status) throws Exception {
+
+        String search = keyword == null ? "" : keyword.trim();
+
+        if (search.length() > 120) {
+            throw new IllegalArgumentException("검색어는 120자 이내로 입력해 주세요.");
+        }
+
+        return memberDAO.findAdminMembers(search, status);
+    }
+    
+    public AdminMemberDetailInfo findAdminMemberDetail(String memberId)
+            throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("회원 정보를 확인해 주세요.");
+        }
+
+        return memberDAO.findAdminMemberDetail(memberId.trim());
+    }
+    
+    public AdminMemberConsentInfo findAdminMemberConsent(String memberId)
+            throws Exception {
+
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("회원 정보를 확인해 주세요.");
+        }
+
+        return memberDAO.findAdminMemberConsent(memberId.trim());
+    }
+    
+    public boolean updateAdminMemberStatus(
+            String actingAdminId,
+            String memberId,
+            String status) throws Exception {
+
+        actingAdminId = actingAdminId == null ? "" : actingAdminId.trim();
+        memberId = memberId == null ? "" : memberId.trim();
+        status = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+
+        if (actingAdminId.isEmpty() || memberId.isEmpty()) {
+            throw new IllegalArgumentException("회원 정보를 확인해 주세요.");
+        }
+
+        if (actingAdminId.equals(memberId)) {
+            throw new IllegalArgumentException("관리자 본인 계정의 상태는 변경할 수 없습니다.");
+        }
+
+        if (!"ACTIVE".equals(status) && !"SUSPENDED".equals(status)) {
+            throw new IllegalArgumentException("변경할 회원 상태를 확인해 주세요.");
+        }
+
+        return memberDAO.updateAdminMemberStatus(
+                memberId,
+                status,
+                actingAdminId
+        ) == 1;
+    }
+    
     
     public MemberProfileInfo findProfileByMemberId(String memberId)
             throws Exception {
