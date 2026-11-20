@@ -6,8 +6,12 @@
     };
 %>
 <nav class="admin-sidebar" aria-label="관리 메뉴">
-    <% for (String[] entry : adminMenu) { %>
-        <a href="${pageContext.request.contextPath}/admin/?view=<%= entry[0] %>" data-admin-link="<%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("adminSection"))) { %> aria-current="page"<% } %>><%= entry[1] %></a>
+        <% for (String[] entry : adminMenu) {
+        String adminHref = "users".equals(entry[0])
+                ? request.getContextPath() + "/app/admin/users"
+                : request.getContextPath() + "/admin/?view=" + entry[0];
+    %>
+        <a href="<%= adminHref %>" data-admin-link="<%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("adminSection"))) { %> aria-current="page"<% } %>><%= entry[1] %></a>
         <% if ("products".equals(entry[0]) && ("products".equals(request.getAttribute("adminSection"))
                 || "product-reviews".equals(request.getAttribute("adminSection")))) { %>
             <a class="admin-sidebar-subitem" href="${pageContext.request.contextPath}/app/admin/products/reviews"

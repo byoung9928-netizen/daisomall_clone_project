@@ -1,125 +1,193 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ page import="java.util.List,daiso.member.controller.AdminMemberInfo,daiso.product.controller.ProductView" %>
+<%
+    request.setAttribute("adminSection", "users");
+
+    String context = request.getContextPath();
+    String route = context + "/app/admin/users";
+
+    List<AdminMemberInfo> members =
+            (List<AdminMemberInfo>) request.getAttribute("adminMembers");
+    if (members == null) {
+        members = List.of();
+    }
+
+    String query = (String) request.getAttribute("adminMemberQuery");
+    if (query == null) {
+        query = "";
+    }
+
+    String status = (String) request.getAttribute("adminMemberStatus");
+    if (status == null) {
+        status = "ALL";
+    }
+
+    String errorMessage = (String) request.getAttribute("adminMembersError");
+    String noticeMessage = (String) request.getAttribute("adminMembersNotice");
+    String csrfToken = (String) request.getAttribute("adminMemberCsrf");
+    String actingAdminId = session.getAttribute("member_id") == null
+            ? "" : String.valueOf(session.getAttribute("member_id"));
+%>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
-<script src="${pageContext.request.contextPath}/assets/js/common/admin-ui.js" defer></script>
 </head>
 <body class="admin-body">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
+
     <div class="admin-layout">
-    <%@ include file="../common/admin-navigation.jspf" %>
-        <main id="admin-content" class="admin-content" data-admin-page="users" tabindex="-1">
-        <p class="admin-eyebrow">
-            MOCK COMMERCE OPERATIONS
-        </p>
-        <h1 class="page-title">
-            사용자 관리
-        </h1>
-        <form class="admin-search">
-            <label class="field">
-                <span>
-                    회원 이름 또는 이메일 검색
-                </span>
-                <input name="query" type="text" maxlength="120" autocomplete="off">
-            </label>
-            <button class="button" type="submit">
-                검색
-            </button>
-        </form>
-        <section class="admin-panel" hidden>
-            <h2 hidden>
-            </h2>
-            <form class="admin-editor-form" hidden>
+        <%@ include file="../common/admin-navigation.jspf" %>
+
+        <main id="admin-content" class="admin-content" tabindex="-1">
+            <p class="admin-eyebrow">MEMBER MANAGEMENT</p>
+            <h1 class="page-title">회원 관리</h1>
+
+            <% if (errorMessage != null) { %>
+                <p class="error-message" role="alert">
+                    <%= ProductView.escape(errorMessage) %>
+                </p>
+            <% } %>
+
+			<%
+			if (noticeMessage != null) {
+			%>
+			<p class="success-message" role="status">
+				<%=ProductView.escape(noticeMessage)%>
+			</p>
+			<%
+			}
+			%>
+
+			<form class="admin-search"
+                  action="<%= ProductView.escape(route) %>"
+                  method="get">
                 <label class="field">
-                    회원 상태
+                    <span>회원 ID, 로그인 ID, 이름 또는 이메일 검색</span>
+                    <input type="search"
+                           name="query"
+                           maxlength="120"
+                           value="<%= ProductView.escape(query) %>"
+                           placeholder="검색어 입력">
+                </label>
+
+                <label class="field">
+                    <span>회원 상태</span>
                     <select name="status">
+                        <option value="ALL" <%= "ALL".equals(status) ? "selected" : "" %>>
+                            전체 상태
+                        </option>
+                        <option value="ACTIVE" <%= "ACTIVE".equals(status) ? "selected" : "" %>>
+                            활성
+                        </option>
+                        <option value="SUSPENDED" <%= "SUSPENDED".equals(status) ? "selected" : "" %>>
+                            이용 중지
+                        </option>
                     </select>
                 </label>
-                <p class="error-message" role="alert">
-                </p>
-                <p class="form-status" role="status">
-                </p>
-                <button type="submit" class="button primary">
-                    회원 상태 저장
-                </button>
+
+                <button class="button" type="submit">검색</button>
+                <a class="button secondary"
+                   href="<%= ProductView.escape(route) %>">초기화</a>
             </form>
-        </section>
-        <div class="admin-table-scroll" tabindex="0" role="region" aria-label="사용자 관리 표 (가로 스크롤 가능)">
-            <table class="admin-table">
-                <caption class="visually-hidden">
-                    사용자 관리
-                </caption>
-                <thead>
-                    <tr>
-                        <th scope="col">
-                            회원 ID
-                        </th>
-                        <th scope="col">
-                            이름
-                        </th>
-                        <th scope="col">
-                            이메일
-                        </th>
-                        <th scope="col">
-                            유형
-                        </th>
-                        <th scope="col">
-                            상태
-                        </th>
-                        <th scope="col">
-                            관리
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
-    </main>
+
+            <p class="admin-count" role="status">
+                검색 결과 <%= members.size() %>명
+            </p>
+
+            <div class="admin-table-scroll"
+                 tabindex="0"
+                 role="region"
+                 aria-label="회원 목록 표 (가로 스크롤 가능)">
+                <table class="admin-table">
+                    <caption class="visually-hidden">회원 목록</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">회원 ID</th>
+                            <th scope="col">로그인 ID</th>
+                            <th scope="col">이름</th>
+                            <th scope="col">이메일</th>
+                            <th scope="col">유형</th>
+                            <th scope="col">상태</th>
+                            <th scope="col">가입일</th>
+                            <th scope="col">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (members.isEmpty()) { %>
+                            <tr>
+                                <td colspan="8">조건에 맞는 회원이 없습니다.</td>
+                            </tr>
+                        <% } else {
+                            for (AdminMemberInfo member : members) {
+                                String roleLabel =
+                                        "ADMIN".equalsIgnoreCase(member.getRole())
+                                                ? "관리자" : "회원";
+                                String statusLabel =
+                                        "ACTIVE".equalsIgnoreCase(member.getStatus())
+                                                ? "활성"
+                                                : "SUSPENDED".equalsIgnoreCase(member.getStatus())
+                                                        ? "이용 중지"
+                                                        : member.getStatus();
+                                String createdAt =
+                                        member.getCreatedAt() == null
+                                                ? "-"
+                                                : new java.text.SimpleDateFormat("yyyy.MM.dd HH:mm")
+                                                        .format(member.getCreatedAt());
+                        %>
+                            <tr>
+                                <td><%= ProductView.escape(member.getMemberId()) %></td>
+                                <td><%= ProductView.escape(member.getLoginId()) %></td>
+							<td><a class="text-button"
+								href="<%=ProductView.escape(
+		context + "/app/admin/users/detail?memberId=" + java.net.URLEncoder.encode(member.getMemberId(), "UTF-8"))%>">
+									<%=ProductView.escape(member.getName())%>
+							</a></td>
+							<td><%=ProductView.escape(member.getEmail())%></td>
+                                <td><%= ProductView.escape(roleLabel) %></td>
+                                <td><%= ProductView.escape(statusLabel) %></td>
+                                <td><%= ProductView.escape(createdAt) %></td>
+							<td>
+								<%
+								boolean isAdmin = "ADMIN".equalsIgnoreCase(member.getRole());
+									boolean isSelf = member.getMemberId() != null && member.getMemberId().equals(actingAdminId);
+									boolean isActive = "ACTIVE".equalsIgnoreCase(member.getStatus());
+									boolean isSuspended = "SUSPENDED".equalsIgnoreCase(member.getStatus());
+
+									if (!isAdmin && !isSelf && (isActive || isSuspended)) {
+										String nextStatus = isActive ? "SUSPENDED" : "ACTIVE";
+										String buttonLabel = isActive ? "이용 중지" : "활성화";
+								%>
+								<form method="post"
+									action="<%=ProductView.escape(context + "/app/admin/users/status")%>">
+									<input type="hidden" name="csrf"
+										value="<%=ProductView.escape(csrfToken)%>"> <input
+										type="hidden" name="memberId"
+										value="<%=ProductView.escape(member.getMemberId())%>">
+									<input type="hidden" name="query"
+										value="<%=ProductView.escape(query)%>"> <input
+										type="hidden" name="filterStatus"
+										value="<%=ProductView.escape(status)%>"> <input
+										type="hidden" name="newStatus" value="<%=nextStatus%>">
+									<button class="button secondary" type="submit">
+										<%=buttonLabel%>
+									</button>
+								</form> <%
+ } else {
+ %> - <%
+ }
+ %>
+							</td>
+						</tr>
+                        <%
+                        }
+                        }
+                        %>
+                    </tbody>
+                </table>
+            </div>
+        </main>
     </div>
-    <script>
-    // 공통 defer 스크립트 실행 후, 이 페이지의 HTML에 Mock 데이터와 이벤트를 연결합니다.
-    document.addEventListener("DOMContentLoaded", function () {
-        "use strict";
-        const app = window.Daiso;
-        const root = document.getElementById("admin-content");
-        const { link, button } = app.ui;
-        const { field, selectField, formFeedback, addRow, openEditor } = app.admin;
-        app.ready.then(function (repository) {
-            if (!app.admin.requireAdmin(root, repository)) return;
-            const section = "users";
-
-        const { form, input } = app.admin.searchBox(root);
-        const userTable = app.admin.table(root);
-        const editor = root.querySelector(".admin-panel");
-        function edit(member) {
-            const editForm = openEditor(editor, member.name + " 상태 관리");
-            selectField(editForm, "회원 상태", "status", [["ACTIVE", "활성"], ["SUSPENDED", "이용 중지"]], member.status);
-            formFeedback(editForm, (values) => {
-                repository.updateMemberStatus(member.id, values.status);
-                render();
-            }, "회원 상태 저장");
-            editor.scrollIntoView({ block: "start" });
-        }
-        function render() {
-            const query = input.value.trim().toLowerCase();
-            userTable.body.replaceChildren();
-            repository.getMembers().filter((member) => (member.name + " " + member.email).toLowerCase().includes(query)).forEach((member) => {
-                const editButton = button("상태 수정", () => edit(member), "text-button");
-                editButton.disabled = member.id === repository.getSession().id;
-                addRow(userTable.body, [member.id, member.name, member.email, member.role, member.status, editButton]);
-            });
-        }
-        form.addEventListener("submit", (event) => {
-            event.preventDefault();
-            render();
-        });
-        render();
-
-        }).catch(function (error) { app.ui.error(root, error); });
-    });
-    </script>
 </body>
 </html>

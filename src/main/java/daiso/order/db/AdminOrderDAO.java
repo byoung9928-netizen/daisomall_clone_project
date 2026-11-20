@@ -101,6 +101,71 @@ public class AdminOrderDAO {
 
 	        return orders;
 				}
+	
+	
+	public List<OrderBean> getOrderListByMemberId(String memberId)
+	        throws SQLException {
+
+	    if (memberId == null || memberId.trim().isEmpty()) {
+	        throw new IllegalArgumentException("회원 정보를 확인해 주세요.");
+	    }
+
+	    String sql =
+	            "SELECT o.order_id, o.order_no, o.member_id, "
+	                    + "o.status, o.total_amount, o.created_at, "
+	                    + "p.status AS payment_status, "
+	                    + "(SELECT oi.product_name FROM order_items oi "
+	                    + "WHERE oi.order_id = o.order_id "
+	                    + "ORDER BY oi.order_item_id LIMIT 1) AS first_product_name, "
+	                    + "(SELECT COUNT(*) FROM order_items oi2 "
+	                    + "WHERE oi2.order_id = o.order_id) AS product_count "
+	                    + "FROM orders o "
+	                    + "LEFT JOIN payment_attempts p "
+	                    + "ON p.payment_id = ("
+	                    + "SELECT MAX(p2.payment_id) "
+	                    + "FROM payment_attempts p2 "
+	                    + "WHERE p2.order_id = o.order_id"
+	                    + ") "
+	                    + "WHERE o.member_id = ? "
+	                    + "ORDER BY o.created_at DESC, o.order_id DESC "
+	                    + "LIMIT 10";
+
+	    List<OrderBean> orders = new ArrayList<>();
+
+	    try (Connection connection = ds.getConnection();
+	         PreparedStatement statement = connection.prepareStatement(sql)) {
+
+	        statement.setString(1, memberId.trim());
+
+	        try (ResultSet result = statement.executeQuery()) {
+	            while (result.next()) {
+	                OrderBean order = new OrderBean();
+	                order.setOrderId(result.getLong("order_id"));
+	                order.setOrderNo(result.getString("order_no"));
+	                order.setMemberId(result.getString("member_id"));
+	                order.setStatus(result.getString("status"));
+	                order.setTotalAmount(result.getInt("total_amount"));
+	                order.setCreatedAt(result.getTimestamp("created_at"));
+	                order.setPaymentStatus(result.getString("payment_status"));
+
+	                String productName = result.getString("first_product_name");
+	                int productCount = result.getInt("product_count");
+
+	                String summary = productName == null
+	                        ? "상품정보 없음" : productName;
+
+	                if (productCount > 1) {
+	                    summary += " 외 " + (productCount - 1) + "종";
+	                }
+
+	                order.setProductSummary(summary);
+	                orders.add(order);
+	            }
+	        }
+	    }
+
+	    return orders;
+	}
 			}
 		
 
