@@ -167,8 +167,7 @@ public class AdminOrderController {
     		return result.toString();
     	}
     	String orderNo=request.getParameter("orderNo");
-    	String carrierId=request.getParameter("carrierId");
-    	String trackingNumber = request.getParameter("trackingNumber");
+    	
     	
     	if (orderNo == null || orderNo.isBlank() || orderNo.length() > 100) {
     		
@@ -184,7 +183,12 @@ public class AdminOrderController {
     			result.addProperty("message", "주문을 찾을 수 없습니다.");
     			return result.toString();
     		}
-    	
+    	String carrierId = order.getCarrierId();
+    	String trackingNumber = order.getTrackingNumber();
+    	if(carrierId == null || carrierId.isBlank()||trackingNumber ==null||trackingNumber.isBlank()) {
+    		result.addProperty("message", "이 주문에 운송장을 먼저 등록해 주세요.");
+    		return result.toString();
+    	}
     	DeliveryTrackerClient client = new DeliveryTrackerClient();
     	
     	JsonObject tracking = client.track(carrierId,trackingNumber);
@@ -224,6 +228,7 @@ public class AdminOrderController {
 
     return result.toString();
     }
+    	
     	
 }
     

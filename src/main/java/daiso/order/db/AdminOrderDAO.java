@@ -156,6 +156,8 @@ public class AdminOrderDAO {
 	                order.setDeliveryMessage(
 	                    rs.getString("delivery_message")
 	                );
+	                order.setCarrierId(rs.getString("carrier_id"));
+	                order.setTrackingNumber(rs.getString("tracking_number"));
 
 	                order.setSubtotalAmount(
 	                    rs.getInt("subtotal_amount")
@@ -206,6 +208,9 @@ public class AdminOrderDAO {
 	        return order;
 	    }
 	}
+	
+		
+	
 			}
 		
 

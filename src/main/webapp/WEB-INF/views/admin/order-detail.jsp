@@ -209,47 +209,42 @@ DateTimeFormatter dateFormat =
                 </table>
             </section>
 			<section class="admin-panel">
-			    <h2>배송조회</h2>
-			
-			    <form id="admin-tracking-form"
-			          class="admin-editor-form"
-			          method="post"
-			          action="${pageContext.request.contextPath}/app/admin/orders/tracking">
-			
-			        <input type="hidden" name="orderNo"
-			               value="<%= ProductView.escape(
-			                   order.getOrderNo()) %>">
-			
-			        <input type="hidden" name="csrfToken"
-			               value="<%= ProductView.escape(
-			                   request.getAttribute("adminOrderCsrf")) %>">
-			
-			        <label class="field">
-			            <span>택배사 ID</span>
-			            <input type="text"
-			                   name="carrierId"
-			                   value="dev.track.dummy"
-			                   maxlength="120"
-			                   required>
-			        </label>
-			
-			        <label class="field">
-			            <span>운송장 번호</span>
-			            <input type="text"
-			                   name="trackingNumber"
-			                   maxlength="200"
-			                   placeholder="운송장 번호를 입력해 주세요"
-			                   required>
-			        </label>
-			
-			        <button class="button primary" type="submit">
-			            배송조회
-			        </button>
-			    </form>
-			
-			    <p id="admin-tracking-result"
-			       role="status"
-			       aria-live="polite"></p>
+				    <h2>배송조회</h2>
+				
+				    <p>
+				        택배사:
+				        <%= order.getCarrierId() == null
+				            ? "배정 전"
+				            : ProductView.escape(order.getCarrierId()) %>
+				    </p>
+				
+				    <p>
+				        운송장:
+				        <%= order.getTrackingNumber() == null
+				            ? "배정 전"
+				            : ProductView.escape(order.getTrackingNumber()) %>
+				    </p>
+				
+				    <form id="admin-tracking-form"
+				          method="post"
+				          action="${pageContext.request.contextPath}/app/admin/orders/tracking">
+				
+				        <input type="hidden" name="orderNo"
+				               value="<%= ProductView.escape(
+				                   order.getOrderNo()) %>">
+				
+				        <input type="hidden" name="csrfToken"
+				               value="<%= ProductView.escape(
+				                   request.getAttribute("adminOrderCsrf")) %>">
+				
+				        <button class="button primary" type="submit">
+				            현재 배송 상태 조회
+				        </button>
+				    </form>
+				
+				    <p id="admin-tracking-result"
+				       role="status"
+				       aria-live="polite"></p>
 			</section>
             <section class="admin-panel">
                 <h2>주문 금액</h2>
@@ -294,62 +289,48 @@ DateTimeFormatter dateFormat =
     const form =
         document.getElementById("admin-tracking-form");
 
-    if (!form) return;
+    if (!form || !saveButton) return;
 
     const resultBox =
         document.getElementById("admin-tracking-result");
 
-    const submitButton =
-        form.querySelector('button[type="submit"]');
+    saveButton.addEventListener("click", async function () {
+        if (saveButton.disabled) return;
+        if (!form.reportValidity()) return;
 
-    form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-
-        if (submitButton.disabled) return;
-
-        submitButton.disabled = true;
-        resultBox.textContent = "배송정보를 조회하고 있습니다.";
+        saveButton.disabled = true;
+        resultBox.textContent = "운송장을 저장하고 있습니다.";
 
         try {
             const data =
                 new URLSearchParams(new FormData(form));
 
-            const response = await fetch(form.action, {
-                method: "POST",
-                body: data
-            });
+            const response = await fetch(
+                "${pageContext.request.contextPath}/app/admin/orders/tracking/save",
+                {
+                    method: "POST",
+                    body: data
+                }
+            );
 
             if (!response.ok) {
-                throw new Error("배송조회 요청에 실패했습니다.");
+                throw new Error("운송장 저장 요청에 실패했습니다.");
             }
 
             const result = await response.json();
 
-            if (!result.success) {
-                resultBox.textContent =
-                    result.message || "배송정보를 조회하지 못했습니다.";
-                return;
-            }
-
-            const tracking = result.tracking;
-            const lastEvent = tracking.lastEvent;
-            const status = lastEvent.status;
-
-            resultBox.textContent = [
-                "운송장: " + tracking.trackingNumber,
-                "상태: " + (status.name || status.code),
-                lastEvent.time,
-                lastEvent.description
-            ].filter(Boolean).join(" / ");
+            resultBox.textContent =
+                result.message || "저장 결과를 확인하지 못했습니다.";
 
         } catch (error) {
             resultBox.textContent = error.message;
 
         } finally {
-            submitButton.disabled = false;
+            saveButton.disabled = false;
         }
     });
 })();
 </script>
+
 </body>
 </html>
