@@ -35,6 +35,8 @@ public class AdminOrderController {
             "adminOrders", Collections.emptyList()
         );
         request.setAttribute("adminOrderQuery", "");
+        boolean awaitingShipment = "awaiting-shipment".equals(request.getParameter("filter"));
+        request.setAttribute("adminOrderAwaitingShipment", awaitingShipment);
         //query 검색어 받기, 없으면 빈 문자열, trim은 앞뒤 공백 제거
         String keyword = request.getParameter("query");
         keyword = keyword == null ? "" : keyword.trim();
@@ -81,7 +83,7 @@ public class AdminOrderController {
             AdminOrderDAO dao = new AdminOrderDAO();
 
             List<OrderBean> orders =
-                dao.getOrderList(keyword, page);
+            		dao.getOrderList(keyword, page, awaitingShipment);
 
             boolean hasNext = orders.size() > 50;
 

@@ -23,8 +23,8 @@ public class AdminOrderDAO {
 	}
 	//전체 회원의 최근 주문 50건 조회
 	//검색어가 있으면 주문 번호 또는 회원번호로 검색
-	public List<OrderBean> getOrderList(String keyword, int page)
-			throws SQLException{
+	public List<OrderBean> getOrderList(String keyword, int page, boolean awaitingShipment)
+	        throws SQLException {
 		if(page < 1) {
 			throw new IllegalArgumentException("페이지 번호를 확인해 주세요.");
 		}
@@ -59,6 +59,9 @@ public class AdminOrderDAO {
 			            + "WHERE search_item.order_id = o.order_id "//이 주문의 상품 중 검색어가 들어간 상품이 하나라도 있는가?
 			            + "AND LOCATE(?, search_item.product_name) > 0"//
 			            + ")) "
+						+ "AND (? = 0 OR (p.status = 'APPROVED' " 
+			            + "AND o.status IN ('PAID', 'PREPARING') "
+						+ "AND o.canceled_at IS NULL)) "
 			            + "ORDER BY o.created_at DESC, o.order_id DESC "
 			            + "LIMIT 51 OFFSET ?";
 		List<OrderBean> orders = new ArrayList<>();
@@ -71,7 +74,8 @@ public class AdminOrderDAO {
 			pstmt.setString(2, query);//주문번호 검색
 			pstmt.setString(3, query);//회원번호 검색
 			pstmt.setString(4, query);//상품명 검색
-			pstmt.setLong(5,offset);
+			pstmt.setBoolean(5, awaitingShipment);
+			pstmt.setLong(6, offset);
 			
 			try (ResultSet rs=pstmt.executeQuery()){
 				while(rs.next()) {
