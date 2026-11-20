@@ -285,6 +285,45 @@ public class OrderDAO {
 		                    "승인 처리할 수 없는 주문 상태입니다."
 		                );
 		            }
+		           // 주문에 저장된 상품별 구매 수량을 조회한다.
+		            String orderedItemsSql =
+		                "SELECT product_id, SUM(quantity) AS ordered_quantity "
+		                + "FROM order_items WHERE order_id = ? "
+		                + "GROUP BY product_id ORDER BY product_id";
+
+		            String deductStockSql =
+		                "UPDATE products "
+		                + "SET stock_quantity = stock_quantity - ? "
+		                + "WHERE product_id = ? AND stock_quantity >= ?";
+
+		            try (PreparedStatement itemsStmt = con.prepareStatement(orderedItemsSql);
+		                 PreparedStatement stockStmt = con.prepareStatement(deductStockSql)) {
+
+		                itemsStmt.setLong(1, orderId);
+
+		                try (ResultSet rs = itemsStmt.executeQuery()) {
+		                    if (!rs.next()) {
+		                        throw new SQLException("주문 상품을 찾을 수 없습니다.");
+		                    }
+
+		                    do {
+		                        String productId = rs.getString("product_id");
+		                        long quantity = rs.getLong("ordered_quantity");
+
+		                        if (quantity <= 0) {
+		                            throw new SQLException("주문 상품의 수량을 확인해 주세요.");
+		                        }
+
+		                        stockStmt.setLong(1, quantity);
+		                        stockStmt.setString(2, productId);
+		                        stockStmt.setLong(3, quantity);
+
+		                        if (stockStmt.executeUpdate() != 1) {
+		                            throw new SQLException("상품 재고가 부족합니다. 상품번호: " + productId);
+		                        }
+		                    } while (rs.next());
+		                }
+		            }
 
 		            String paymentSql =
 		                "UPDATE payment_attempts "
@@ -308,7 +347,7 @@ public class OrderDAO {
 
 		            String orderSql =
 		            		 "UPDATE orders "
-		            			+ "SET status = 'PAID', hidden_at = NULL, "
+		            		    + "SET status = 'PAID', hidden_at = NULL, stock_deducted = TRUE, "
 		            			+ "carrier_id = 'dev.track.dummy', "
 		            			+ "tracking_number = ? "
 		            			+ "WHERE order_id = ? AND member_id = ? "
@@ -405,18 +444,19 @@ public class OrderDAO {
 		public Map<String, Object> getMyOrderDetail(
 		        String memberId, String orderNo) throws SQLException {
 
-		    String sql =
-		        "SELECT o.*, p.status AS payment_status, "
-		        + "p.approved_at "
-		        + "FROM orders o "
-		        + "LEFT JOIN payment_attempts p "
-		        + "ON p.payment_id = ("
-		        + "SELECT MAX(p2.payment_id) "
-		        + "FROM payment_attempts p2 "
-		        + "WHERE p2.order_id = o.order_id"
-		        + ") "
-		        + "WHERE o.member_id = ? AND o.order_no = ? "
-		        + "AND o.hidden_at IS NULL";
+				String sql =
+				    "SELECT o.*, p.status AS payment_status, "
+				    + "p.approved_at, r.status AS return_status, "
+				    + "r.admin_note AS return_admin_note "
+				    + "FROM orders o "
+				    + "LEFT JOIN payment_attempts p ON p.payment_id = ("
+				    + "SELECT MAX(p2.payment_id) "
+				    + "FROM payment_attempts p2 "
+				    + "WHERE p2.order_id = o.order_id"
+				    + ") "
+				    + "LEFT JOIN order_returns r ON r.order_id = o.order_id "
+				    + "WHERE o.member_id = ? AND o.order_no = ? "
+				    + "AND o.hidden_at IS NULL";
 		       
 
 		    try (Connection con = ds.getConnection()) {
@@ -443,6 +483,8 @@ public class OrderDAO {
 		                order.put("carrierId", rs.getString("carrier_id"));
 		                order.put("trackingNumber", rs.getString("tracking_number"));
 		                order.put("paymentStatus", rs.getString("payment_status"));
+		                order.put("returnStatus", rs.getString("return_status"));
+		                order.put("returnAdminNote", rs.getString("return_admin_note"));
 		                order.put("subtotal", rs.getInt("subtotal_amount"));
 		                order.put("shipping", rs.getInt("shipping_fee"));
 		                order.put("total", rs.getInt("total_amount"));
