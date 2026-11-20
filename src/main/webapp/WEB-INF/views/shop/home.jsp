@@ -44,7 +44,6 @@ document.addEventListener("DOMContentLoaded", function () {
          data-login-url="${pageContext.request.contextPath}/app/member/login"
          data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"
          data-logged-in="<%= Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn")) %>">
-        <a class="button secondary" href="${pageContext.request.contextPath}/app/products/wishlist">♡ 관심상품 보기</a>
         <p class="wishlist-feedback" data-wishlist-feedback role="status" aria-live="polite"><%= ProductView.escape(request.getAttribute("wishlistError")) %></p>
     </div>
     <main id="main-content" class="container storefront" data-page="home" tabindex="-1">

@@ -27,7 +27,6 @@
          data-login-url="${pageContext.request.contextPath}/app/member/login"
          data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"
          data-logged-in="<%= Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn")) %>">
-        <a class="button secondary" href="${pageContext.request.contextPath}/app/products/wishlist">♡ 관심상품 보기</a>
         <p class="wishlist-feedback" data-wishlist-feedback role="status" aria-live="polite"><%= ProductView.escape(request.getAttribute("wishlistError")) %></p>
     </div>
     <main id="main-content" class="container shop-page" data-page="product" tabindex="-1">
@@ -64,7 +63,7 @@
                         <strong>택배배송</strong>
                         <p>배송비 3,000원 · 상품 30,000원 이상 무료</p>
                     </div>
-                    <a class="button secondary" href="<%= ProductView.url(context, "/search.jsp", Map.of("collection", "store", "q", product.getProductCode())) %>">매장 상품 찾기</a>
+                    <a class="button secondary" href="<%= ProductView.url(context, "/app/stores/products", Map.of("product", product.getProductId())) %>">매장 상품 찾기</a>
                     
                     <!-- 1. 장바구니 요청 시작 -->
                     <form id="cartAddForm" method="post" action="${pageContext.request.contextPath}/app/cart/add">

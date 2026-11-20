@@ -1,0 +1,40 @@
+.store-admin-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .55rem;
+    margin-block: .8rem 1rem;
+}
+
+.store-admin-links [aria-current="page"] {
+    border-color: #9d072b;
+    background: #9d072b;
+    color: #fff;
+}
+
+.store-admin-filters {
+    align-items: end;
+}
+
+.store-adjustment {
+    margin-block: 1rem;
+    scroll-margin-top: 1rem;
+}
+
+.store-adjustment-fields,
+.store-adjustment-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .75rem;
+}
+
+.store-adjustment-summary dd {
+    margin: .2rem 0 0;
+}
+
+.store-admin tbody small {
+    color: #50545b;
+}
+
+.store-admin time {
+    white-space: nowrap;
+}
