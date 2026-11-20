@@ -71,6 +71,7 @@ public final class ProductView {
     }
 
     public static String status(ProductDTO product) {
+        if ("DISCONTINUED".equals(product.getStatus())) return "판매 종료";
         if ("SCHEDULED".equals(product.getStatus())) return "판매 예정";
         return available(product) ? "구매 가능" : "품절";
     }

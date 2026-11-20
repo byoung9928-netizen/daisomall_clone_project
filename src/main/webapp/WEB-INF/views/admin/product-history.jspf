@@ -6,7 +6,7 @@
 %>
 <% if (productHistory != null) {
     DateTimeFormatter changeTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제");
+    Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제", "STOCK_ADJUST", "수동 온라인 재고");
 %>
     <section class="admin-panel admin-product-history" id="product-history" aria-labelledby="product-history-title">
         <div class="admin-product-history-heading">
@@ -40,6 +40,11 @@
                                         <% } %>
                                         <% if (change.stockChanged()) { %>
                                             <li><strong>재고</strong> <%= change.beforeStock == null ? "—" : change.beforeStock %> → <%= change.afterStock == null ? "—" : change.afterStock %></li>
+                                        <% } %>
+                                        <% if (change.stockOperation != null) { %>
+                                            <% int delta = change.afterStock - change.beforeStock; %>
+                                            <li><strong>유형</strong> <%= daiso.product.controller.OnlineInventoryController.operationLabel(daiso.product.dao.StoreInventoryDAO.Change.valueOf(change.stockOperation)) %> · <%= delta > 0 ? "+" : "" %><%= delta %>개</li>
+                                            <li><strong>사유</strong> <%= ProductView.escape(change.stockReason) %></li>
                                         <% } %>
                                         <% if (change.statusChanged()) { %>
                                             <li><strong>판매 상태</strong> <%= change.beforeStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.beforeStatus, change.beforeStatus)) %> → <%= change.afterStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.afterStatus, change.afterStatus)) %></li>

@@ -28,6 +28,9 @@
         <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content store-admin" tabindex="-1">
             <h1 class="page-title">매장별 재고 관리</h1>
+            <% if (storeSuccess != null) { %>
+                <p id="store-save-result" class="inventory-success" role="status"><%= ProductView.escape(storeSuccess) %></p>
+            <% } %>
             <p>오프라인 매장 재고입니다. 매장 미취급 상품은 목록에 표시되지 않으며, 취급 상품의 재고가 0개면 품절로 표시됩니다.</p>
             <% if (storeError != null && !editingStock) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(storeError) %></p>
@@ -205,11 +208,7 @@
                         </div>
                     <% } else { %>
                         <% if (!inventoryPage.showingAssortment) { %><p class="store-stock-hint">재고가 0개인 상품은 취급 해제할 수 있어요.</p><% } %>
-                        <div id="store-inventory-table" tabindex="-1">
-                            <% if (storeSuccess != null && savedProduct == null) { %>
-                                <p class="inventory-success" role="status"><%= ProductView.escape(storeSuccess) %></p>
-                            <% } %>
-                        </div>
+                        <div id="store-inventory-table" tabindex="-1"></div>
                         <div class="admin-table-scroll" tabindex="0" role="region" aria-label="매장 취급 상품 표">
                             <table class="admin-table store-stock-table">
                                 <thead><tr>
@@ -226,7 +225,7 @@
                                                    && action.name().equals(storeDraft.get("operation"));
                                            boolean confirmUnlist = stock.id.equals(request.getAttribute("storeUnlistConfirmation"));
                                            boolean savedRow = stock.id.equals(savedProduct); %>
-                                        <tr id="<%= Page.rowAnchor(stock.id) %>" tabindex="-1"<%= savedRow ? " data-saved-row aria-describedby=\"store-row-result\"" : "" %>>
+                                        <tr id="<%= Page.rowAnchor(stock.id) %>" tabindex="-1"<%= savedRow ? " data-saved-row aria-describedby=\"store-save-result\"" : "" %>>
                                             <td><div class="store-stock-product">
                                                 <img src="<%= ProductView.image(inventoryPage.context, stock.image) %>" width="48" height="52" loading="lazy" alt="">
                                                 <div><strong><%= ProductView.escape(stock.name) %></strong><small>품번 <%= ProductView.escape(stock.code) %></small></div>
@@ -240,9 +239,6 @@
                                                 <% } %>
                                             </td>
                                             <td>
-                                                <% if (savedRow) { %>
-                                                    <p id="store-row-result" class="inventory-success" role="status"><%= ProductView.escape(storeSuccess) %></p>
-                                                <% } %>
                                                 <div class="store-stock-actions">
                                                     <% if (activeList) { %>
                                                         <a class="button secondary" href="<%= inventoryPage.editUrl(stock.id) %>#store-adjustment"

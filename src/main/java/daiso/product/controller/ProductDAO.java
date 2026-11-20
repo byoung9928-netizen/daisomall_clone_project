@@ -69,12 +69,48 @@ public class ProductDAO {
                 total = rows.getInt(1);
             }
         }
-        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + ADMIN_COLUMNS + scope
+        String columns = ADMIN_COLUMNS + (filter.onlineInventory ? ", p.low_stock_threshold" : "");
+        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + columns + scope
                 + " ORDER BY " + filter.sort.orderBy + ", p.product_id LIMIT ? OFFSET ?")) {
             bind(query, terms);
             query.setInt(terms.size() + 1, limit);
             query.setInt(terms.size() + 2, offset);
-            return new CatalogPage(readProducts(query), total);
+            return new CatalogPage(readProducts(query, filter.onlineInventory), total);
+        }
+    }
+
+    Map<OnlineStockState, Long> onlineSummary(Connection conn) throws SQLException {
+        String sql = "SELECT COUNT(*) AS total, "
+                + aggregate(OnlineStockState.NORMAL) + ", " + aggregate(OnlineStockState.LOW) + ", "
+                + aggregate(OnlineStockState.SOLD_OUT) + ", " + aggregate(OnlineStockState.INACTIVE) + " FROM products p";
+        try (PreparedStatement query = conn.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
+            rows.next();
+            return Map.of(OnlineStockState.ALL, rows.getLong("total"), OnlineStockState.NORMAL, rows.getLong("NORMAL"),
+                    OnlineStockState.LOW, rows.getLong("LOW"), OnlineStockState.SOLD_OUT, rows.getLong("SOLD_OUT"),
+                    OnlineStockState.INACTIVE, rows.getLong("INACTIVE"));
+        }
+    }
+
+    private static String aggregate(OnlineStockState state) {
+        return "COUNT(CASE WHEN " + state.condition + " THEN 1 END) AS `" + state.name() + "`";
+    }
+
+    ProductDTO findOnlineProduct(Connection conn, String id, boolean lock) throws SQLException {
+        String sql = "SELECT " + ADMIN_COLUMNS + ", p.low_stock_threshold FROM products p WHERE p.product_id = ?"
+                + (lock ? " FOR UPDATE" : "");
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            query.setString(1, id);
+            List<ProductDTO> matches = readProducts(query, true);
+            return matches.isEmpty() ? null : matches.get(0);
+        }
+    }
+
+    void updateOnlineInventory(Connection conn, String id, int quantity, boolean threshold) throws SQLException {
+        String column = threshold ? "low_stock_threshold" : "stock_quantity";
+        try (PreparedStatement query = conn.prepareStatement("UPDATE products SET " + column + " = ? WHERE product_id = ?")) {
+            query.setInt(1, quantity);
+            query.setString(2, id);
+            if (query.executeUpdate() != 1) throw new SQLException("Online inventory update failed");
         }
     }
 
@@ -99,6 +135,16 @@ public class ProductDAO {
             query.setString(2, excludedId);
             try (ResultSet rows = query.executeQuery()) {
                 return rows.next();
+            }
+        }
+    }
+
+    boolean lockLeafCategory(Connection conn, String id) throws SQLException {
+        try (PreparedStatement statement = conn.prepareStatement(
+                "SELECT is_leaf FROM categories WHERE category_id = ? FOR SHARE")) {
+            statement.setString(1, id);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() && row.getBoolean("is_leaf");
             }
         }
     }
@@ -317,7 +363,7 @@ public class ProductDAO {
             scope.append(" JOIN (SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
                     + "wishlist_rank ON wishlist_rank.product_id = p.product_id");
         }
-        scope.append(" WHERE 1 = 1");
+        scope.append(" WHERE p.status <> 'DISCONTINUED'");
         if (!filter.keyword.isEmpty()) {
             scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0"
                     + " OR LOCATE(?, p.brand) > 0)");
@@ -412,10 +458,16 @@ public class ProductDAO {
     }
 
     private static List<ProductDTO> readProducts(PreparedStatement query) throws SQLException {
+        return readProducts(query, false);
+    }
+
+    private static List<ProductDTO> readProducts(PreparedStatement query, boolean onlineInventory) throws SQLException {
         List<ProductDTO> products = new ArrayList<>();
         try (ResultSet rows = query.executeQuery()) {
             while (rows.next()) {
-                products.add(readProduct(rows));
+                ProductDTO product = readProduct(rows);
+                if (onlineInventory) product.setLowStockThreshold(rows.getInt("low_stock_threshold"));
+                products.add(product);
             }
         }
         return products;

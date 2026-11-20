@@ -18,7 +18,8 @@
     String activeSort = filters == null ? "" : filters.get("sort");
     boolean priceAscending = "PRICE_ASC".equals(activeSort);
     boolean priceDescending = "PRICE_DESC".equals(activeSort);
-    java.util.List<String> statusKeys = java.util.List.of("AVAILABLE", "SOLD_OUT", "SCHEDULED");
+    java.util.List<String> statusKeys = java.util.List.of("AVAILABLE", "SOLD_OUT", "SCHEDULED", "DISCONTINUED");
+    boolean discontinuationEnabled = Boolean.TRUE.equals(request.getAttribute("productDiscontinuationEnabled"));
 %>
 <!DOCTYPE html>
 <html lang="ko">
@@ -36,6 +37,9 @@
         <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1">
             <h1 class="page-title">상품 관리</h1>
+            <% if (!discontinuationEnabled && blocked == null) { %>
+                <p class="source-note">판매 종료 전환은 결제 승인 단계의 상품 상태 확인이 준비될 때까지 보류됩니다.</p>
+            <% } %>
             <% if (blocked != null) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(blocked) %></p>
                 <% if (response.getStatus() == 403) { %>
@@ -147,12 +151,18 @@
                                 </label>
                                 <p class="product-field-feedback" id="product-price-feedback" role="status">${adminPriceRange}</p>
                                 <label class="field">온라인 재고
-                                <input id="product-stock" name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>">
+                                <input id="product-stock" name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>"
+                                       <%= productForm.getOrDefault("id", "").isEmpty() ? "" : "readonly" %>>
                                 </label>
+                                <% if (!productForm.getOrDefault("id", "").isEmpty()) { %>
+                                    <a href="<%= ProductView.url(request.getContextPath(), "/app/admin/inventory",
+                                            Map.of("edit", productForm.get("id"))) %>#online-stock-editor">온라인 재고 조정으로 이동</a>
+                                <% } %>
                                 <label class="field">판매 상태
                                 <select id="product-status" name="status" required>
                                     <% for (String status : statusKeys) { %>
-                                        <option value="<%= status %>" <%= status.equals(productForm.get("status")) ? "selected" : "" %>><%= statuses.get(status) %></option>
+                                        <option value="<%= status %>" <%= status.equals(productForm.get("status")) ? "selected" : "" %>
+                                                <%= !discontinuationEnabled && "DISCONTINUED".equals(status) && !status.equals(productForm.get("status")) ? "disabled" : "" %>><%= statuses.get(status) %></option>
                                     <% } %>
                                 </select>
                                 </label>
@@ -284,7 +294,7 @@
                                 <select name="targetStatus" required>
                                     <option value="">변경할 상태 선택</option>
                                     <% for (String status : statusKeys) { %>
-                                        <option value="<%= status %>"><%= statuses.get(status) %></option>
+                                        <option value="<%= status %>" <%= !discontinuationEnabled && "DISCONTINUED".equals(status) ? "disabled" : "" %>><%= statuses.get(status) %></option>
                                     <% } %>
                                 </select>
                             </label>

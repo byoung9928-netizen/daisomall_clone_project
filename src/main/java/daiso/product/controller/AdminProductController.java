@@ -40,7 +40,7 @@ public final class AdminProductController {
     private static final int MAX_PRICE = 5000;
     private static final String PRICE_RANGE = "가격은 1,000원 이상 5,000원 이하로 입력해 주세요.";
     private static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
-            "SCHEDULED", "판매 예정");
+            "SCHEDULED", "판매 예정", "DISCONTINUED", "판매 종료");
     private final ProductDAO dao = new ProductDAO();
     private final ProductDetailImages detailImages = new ProductDetailImages();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
@@ -129,8 +129,11 @@ public final class AdminProductController {
                 detailUploads.add(path);
             }
             saved = write(conn -> {
+                if (!dao.lockLeafCategory(conn, product.getCategoryId())) return false;
                 ProductDTO before = create ? null : dao.lockAdminProduct(conn, product.getProductId());
                 if (!create && before == null) return false;
+                verifyDiscontinuation(request, product.getStatus(), before);
+                if (!create) product.setStockQuantity(before.getStockQuantity());
                 Map<Long, String> currentImages = create ? Map.of() : detailImages.list(conn, product.getProductId());
                 if (!ProductDetailImages.baseline(currentImages).equals(imageBaseline)) {
                     throw new IllegalArgumentException("다른 작업에서 상세 이미지가 변경되었습니다. 현재 목록을 다시 확인해 주세요.");
@@ -242,6 +245,7 @@ public final class AdminProductController {
                         throw new IllegalArgumentException("선택 목록에 삭제됐거나 찾을 수 없는 상품이 있습니다.");
                     }
                     if (status.equals(before.getStatus())) continue;
+                    verifyDiscontinuation(request, status, before);
                     dao.updateAdminStatus(conn, id, status);
                     ProductDTO after = dao.lockAdminProduct(conn, id);
                     changes.record(conn, administrator(session), Action.BULK_STATUS, before, after);
@@ -255,6 +259,17 @@ public final class AdminProductController {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
+        }
+    }
+
+    private static boolean discontinuationEnabled(HttpServletRequest request) {
+        return "true".equalsIgnoreCase(request.getServletContext().getInitParameter("daiso.product.discontinuationEnabled"));
+    }
+
+    private static void verifyDiscontinuation(HttpServletRequest request, String requested, ProductDTO current) {
+        if ("DISCONTINUED".equals(requested) && (current == null || !"DISCONTINUED".equals(current.getStatus()))
+                && !discontinuationEnabled(request)) {
+            throw new IllegalArgumentException("결제 승인 단계의 판매 상태 검증이 준비될 때까지 판매 종료 전환은 보류됩니다.");
         }
     }
 
@@ -400,6 +415,7 @@ public final class AdminProductController {
             request.setAttribute("adminProductList", inventoryReturn.isEmpty() ? ProductView.url(context, url, filters)
                     : ProductView.url(context, OnlineInventoryController.ROUTE, inventoryReturn));
             request.setAttribute("productStatuses", STATUSES);
+            request.setAttribute("productDiscontinuationEnabled", discontinuationEnabled(request));
             request.setAttribute(CSRF, token(session));
             return VIEW;
         } catch (SQLException | NamingException error) {

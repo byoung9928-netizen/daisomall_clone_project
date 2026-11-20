@@ -44,6 +44,14 @@
     color: #50545b;
 }
 
+.admin-category-editor { margin-block: 1.25rem; }
+.admin-category-group { margin-block: .65rem; border: 1px solid var(--admin-line); border-radius: .65rem; background: white; }
+.admin-category-group summary { padding: .85rem 1rem; cursor: pointer; }
+.admin-category-name small { display: block; margin-block-start: .15rem; }
+.admin-category-name[data-level="2"] { padding-inline-start: 1rem; }
+.admin-category-name[data-level="3"] { padding-inline-start: 2rem; }
+.store-stock-badge[data-stock-state="INACTIVE"] { background: #eee; color: #41454b; }
+
 .store-admin time {
     white-space: nowrap;
 }

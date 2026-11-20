@@ -120,7 +120,7 @@
         if (!summary) return;
 
         const amount = form.elements.namedItem('amount');
-        const change = form.elements.namedItem('change');
+        const change = form.elements.namedItem('change') || form.elements.namedItem('operation');
         const before = Number(form.dataset.before);
         const delta = summary.querySelector('[data-stock-delta]');
         const after = summary.querySelector('[data-stock-after]');
