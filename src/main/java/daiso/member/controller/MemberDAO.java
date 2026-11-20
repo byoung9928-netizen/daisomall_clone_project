@@ -159,6 +159,49 @@ public class MemberDAO {
         }
     }
     
+    
+    
+    public int saveMemberConsentSettings(
+            String memberId,
+            boolean marketingSms,
+            boolean marketingEmail,
+            boolean marketingPersonalInfo,
+            boolean locationTerms,
+            String retentionPeriod)
+            throws NamingException, SQLException {
+
+        String sql =
+                "INSERT INTO member_consent_settings "
+                        + "(member_id, marketing_sms, marketing_email, "
+                        + "marketing_personal_info, location_terms, retention_period) "
+                        + "VALUES (?, ?, ?, ?, ?, ?) "
+                        + "ON DUPLICATE KEY UPDATE "
+                        + "marketing_sms = ?, "
+                        + "marketing_email = ?, "
+                        + "marketing_personal_info = ?, "
+                        + "location_terms = ?, "
+                        + "retention_period = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+            statement.setBoolean(2, marketingSms);
+            statement.setBoolean(3, marketingEmail);
+            statement.setBoolean(4, marketingPersonalInfo);
+            statement.setBoolean(5, locationTerms);
+            statement.setString(6, retentionPeriod);
+
+            statement.setBoolean(7, marketingSms);
+            statement.setBoolean(8, marketingEmail);
+            statement.setBoolean(9, marketingPersonalInfo);
+            statement.setBoolean(10, locationTerms);
+            statement.setString(11, retentionPeriod);
+
+            return statement.executeUpdate();
+        }
+    }
+    
     public int updateAdminMemberStatus(
             String memberId,
             String status,
