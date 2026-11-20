@@ -8,6 +8,9 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 public class MemberDAO {
 
@@ -18,6 +21,168 @@ public class MemberDAO {
                 "java:comp/env/jdbc/mysqlDB"
         );
         return dataSource.getConnection();
+    }
+    
+    public List<AdminMemberInfo> findAdminMembers(String keyword, String status)
+            throws NamingException, SQLException {
+
+        String search = keyword == null ? "" : keyword.trim();
+        String selectedStatus = status == null || status.trim().isEmpty()
+                ? "ALL"
+                : status.trim().toUpperCase(Locale.ROOT);
+
+        if (!"ALL".equals(selectedStatus)
+                && !"ACTIVE".equals(selectedStatus)
+                && !"SUSPENDED".equals(selectedStatus)) {
+            throw new IllegalArgumentException("회원 상태 검색값이 올바르지 않습니다.");
+        }
+
+        StringBuilder sql = new StringBuilder(
+                "SELECT member_id, login_id, name, email, role, status, created_at " +
+                "FROM members WHERE 1 = 1");
+
+        List<String> parameters = new ArrayList<>();
+
+        if (!search.isEmpty()) {
+            sql.append(
+                    " AND (member_id LIKE ? OR login_id LIKE ? " +
+                    "OR name LIKE ? OR email LIKE ?)"
+            );
+
+            String searchPattern = "%" + search + "%";
+            parameters.add(searchPattern);
+            parameters.add(searchPattern);
+            parameters.add(searchPattern);
+            parameters.add(searchPattern);
+        }
+
+        if (!"ALL".equals(selectedStatus)) {
+            sql.append(" AND status = ?");
+            parameters.add(selectedStatus);
+        }
+
+        sql.append(" ORDER BY created_at DESC, member_id ASC");
+
+        List<AdminMemberInfo> members = new ArrayList<>();
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement =
+                     connection.prepareStatement(sql.toString())) {
+
+            for (int i = 0; i < parameters.size(); i++) {
+                statement.setString(i + 1, parameters.get(i));
+            }
+
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    members.add(new AdminMemberInfo(
+                            result.getString("member_id"),
+                            result.getString("login_id"),
+                            result.getString("name"),
+                            result.getString("email"),
+                            result.getString("role"),
+                            result.getString("status"),
+                            result.getTimestamp("created_at")
+                    ));
+                }
+            }
+        }
+
+        return members;
+    }
+    
+    public AdminMemberDetailInfo findAdminMemberDetail(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT member_id, login_id, name, email, phone, "
+                        + "birth_date, gender, role, status, created_at "
+                        + "FROM members "
+                        + "WHERE member_id = ? "
+                        + "LIMIT 1";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new AdminMemberDetailInfo(
+                        result.getString("member_id"),
+                        result.getString("login_id"),
+                        result.getString("name"),
+                        result.getString("email"),
+                        result.getString("phone"),
+                        result.getDate("birth_date"),
+                        result.getString("gender"),
+                        result.getString("role"),
+                        result.getString("status"),
+                        result.getTimestamp("created_at")
+                );
+            }
+        }
+    }
+    
+    public AdminMemberConsentInfo findAdminMemberConsent(String memberId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "SELECT marketing_sms, marketing_email, "
+                        + "marketing_personal_info, location_terms, "
+                        + "retention_period, updated_at "
+                        + "FROM member_consent_settings "
+                        + "WHERE member_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, memberId);
+
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+
+                return new AdminMemberConsentInfo(
+                        result.getBoolean("marketing_sms"),
+                        result.getBoolean("marketing_email"),
+                        result.getBoolean("marketing_personal_info"),
+                        result.getBoolean("location_terms"),
+                        result.getString("retention_period"),
+                        result.getTimestamp("updated_at")
+                );
+            }
+        }
+    }
+    
+    public int updateAdminMemberStatus(
+            String memberId,
+            String status,
+            String actingAdminId)
+            throws NamingException, SQLException {
+
+        String sql =
+                "UPDATE members SET status = ? " +
+                "WHERE member_id = ? " +
+                "AND member_id <> ? " +
+                "AND role <> 'ADMIN' " +
+                "AND status <> ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement =
+                     connection.prepareStatement(sql)) {
+
+            statement.setString(1, status);
+            statement.setString(2, memberId);
+            statement.setString(3, actingAdminId);
+            statement.setString(4, status);
+
+            return statement.executeUpdate();
+        }
     }
 
     public boolean existsByEmail(String email)
