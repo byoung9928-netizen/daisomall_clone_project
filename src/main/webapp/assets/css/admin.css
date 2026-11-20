@@ -368,16 +368,23 @@
 .product-editor-dialog .admin-editor-form { max-width: none; }
 .product-editor-dialog .field { min-width: 0; }
 .product-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 12px; }
-.admin-product-preview {
-    padding: 1rem;
-    border: 1px solid var(--admin-line);
-    border-radius: .55rem;
-}
-.admin-product-preview summary { min-height: 2.25rem; cursor: pointer; font-weight: 700; }
-.admin-product-preview-layout { gap: 1rem; margin-block: .5rem 1rem; }
-.admin-product-preview-layout .detail-image { max-height: 16rem; object-fit: contain; }
-.admin-product-preview h3 { margin: .4rem 0; }
-.admin-product-preview-description { margin: .5rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.product-editor-dialog [hidden] { display: none; }
+.product-editor-dialog.is-preview { width: min(1060px, calc(100% - 32px)); }
+.product-editor-dialog.is-preview .product-editor-heading { display: none; }
+.admin-product-preview > h2 { margin: 0 0 1.25rem; }
+.admin-product-preview-layout { gap: clamp(1rem, 3vw, 2rem); margin-block: .5rem 1.5rem; }
+.admin-product-preview-layout .detail-image { max-height: 34rem; object-fit: contain; }
+.admin-product-preview-layout .detail-info h3 { margin-block: .5rem; font-size: clamp(1.25rem, 3vw, 2rem); }
+.admin-preview-actions { margin-top: 1.5rem; }
+.admin-gallery { min-width: 0; margin-block: 1.25rem; padding: .9rem; border: 1px solid var(--admin-line); }
+.admin-gallery legend { padding-inline: .4rem; font-weight: 700; }
+.admin-gallery .field { margin-bottom: .5rem; }
+.admin-gallery p { margin-block: .4rem; }
+.admin-gallery-list { display: flex; flex-wrap: wrap; gap: 1rem; padding-inline-start: 1.25rem; }
+.admin-gallery-list:empty { display: none; }
+.admin-gallery-list li img { width: 6.5rem; height: 5rem; display: block; object-fit: contain; background: #f6f7f9; }
+.admin-gallery-actions { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .4rem; }
+.admin-gallery-actions .button { min-height: 36px; padding: .25rem .5rem; }
 .admin-review-results { margin-block: 1.25rem; }
 .admin-review-card { margin-bottom: .8rem; }
 .admin-review-card summary { cursor: pointer; padding: .25rem 0; }

@@ -1,3 +1,5 @@
+.pd-product-description { margin-block: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 .pd-official {
     max-width: 900px;
     margin: 2rem auto 3rem;

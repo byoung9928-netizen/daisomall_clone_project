@@ -42,6 +42,8 @@ public final class AdminProductController {
     private static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
             "SCHEDULED", "판매 예정");
     private final ProductDAO dao = new ProductDAO();
+    private final ProductDetailImages detailImages = new ProductDetailImages();
+    private final OfficialProductDetails officialDetails = new OfficialProductDetails();
     private final AdminProductChanges changes = new AdminProductChanges();
 
     @DaisoGetMapping(ROUTE)
@@ -92,35 +94,52 @@ public final class AdminProductController {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         Map<String, String> form = new LinkedHashMap<>();
         ProductImageStorage imageStorage = new ProductImageStorage(request.getServletContext());
-        String uploadedImage = null;
-        String previousImage = "";
+        List<String> uploadedImages = new java.util.ArrayList<>();
         boolean saved = false;
-        boolean replacingImage = false;
         try {
-            if (request.getContentType() != null && request.getContentType().startsWith("multipart/form-data")) {
-                request.getParts();
-            }
+            java.util.Collection<javax.servlet.http.Part> parts = request.getContentType() != null
+                    && request.getContentType().startsWith("multipart/form-data") ? request.getParts() : List.of();
             if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
             form = productForm(request);
-            previousImage = form.get("image");
-            javax.servlet.http.Part file = null;
-            if (request.getContentType() != null && request.getContentType().startsWith("multipart/form-data")) {
-                file = request.getPart("imageFile");
+            if (!"1".equals(request.getParameter("previewConfirmed"))) {
+                throw new IllegalArgumentException("고객 상세 미리보기를 확인한 뒤 저장해 주세요.");
             }
-            boolean hasFile = file != null && file.getSubmittedFileName() != null && !file.getSubmittedFileName().isBlank();
-            replacingImage = hasFile;
-            if (hasFile) form.put("image", "");
+            String imageOrder = ProductQueries.text(request, "detailImageOrder", 250);
+            String imageBaseline = ProductQueries.text(request, "detailImageBaseline", 210);
+            List<javax.servlet.http.Part> covers = imageFiles(parts, "imageFile");
+            List<javax.servlet.http.Part> details = imageFiles(parts, "detailImages");
+            if (covers.size() > 1 || details.size() > ProductDetailImages.LIMIT
+                    || java.util.stream.Stream.concat(covers.stream(), details.stream())
+                            .mapToLong(javax.servlet.http.Part::getSize).sum() > ProductImageStorage.MAX_BYTES) {
+                throw new IllegalArgumentException("상세 이미지 최대 10장, 새로 첨부하는 사진은 합계 5MB까지 저장할 수 있습니다.");
+            }
             boolean create = form.get("id").isEmpty();
-            ProductDTO product = product(form);
-            if (hasFile) {
-                uploadedImage = imageStorage.save(file);
-                product.setImage(uploadedImage);
-                form.put("image", uploadedImage);
+            Map<String, String> fields = new LinkedHashMap<>(form);
+            if (!covers.isEmpty()) fields.put("image", "");
+            ProductDTO product = product(fields);
+            if (!covers.isEmpty()) {
+                String path = imageStorage.save(covers.get(0));
+                uploadedImages.add(path);
+                product.setImage(path);
+            }
+            List<String> detailUploads = new java.util.ArrayList<>();
+            for (javax.servlet.http.Part detail : details) {
+                String path = imageStorage.save(detail);
+                uploadedImages.add(path);
+                detailUploads.add(path);
             }
             saved = write(conn -> {
                 ProductDTO before = create ? null : dao.lockAdminProduct(conn, product.getProductId());
                 if (!create && before == null) return false;
+                Map<Long, String> currentImages = create ? Map.of() : detailImages.list(conn, product.getProductId());
+                if (!ProductDetailImages.baseline(currentImages).equals(imageBaseline)) {
+                    throw new IllegalArgumentException("다른 작업에서 상세 이미지가 변경되었습니다. 현재 목록을 다시 확인해 주세요.");
+                }
+                List<String> orderedImages = ProductDetailImages.order(imageOrder, currentImages, detailUploads);
                 if (!dao.saveAdminProduct(conn, product, create)) return false;
+                if (!List.copyOf(currentImages.values()).equals(orderedImages)) {
+                    detailImages.replace(conn, product.getProductId(), orderedImages);
+                }
                 changes.record(conn, administrator(session), create ? Action.CREATE : Action.UPDATE, before, product);
                 return true;
             });
@@ -148,15 +167,21 @@ public final class AdminProductController {
         } catch (NamingException error) {
             return unavailable(request, response, error);
         } finally {
-            if (replacingImage && !saved) form.put("image", previousImage);
-            if (uploadedImage != null && !saved) {
-                try {
-                    imageStorage.discard(uploadedImage);
-                } catch (java.io.IOException error) {
-                    request.getServletContext().log("저장되지 않은 상품 사진 정리 실패", error);
+            if (!saved) {
+                for (String path : uploadedImages) {
+                    try {
+                        imageStorage.discard(path);
+                    } catch (java.io.IOException error) {
+                        request.getServletContext().log("저장되지 않은 상품 사진 정리 실패", error);
+                    }
                 }
             }
         }
+    }
+
+    private static List<javax.servlet.http.Part> imageFiles(java.util.Collection<javax.servlet.http.Part> parts, String name) {
+        return parts.stream().filter(part -> name.equals(part.getName()) && part.getSubmittedFileName() != null
+                && !part.getSubmittedFileName().isBlank()).collect(java.util.stream.Collectors.toList());
     }
 
     @DaisoPostMapping(ROUTE + "/delete")
@@ -289,6 +314,17 @@ public final class AdminProductController {
             }
             if (form != null) {
                 request.setAttribute("productForm", form);
+                String productId = form.getOrDefault("id", "");
+                Map<Long, String> images = productId.isEmpty() ? Map.of() : detailImages.list(conn, productId);
+                request.setAttribute("adminDetailImages", images);
+                request.setAttribute("adminDetailImageBaseline", ProductDetailImages.baseline(images));
+                if (!productId.isEmpty()) {
+                    ProductDTO current = dao.findById(conn, productId);
+                    if (current != null) {
+                        request.setAttribute("adminOfficialCode", current.getProductCode());
+                        request.setAttribute("adminOfficialDetail", officialDetails.find(request.getServletContext(), current));
+                    }
+                }
                 request.setAttribute("productCategories", dao.findAdminCategories(conn, true));
                 request.setAttribute("adminMinPrice", MIN_PRICE);
                 request.setAttribute("adminMaxPrice", MAX_PRICE);
