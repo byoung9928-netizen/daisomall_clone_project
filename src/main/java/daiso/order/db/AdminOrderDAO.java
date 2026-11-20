@@ -156,6 +156,8 @@ public class AdminOrderDAO {
 	                order.setDeliveryMessage(
 	                    rs.getString("delivery_message")
 	                );
+	                order.setCarrierId(rs.getString("carrier_id"));
+	                order.setTrackingNumber(rs.getString("tracking_number"));
 
 	                order.setSubtotalAmount(
 	                    rs.getInt("subtotal_amount")
@@ -270,6 +272,68 @@ public class AdminOrderDAO {
 
 	    return orders;
 	}
+	
+	public void updateDeliveryStatus(
+	        String orderNo,
+	        String carrierId,
+	        String trackingNumber,
+	        String nextStatus) throws SQLException {
+
+	    if (!"SHIPPED".equals(nextStatus)
+	            && !"DELIVERED".equals(nextStatus)) {
+	        throw new IllegalArgumentException(
+	            "지원하지 않는 배송 상태입니다."
+	        );
+	    }
+
+	    String sql =
+	        "UPDATE orders o "
+	        + "JOIN payment_attempts p "
+	        + "ON p.payment_id = ("
+	        + "SELECT MAX(p2.payment_id) "
+	        + "FROM payment_attempts p2 "
+	        + "WHERE p2.order_id = o.order_id"
+	        + ") "
+	        + "SET o.status = ? "
+	        + "WHERE o.order_no = ? "
+	        + "AND o.carrier_id = ? "
+	        + "AND o.tracking_number = ? "
+	        + "AND p.status = 'APPROVED' "
+	        + "AND o.status IN ('PAID', 'PREPARING', 'SHIPPED') "
+	        + "AND (? = 'DELIVERED' "
+	        + "OR o.status IN ('PAID', 'PREPARING'))";
+
+	    try (Connection con = ds.getConnection()) {
+	        boolean originalAutoCommit = con.getAutoCommit();
+
+	        con.setReadOnly(false);
+	        con.setAutoCommit(false);
+
+	        try {
+	            try (PreparedStatement pstmt =
+	                    con.prepareStatement(sql)) {
+
+	                pstmt.setString(1, nextStatus);
+	                pstmt.setString(2, orderNo);
+	                pstmt.setString(3, carrierId);
+	                pstmt.setString(4, trackingNumber);
+	                pstmt.setString(5, nextStatus);
+
+	                pstmt.executeUpdate();
+	            }
+
+	            con.commit();
+
+	        } catch (SQLException | RuntimeException e) {
+	            con.rollback();
+	            throw e;
+
+	        } finally {
+	            con.setAutoCommit(originalAutoCommit);
+	        }
+	    }
+	}
+	
 			}
 		
 

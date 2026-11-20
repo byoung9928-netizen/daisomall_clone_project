@@ -1,5 +1,7 @@
 package daiso.order.controller;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -7,8 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
@@ -21,9 +21,10 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.common.annotation.DaisoResponseBody;
-import daiso.order.payment.kakaoPayClient;
 import daiso.order.db.OrderBean;
 import daiso.order.db.OrderDAO;
+import daiso.order.delivery.DemoTrackingNumber;
+import daiso.order.payment.kakaoPayClient;
 
 @DaisoController
 public class KakaoPayController {
@@ -353,7 +354,10 @@ public class KakaoPayController {
             			);
             	OrderDAO orderDAO= new OrderDAO();
             	
-            	orderDAO.approvePayment(memberId,orderId,tid,approvedAmount,approvedAt);
+            	//결제승인이 확인된 주문에 가상운송장 번호 생성
+            	String trackingNumber = DemoTrackingNumber.create();
+            	
+            	orderDAO.approvePayment(memberId,orderId,tid,approvedAmount,approvedAt,trackingNumber);
             }
             synchronized (pending) {
                 pending.put("status",

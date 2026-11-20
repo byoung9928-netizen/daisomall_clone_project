@@ -2567,6 +2567,26 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						<li <%=myCurrentStep == 4 ? "aria-current=\"step\"" : ""%>>
 							배송완료</li>
 					</ol>
+					<form id="my-order-tracking-form"
+					      method="post"
+					      action="<%= myContext %>/app/order/tracking">
+					
+					    <input type="hidden" name="orderNo"
+					           value="<%= ProductView.escape(
+					               myOrder.get("orderNo")) %>">
+					
+					    <input type="hidden" name="csrfToken"
+					           value="<%= ProductView.escape(
+					               request.getAttribute("myOrderDeleteCsrf")) %>">
+					
+					    <button class="my-outline-button" type="submit">
+					        현재 배송 상태 조회
+					    </button>
+					</form>
+					
+					<p id="my-order-tracking-result"
+					   role="status"
+					   aria-live="polite"></p>
 					<%
 					}
 					%>
@@ -3384,6 +3404,59 @@ if (memberConsentForm && memberConsentMessage && memberConsentSaveButton) {
         }
     });
 }
+</script>
+<script>
+(function () {
+    const form =
+        document.getElementById("my-order-tracking-form");
+
+    if (!form) return;
+
+    const button =
+        form.querySelector('button[type="submit"]');
+
+    const resultBox =
+        document.getElementById("my-order-tracking-result");
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (button.disabled) return;
+
+        button.disabled = true;
+        resultBox.textContent = "배송 상태를 확인하고 있습니다.";
+
+        try {
+            const data =
+                new URLSearchParams(new FormData(form));
+
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: data
+            });
+
+            if (!response.ok) {
+                throw new Error("배송조회 요청에 실패했습니다.");
+            }
+
+            const result = (await response.text()).trim();
+
+            if (result !== "OK") {
+                resultBox.textContent = result;
+                return;
+            }
+
+            // 갱신된 DB 상태로 주문 진행 단계를 다시 표시
+            window.location.reload();
+
+        } catch (error) {
+            resultBox.textContent = error.message;
+
+        } finally {
+            button.disabled = false;
+        }
+    });
+})();
 </script>
 </body>
 </html>

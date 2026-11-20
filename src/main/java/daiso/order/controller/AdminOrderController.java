@@ -167,8 +167,7 @@ public class AdminOrderController {
     		return result.toString();
     	}
     	String orderNo=request.getParameter("orderNo");
-    	String carrierId=request.getParameter("carrierId");
-    	String trackingNumber = request.getParameter("trackingNumber");
+    	
     	
     	if (orderNo == null || orderNo.isBlank() || orderNo.length() > 100) {
     		
@@ -184,10 +183,38 @@ public class AdminOrderController {
     			result.addProperty("message", "주문을 찾을 수 없습니다.");
     			return result.toString();
     		}
-    	
+    	String carrierId = order.getCarrierId();
+    	String trackingNumber = order.getTrackingNumber();
+    	if(carrierId == null || carrierId.isBlank()||trackingNumber ==null||trackingNumber.isBlank()) {
+    		result.addProperty("message", "이 주문에 운송장을 먼저 등록해 주세요.");
+    		return result.toString();
+    	}
     	DeliveryTrackerClient client = new DeliveryTrackerClient();
     	
     	JsonObject tracking = client.track(carrierId,trackingNumber);
+    	String deliveryCode = tracking
+    		    .getAsJsonObject("lastEvent")
+    		    .getAsJsonObject("status")
+    		    .get("code").getAsString();
+
+    		String nextStatus = null;
+
+    		if ("DELIVERED".equals(deliveryCode)) {
+    		    nextStatus = "DELIVERED";
+
+    		} else if ("IN_TRANSIT".equals(deliveryCode)
+    		        || "OUT_FOR_DELIVERY".equals(deliveryCode)) {
+    		    nextStatus = "SHIPPED";
+    		}
+
+    		if (nextStatus != null) {
+    		    dao.updateDeliveryStatus(
+    		        orderNo,
+    		        carrierId,
+    		        trackingNumber,
+    		        nextStatus
+    		    );
+    		}
     	result.addProperty("success", true);
         result.add("tracking", tracking);
 
@@ -224,6 +251,7 @@ public class AdminOrderController {
 
     return result.toString();
     }
+    	
     	
 }
     
