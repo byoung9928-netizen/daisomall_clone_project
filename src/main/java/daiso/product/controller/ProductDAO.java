@@ -1,6 +1,7 @@
 package daiso.product.controller;
 
 import daiso.product.dao.ReviewVisibility;
+import daiso.product.dto.ProductActivityItem;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -161,6 +162,75 @@ public class ProductDAO {
         return findById(conn, productId, false);
     }
 
+    void loadActivityRatings(Connection conn, List<ProductActivityItem> items) throws SQLException {
+        if (items.isEmpty()) return;
+        String placeholders = String.join(",", Collections.nCopies(items.size(), "?"));
+        Map<String, ProductDTO> products = new LinkedHashMap<>();
+        for (ProductActivityItem item : items) products.put(item.product.getProductId(), item.product);
+        String sql = "SELECT rv.product_id, AVG(rv.rating) AS average_rating, COUNT(*) AS review_count "
+                + "FROM product_reviews rv WHERE rv.deleted_at IS NULL AND rv.product_id IN (" + placeholders + ")"
+                + ReviewVisibility.PUBLISHED + " GROUP BY rv.product_id";
+        for (ProductDTO product : products.values()) {
+            product.setRating(0);
+            product.setReviewCount(0);
+        }
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, items.stream().map(item -> item.product.getProductId()).collect(java.util.stream.Collectors.toList()));
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    ProductDTO product = products.get(rows.getString("product_id"));
+                    product.setRating(rows.getDouble("average_rating"));
+                    product.setReviewCount(rows.getInt("review_count"));
+                }
+            }
+        }
+    }
+
+    List<ProductActivityItem> findRecentlyViewed(Connection conn, List<String> ids, int limit, int offset) throws SQLException {
+        if (ids.isEmpty() || offset >= ids.size()) return List.of();
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        String sql = VISIBLE_CATEGORIES + " SELECT " + ADMIN_COLUMNS + " FROM products p "
+                + "JOIN visible_categories v ON p.category_id = v.category_id WHERE p.product_id IN (" + placeholders + ")";
+        Map<String, ProductDTO> products = new LinkedHashMap<>();
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, ids);
+            for (ProductDTO product : readProducts(query)) products.put(product.getProductId(), product);
+        }
+        List<ProductActivityItem> items = new ArrayList<>();
+        int seen = 0;
+        for (String id : ids) {
+            ProductDTO product = products.get(id);
+            if (product != null && seen++ >= offset) items.add(new ProductActivityItem(product, 0));
+            if (items.size() == limit) break;
+        }
+        return items;
+    }
+
+    List<ProductActivityItem> findFrequentlyPurchased(Connection conn, String member, int limit, int offset)
+            throws SQLException {
+        String sql = VISIBLE_CATEGORIES
+                + ", member_purchases AS (SELECT i.product_id, COUNT(DISTINCT o.order_id) AS purchase_count, "
+                + "MAX(o.created_at) AS last_purchase FROM order_items i JOIN orders o ON o.order_id = i.order_id "
+                + "WHERE o.member_id = ? AND o.status = 'PAID' AND o.canceled_at IS NULL "
+                + "AND EXISTS (SELECT 1 FROM payment_attempts pa WHERE pa.order_id = o.order_id "
+                + "AND pa.method = 'KAKAOPAY' AND pa.status = 'APPROVED' AND pa.approved_at IS NOT NULL "
+                + "AND pa.tid IS NOT NULL AND pa.tid <> '' AND pa.amount = o.total_amount) GROUP BY i.product_id) "
+                + "SELECT " + ADMIN_COLUMNS + ", mp.purchase_count FROM member_purchases mp "
+                + "JOIN products p ON p.product_id = mp.product_id "
+                + "JOIN visible_categories v ON p.category_id = v.category_id "
+                + "ORDER BY mp.purchase_count DESC, mp.last_purchase DESC, p.product_id LIMIT ? OFFSET ?";
+        List<ProductActivityItem> items = new ArrayList<>();
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            query.setString(1, member);
+            query.setInt(2, limit);
+            query.setInt(3, offset);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) items.add(new ProductActivityItem(readProduct(rows), rows.getLong("purchase_count")));
+            }
+        }
+        return items;
+    }
+
     ProductDTO findVisibleById(Connection conn, String productId) throws SQLException {
         return findById(conn, productId, true);
     }
@@ -200,6 +270,23 @@ public class ProductDAO {
         return categories;
     }
 
+    private static final String STOCK_WATCH_CONDITION = "p.stock_quantity BETWEEN 0 AND 5 "
+            + "AND p.status IN ('AVAILABLE', 'SOLD_OUT')";
+
+    Map<String, Integer> stockWatchCounts(Connection conn) throws SQLException {
+        String sql = "WITH RECURSIVE roots AS (SELECT category_id, category_id AS root_id FROM categories "
+                + "WHERE parent_id IS NULL AND is_visible = 1 UNION ALL "
+                + "SELECT c.category_id, r.root_id FROM categories c JOIN roots r ON c.parent_id = r.category_id "
+                + "WHERE c.is_visible = 1) SELECT r.root_id, COUNT(*) AS stock_count "
+                + "FROM products p JOIN roots r ON r.category_id = p.category_id WHERE "
+                + STOCK_WATCH_CONDITION + " GROUP BY r.root_id";
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        try (PreparedStatement query = conn.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
+            while (rows.next()) counts.put(rows.getString("root_id"), rows.getInt("stock_count"));
+        }
+        return counts;
+    }
+
     CatalogPage findCatalog(Connection conn, CatalogFilter filter) throws SQLException {
         List<Object> parameters = new ArrayList<>();
         String categories = "visible_categories";
@@ -210,7 +297,27 @@ public class ProductDAO {
             parameters.add(filter.category);
         }
         StringBuilder scope = new StringBuilder(" FROM products p JOIN " + categories
-                + " c ON p.category_id = c.category_id" + ACTIVE_REVIEW_STATS + " WHERE 1 = 1");
+                + " c ON p.category_id = c.category_id" + ACTIVE_REVIEW_STATS);
+        if (filter.salesDays > 0) {
+            sql += ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
+                    + "FROM orders o JOIN payment_attempts pa ON pa.order_id = o.order_id "
+                    + "WHERE o.status = 'PAID' AND o.canceled_at IS NULL AND pa.status = 'APPROVED' "
+                    + "AND pa.tid <> '' AND pa.amount = o.total_amount "
+                    + "AND pa.approved_at >= TIMESTAMPADD(DAY, ?, CURRENT_TIMESTAMP) GROUP BY o.order_id)";
+            String units = filter.salesGrowth
+                    ? "SUM(CASE WHEN a.approved_at >= CURRENT_TIMESTAMP - INTERVAL 1 DAY "
+                        + "THEN i.quantity ELSE -i.quantity END)"
+                    : "SUM(i.quantity)";
+            scope.append(" JOIN (SELECT i.product_id, ").append(units)
+                    .append(" AS units FROM approved_orders a JOIN order_items i ON i.order_id = a.order_id "
+                    + "GROUP BY i.product_id HAVING units > 0) sales_rank ON sales_rank.product_id = p.product_id");
+            parameters.add(-filter.salesDays);
+        }
+        if (filter.wishlistRank) {
+            scope.append(" JOIN (SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
+                    + "wishlist_rank ON wishlist_rank.product_id = p.product_id");
+        }
+        scope.append(" WHERE 1 = 1");
         if (!filter.keyword.isEmpty()) {
             scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0"
                     + " OR LOCATE(?, p.brand) > 0)");
@@ -234,9 +341,24 @@ public class ProductDAO {
         if (filter.lowStock) {
             scope.append(" AND p.stock_quantity <= 5");
         }
-        if (filter.topRated) {
-            scope.append(" AND " + REVIEW_AVERAGE + " = 5 AND " + REVIEW_COUNT + " > 0");
+        if (filter.stockWatch) scope.append(" AND ").append(STOCK_WATCH_CONDITION);
+        if (filter.recentOnly) scope.append(" AND p.created_at >= CURRENT_TIMESTAMP - INTERVAL 30 DAY");
+        if (filter.withReviews || filter.topRated || filter.ratingBand != null) {
+            scope.append(" AND ").append(REVIEW_COUNT).append(" > 0");
         }
+        if (filter.topRated) scope.append(" AND ").append(REVIEW_AVERAGE).append(" = 5");
+        if (filter.ratingBand != null) {
+            String score = filter.ratingBand.compareTo(java.math.BigDecimal.valueOf(5)) == 0
+                    ? REVIEW_AVERAGE : "ROUND(" + REVIEW_AVERAGE + ", 1)";
+            scope.append(" AND ").append(score).append(" = ?");
+            parameters.add(filter.ratingBand);
+        }
+        if (filter.satisfactoryReview) {
+            scope.append(" AND EXISTS (SELECT 1 FROM product_reviews rv JOIN product_review_answers ra "
+                    + "ON ra.review_id = rv.review_id WHERE rv.product_id = p.product_id AND ra.answer_value = 3 "
+                    + "AND rv.deleted_at IS NULL").append(ReviewVisibility.PUBLISHED).append(')');
+        }
+        if (filter.publicSale) scope.append(" AND p.status <> 'SCHEDULED'");
 
         int total;
         try (PreparedStatement query = conn.prepareStatement(sql + " SELECT COUNT(*)" + scope)) {
@@ -248,7 +370,10 @@ public class ProductDAO {
         }
 
         String order = sortSql(filter.sort);
-        if ("recommended".equals(filter.sort) && !filter.keyword.isEmpty()) {
+        if (filter.salesDays > 0) order = "sales_rank.units DESC, " + order;
+        if (filter.wishlistRank) order = "wishlist_rank.saves DESC, " + order;
+        if (filter.salesDays == 0 && !filter.wishlistRank && "recommended".equals(filter.sort)
+                && !filter.keyword.isEmpty()) {
             order = "CASE WHEN p.product_code = ? THEN 0 ELSE 1 END, " + order;
             parameters.add(filter.keyword);
         }
@@ -265,6 +390,8 @@ public class ProductDAO {
         switch (sort) {
             case "newest":
                 return "p.created_at DESC";
+            case "stockDesc":
+                return "p.stock_quantity DESC";
             case "priceAsc":
                 return "p.price ASC";
             case "priceDesc":
@@ -322,7 +449,18 @@ public class ProductDAO {
         Integer maxPrice;
         boolean available;
         boolean lowStock;
+        boolean stockWatch;
+        boolean recentOnly;
+        String watchRank = "";
         boolean topRated;
+        boolean publicSale;
+        boolean withReviews;
+        boolean wishlistRank;
+        boolean salesGrowth;
+        boolean satisfactoryReview;
+        int salesDays;
+        java.math.BigDecimal ratingBand;
+        String collectionMode = "";
         int limit;
         int offset;
     }

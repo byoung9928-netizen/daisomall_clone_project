@@ -1,5 +1,7 @@
 package daiso.product.dao;
 
+import daiso.product.controller.ProductDTO;
+import daiso.product.dto.MyReviewItem;
 import daiso.product.dto.ProductReview;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -23,15 +25,20 @@ public final class ProductReviewDAO {
             + "AND o.status = 'CANCELLED' AND o.canceled_at IS NOT NULL "
             + "AND p.method = 'KAKAOPAY' AND p.status = 'CANCELLED' AND p.approved_at IS NOT NULL "
             + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount) AS refunded";
+    private static final String APPROVED_PURCHASE = "o.status = 'PAID' AND o.canceled_at IS NULL "
+            + "AND p.method = 'KAKAOPAY' AND p.status = 'APPROVED' "
+            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.approved_at IS NOT NULL AND p.amount = o.total_amount";
     private static final String PURCHASE = "SELECT i.order_item_id FROM order_items i "
             + "JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
             + "WHERE o.member_id = ? AND i.product_id = ? "
-            + "AND o.status = 'PAID' AND o.canceled_at IS NULL "
-            + "AND p.method = 'KAKAOPAY' AND p.status = 'APPROVED' "
-            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.approved_at IS NOT NULL "
-            + "AND p.amount = o.total_amount "
-            + "ORDER BY p.approved_at DESC, i.order_item_id DESC LIMIT 1";
+            + "AND " + APPROVED_PURCHASE + " ORDER BY p.approved_at DESC, i.order_item_id DESC LIMIT 1";
+
+    private static final String VISIBLE = "WITH RECURSIVE visible AS ("
+            + "SELECT category_id FROM categories WHERE parent_id IS NULL AND is_visible = 1 "
+            + "UNION ALL SELECT c.category_id FROM categories c JOIN visible v "
+            + "ON c.parent_id = v.category_id WHERE c.is_visible = 1) ";
+    private static final String MY_PRODUCT = "pr.product_id, pr.name, pr.image_url, pr.product_code, ";
 
     public enum Sort {
         NEWEST("newest", "created_at DESC, review_id DESC"),
@@ -92,6 +99,48 @@ public final class ProductReviewDAO {
                 return rows.next() ? review(rows, true) : null;
             }
         }
+    }
+
+    public List<MyReviewItem> mine(Connection connection, String member, boolean written, boolean oldest,
+            int limit, int offset) throws SQLException {
+        String sql;
+        if (written) {
+            sql = VISIBLE + "SELECT " + MY_PRODUCT + "r.review_id, r.rating, r.content, r.created_at AS event_at, "
+                    + "COALESCE(rm.moderation_state, 'PUBLISHED') AS moderation_state, v.category_id IS NOT NULL AS visible "
+                    + "FROM product_reviews r JOIN products pr ON pr.product_id = r.product_id "
+                    + "LEFT JOIN visible v ON pr.category_id = v.category_id "
+                    + "LEFT JOIN product_review_moderation rm ON rm.review_id = r.review_id "
+                    + "WHERE r.member_id = ? AND r.deleted_at IS NULL";
+        } else {
+            sql = VISIBLE + ", eligible AS (SELECT i.product_id, MAX(p.approved_at) AS event_at "
+                    + "FROM order_items i JOIN orders o ON o.order_id = i.order_id "
+                    + "JOIN payment_attempts p ON p.order_id = o.order_id WHERE o.member_id = ? AND " + APPROVED_PURCHASE
+                    + " AND NOT EXISTS(SELECT 1 FROM product_reviews r WHERE r.member_id = o.member_id "
+                    + "AND r.product_id = i.product_id AND r.deleted_at IS NULL) GROUP BY i.product_id) "
+                    + "SELECT " + MY_PRODUCT + "0 AS review_id, 0 AS rating, NULL AS content, e.event_at, "
+                    + "NULL AS moderation_state, TRUE AS visible FROM eligible e JOIN products pr ON pr.product_id = e.product_id "
+                    + "JOIN visible v ON pr.category_id = v.category_id";
+        }
+        sql += " ORDER BY event_at " + (oldest ? "ASC" : "DESC") + ", pr.product_id LIMIT ? OFFSET ?";
+        List<MyReviewItem> items = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, member);
+            query.setInt(2, limit);
+            query.setInt(3, offset);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    ProductDTO product = new ProductDTO();
+                    product.setProductId(rows.getString("product_id"));
+                    product.setName(rows.getString("name"));
+                    product.setProductCode(rows.getString("product_code"));
+                    product.setImage(rows.getString("image_url"));
+                    items.add(new MyReviewItem(product, rows.getObject("event_at", LocalDateTime.class),
+                            rows.getLong("review_id"), rows.getInt("rating"), rows.getString("content"),
+                            rows.getString("moderation_state"), rows.getBoolean("visible")));
+                }
+            }
+        }
+        return items;
     }
 
     // 저장 시 승인 근거 행을 커밋까지 잠가 확인과 등록 사이의 상태 변경을 막는다.

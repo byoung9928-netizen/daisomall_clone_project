@@ -6,6 +6,11 @@
 <%@ page import="java.util.Set"%>
 <%
 String myContext = request.getContextPath();
+String productActivity = request.getParameter("productActivity");
+if (productActivity == null || !Set.of("wishlist", "recent", "frequent", "restock", "reviews").contains(productActivity)
+        || "profile".equals(request.getAttribute("myPageSection"))) {
+    productActivity = "";
+}
 Set<String> linkedSocialProviders =
 (Set<String>) request.getAttribute("linkedSocialProviders");
 
@@ -67,6 +72,12 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 <html lang="ko">
 <head>
 <%@ include file="../common/head.jspf"%>
+<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/my-product-activity.css">
+<% if (Set.of("wishlist", "recent", "frequent").contains(productActivity)) { %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
+    <script defer src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js"></script>
+<% } %>
+<script defer src="${pageContext.request.contextPath}/assets/js/common/my-product-activity.js"></script>
 <style>
 .my-screen.container {
 	width: calc(100% - 48px);
@@ -987,66 +998,10 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	font-size: 20px;
 }
 
-.my-home-products {
-	margin-top: 38px;
-}
-
-.my-home-product-grid {
-	display: grid;
-	gap: 12px;
-}
-
-.my-home-wish-grid {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.my-home-recent-grid {
-	grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.my-home-product {
-	min-width: 0;
-	font-size: 12px;
-}
-
-.my-home-product-image {
-	position: relative;
-	aspect-ratio: 1/1.15;
-	overflow: hidden;
-	margin-bottom: 7px;
-	background: #f1f2f4;
-}
-
-.my-home-product-image img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.my-home-product-image span {
-	position: absolute;
-	right: 8px;
-	bottom: 8px;
-	color: #e60023;
-	font-size: 20px;
-}
-
-.my-home-product strong, .my-home-product small {
-	display: block;
-	margin-top: 5px;
-}
-
-.my-home-product small {
-	color: #7a889b;
-}
-
 @media ( max-width : 700px) {
 	.my-home-shortcuts {
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		row-gap: 12px;
-	}
-	.my-home-recent-grid {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 }
 
@@ -1818,7 +1773,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<h2>
 						주문 관리 <small>최근 1년</small>
 					</h2>
-					<a class="my-current" href="<%=myContext%>/app/order/mypage">주문내역</a>
+					<a class="<%= productActivity.isEmpty() ? "my-current" : "" %>" href="<%=myContext%>/app/order/mypage">주문내역</a>
 					<button type="button" data-my-unavailable>취소/교환/반품 내역</button>
 				</section>
 				<section class="my-menu-group">
@@ -1831,12 +1786,12 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 활동</h2>
-					<button type="button" data-my-unavailable>찜</button>
-					<button type="button" data-my-unavailable>리뷰</button>
-					<button type="button" data-my-unavailable>최근 본</button>
-					<button type="button" data-my-unavailable>자주 산</button>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=wishlist" <%= "wishlist".equals(productActivity) ? "class=\"my-current\" aria-current=\"page\"" : "" %>>찜</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=reviews" <%= "reviews".equals(productActivity) ? "class=\"my-current\" aria-current=\"page\"" : "" %>>리뷰</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=recent" <%= "recent".equals(productActivity) ? "class=\"my-current\" aria-current=\"page\"" : "" %>>최근 본</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=frequent" <%= "frequent".equals(productActivity) ? "class=\"my-current\" aria-current=\"page\"" : "" %>>자주 산</a>
 					<button type="button" data-my-unavailable>이벤트 참여내역</button>
-					<button type="button" data-my-unavailable>상품 입고 알림</button>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=restock" <%= "restock".equals(productActivity) ? "class=\"my-current\" aria-current=\"page\"" : "" %>>상품 입고 알림</a>
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 정보</h2>
@@ -1862,7 +1817,15 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 			</aside>
 			<div class="my-content">
 				<%
-				if ("profile".equals(request.getAttribute("myPageSection"))) {
+				if ("reviews".equals(productActivity)) {
+                    %>
+                    <%@ include file="../product/my-reviews.jspf" %>
+                    <%
+                } else if (!productActivity.isEmpty()) {
+                    %>
+                    <%@ include file="../product/my-activity.jspf" %>
+                    <%
+                } else if ("profile".equals(request.getAttribute("myPageSection"))) {
 					MemberProfileInfo profile = (MemberProfileInfo) request.getAttribute("profile");
 
 					String genderText = "선택 안 함";
@@ -2505,15 +2468,9 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				%>
 				<nav class="my-home-shortcuts" aria-label="마이페이지 바로가기">
 					<a href="<%=myContext%>/app/order/mypage"><span>▤</span>주문내역</a>
-					<button type="button" data-my-unavailable>
-						<span>♡</span>찜
-					</button>
-					<button type="button" data-my-unavailable>
-						<span>▧</span>리뷰
-					</button>
-					<button type="button" data-my-unavailable>
-						<span>◷</span>최근 본
-					</button>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=wishlist"><span>♡</span>찜</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=reviews"><span>▧</span>리뷰</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=recent"><span>◷</span>최근 본</a>
 					<button type="button" data-my-unavailable>
 						<span>％</span>쿠폰
 					</button>
@@ -2814,51 +2771,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				}
 				%>
 
-				<section class="my-section my-home-products">
-					<div class="my-section-heading">
-						<h2>찜한 상품 ›</h2>
-						<button type="button" disabled>전체보기</button>
-					</div>
-
-					<div class="my-home-product-grid my-home-wish-grid">
-						<%
-						for (int i = 0; i < 3; i++) {
-						%>
-						<article class="my-home-product">
-							<div class="my-home-product-image">
-								<img src="<%=myContext%>/assets/images/mock-product-<%=i%>.svg"
-									alt="샘플 상품 이미지"> <span aria-hidden="true">♡</span>
-							</div>
-							<strong>샘플 상품</strong> <small>찜 목록 연결 준비 중</small>
-						</article>
-						<%
-						}
-						%>
-					</div>
-				</section>
-
-				<section class="my-section my-home-products">
-					<div class="my-section-heading">
-						<h2>최근 본 상품 ›</h2>
-						<button type="button" disabled>전체보기</button>
-					</div>
-
-					<div class="my-home-product-grid my-home-recent-grid">
-						<%
-						for (int i = 0; i < 5; i++) {
-						%>
-						<article class="my-home-product">
-							<div class="my-home-product-image">
-								<img src="<%=myContext%>/assets/images/mock-product-<%=i%>.svg"
-									alt="샘플 상품 이미지"> <span aria-hidden="true">♡</span>
-							</div>
-							<strong>샘플 상품</strong> <small>최근 본 상품 연결 준비 중</small>
-						</article>
-						<%
-						}
-						%>
-					</div>
-				</section>
+				<%@ include file="../product/my-activity.jspf" %>
 				<%
 				}
 				%>
