@@ -34,8 +34,8 @@ final class AdminProductFilter {
                 stock, quantity, sort.isEmpty() ? Sort.NEWEST : Sort.valueOf(sort));
     }
 
-    static AdminProductFilter forInventory(String keyword, Stock stock) {
-        return new AdminProductFilter(keyword, "", "", stock, null, Sort.NAME);
+    static AdminProductFilter forInventory(String keyword, String category, Stock stock, boolean lowFirst) {
+        return new AdminProductFilter(keyword, category, "", stock, null, lowFirst ? Sort.STOCK_ASC : Sort.NAME);
     }
 
     static AdminProductFilter defaults() {

@@ -14,7 +14,7 @@
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
@@ -30,6 +30,14 @@
                     <label class="field">상품명·품번
                         <input name="q" type="search" maxlength="120" value="<%= ProductView.escape(online.keyword) %>">
                     </label>
+                    <label class="field">카테고리
+                        <select name="category">
+                            <option value="">전체 카테고리</option>
+                            <% for (Map.Entry<String, String> category : online.categories.entrySet()) { %>
+                                <option value="<%= ProductView.escape(category.getKey()) %>" <%= category.getKey().equals(online.category) ? "selected" : "" %>><%= ProductView.escape(category.getValue()) %></option>
+                            <% } %>
+                        </select>
+                    </label>
                     <label class="field">재고 상태
                         <select name="state">
                             <% for (State state : State.values()) { %>
@@ -37,9 +45,19 @@
                             <% } %>
                         </select>
                     </label>
-                    <button class="button primary" type="submit">조회</button>
+                    <label class="field">정렬
+                        <select name="sort">
+                            <option value="">상품명순</option>
+                            <option value="low" <%= online.lowFirst ? "selected" : "" %>>재고 적은 순</option>
+                        </select>
+                    </label>
+                    <div class="inventory-filter-actions">
+                        <button class="button primary" type="submit">검색</button>
+                        <a class="button secondary" href="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">초기화</a>
+                    </div>
                 </form>
-                <p>검색 결과 <strong><%= online.total %></strong>종</p>
+                <p class="inventory-range" role="status">전체 <strong><%= online.total %></strong>종
+                    <% if (online.total > 0) { %><span> · <%= online.first %>–<%= online.last %>번째 상품 표시</span><% } %></p>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="온라인 재고 상품 표">
                     <table class="admin-table store-stock-table">
                         <thead><tr>
@@ -56,7 +74,7 @@
                                     <td><%= item.getStockQuantity() %>개</td>
                                     <td><span class="store-stock-badge" data-stock-state="<%= state.name() %>"><%= state.label %></span></td>
                                     <td><a class="button secondary"
-                                           href="<%= ProductView.url(inventoryContext, "/app/admin/products", Map.of("edit", item.getProductId())) %>">상품 관리에서 수정</a></td>
+                                           href="<%= online.editUrl(inventoryContext, item.getProductId()) %>#product-stock">재고 수정</a></td>
                                 </tr>
                             <% } %>
                             <% if (online.products.isEmpty()) { %><tr><td colspan="4">조건에 맞는 상품이 없습니다.</td></tr><% } %>

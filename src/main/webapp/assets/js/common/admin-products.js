@@ -8,7 +8,8 @@
             event.preventDefault();
             location.assign(close.href);
         });
-        const focus = location.hash === '#product-status' ? '#product-status' : '#product-editor-title';
+        const fieldTargets = ['#product-status', '#product-stock'];
+        const focus = fieldTargets.includes(location.hash) ? location.hash : '#product-editor-title';
         editor.querySelector(focus).focus();
     }
 

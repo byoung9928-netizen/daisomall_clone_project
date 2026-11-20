@@ -145,6 +145,10 @@ public final class AdminProductController {
             });
             if (!saved) return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST,
                     "상품과 최하위 카테고리를 확인해 주세요.", form);
+            Map<String, String> inventoryReturn = create ? Map.of() : OnlineInventoryController.returnParameters(request);
+            if (!inventoryReturn.isEmpty()) {
+                return "redirect:" + ProductView.rawUrl("", OnlineInventoryController.MAPPING, inventoryReturn);
+            }
             session.setAttribute(NOTICE, create ? "상품을 등록했습니다." : "상품을 수정했습니다.");
             return redirectToList(request);
         } catch (IllegalStateException error) {
@@ -342,7 +346,18 @@ public final class AdminProductController {
                     ProductView.with(filter.parameters(1), "sort", nextPriceSort.name())));
             Map<String, String> historyFilters = ProductView.with(filters, "history", "1");
             request.setAttribute("adminProductHistory", ProductView.url(context, url, historyFilters));
-            request.setAttribute("adminProductSave", ProductView.url(context, url + "/save", filters));
+            Map<String, String> saveFilters = new LinkedHashMap<>(filters);
+            Map<String, String> inventoryReturn = form != null && !form.getOrDefault("id", "").isEmpty()
+                    ? OnlineInventoryController.returnParameters(request) : Map.of();
+            if (!inventoryReturn.isEmpty()) {
+                saveFilters.put("fromInventory", "1");
+                saveFilters.put("inventoryQuery", inventoryReturn.get("q"));
+                saveFilters.put("inventoryCategory", inventoryReturn.get("category"));
+                saveFilters.put("inventoryState", inventoryReturn.get("state"));
+                saveFilters.put("inventoryPage", inventoryReturn.get("page"));
+                saveFilters.put("inventorySort", inventoryReturn.get("sort"));
+            }
+            request.setAttribute("adminProductSave", ProductView.url(context, url + "/save", saveFilters));
             request.setAttribute("adminProductDelete", ProductView.url(context, url + "/delete", filters));
             request.setAttribute("adminProductBulk", ProductView.url(context, url + "/bulk-status", filters));
             if (history) {
@@ -380,7 +395,8 @@ public final class AdminProductController {
             request.setAttribute("adminProductNext", page < pages ? ProductView.url(context, url,
                     ProductView.with(filters, "page", Integer.toString(page + 1))) : null);
             request.setAttribute("adminProductNew", ProductView.url(context, url, ProductView.with(filters, "new", "1")));
-            request.setAttribute("adminProductList", ProductView.url(context, url, filters));
+            request.setAttribute("adminProductList", inventoryReturn.isEmpty() ? ProductView.url(context, url, filters)
+                    : ProductView.url(context, OnlineInventoryController.ROUTE, inventoryReturn));
             request.setAttribute("productStatuses", STATUSES);
             request.setAttribute(CSRF, token(session));
             return VIEW;

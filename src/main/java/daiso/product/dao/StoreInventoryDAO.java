@@ -91,10 +91,25 @@ public final class StoreInventoryDAO {
         return result;
     }
 
-    public List<Stock> assortment(Connection connection, String store, String keyword, int limit, int offset)
+    public enum AssortmentFilter {
+        UNREGISTERED("미등록", " AND i.product_id IS NULL"),
+        ACTIVE("취급 중", " AND i.is_carried = 1"),
+        ENDED("취급 종료", " AND i.is_carried = 0"),
+        ALL("전체", "");
+
+        public final String label;
+        private final String predicate;
+        AssortmentFilter(String label, String predicate) {
+            this.label = label;
+            this.predicate = predicate;
+        }
+    }
+
+    public List<Stock> assortment(Connection connection, String store, String keyword, AssortmentFilter filter,
+            int limit, int offset)
             throws SQLException {
         String sql = STOCK_FIELDS + "FROM products p LEFT JOIN store_inventory i "
-                + "ON i.product_id = p.product_id AND i.store_id = ? WHERE 1 = 1"
+                + "ON i.product_id = p.product_id AND i.store_id = ? WHERE 1 = 1" + filter.predicate
                 + String.format(SEARCH, "p.name", "p.product_code") + " ORDER BY p.name, p.product_id LIMIT ? OFFSET ?";
         List<Stock> result = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
