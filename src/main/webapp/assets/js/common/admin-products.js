@@ -124,43 +124,6 @@
         price.addEventListener('input', updatePriceFeedback);
         price.addEventListener('invalid', updatePriceFeedback);
         updatePriceFeedback();
-        setupDetailPreview(form, preview);
-    }
-
-    function setupDetailPreview(form, imagePreview) {
-        const detail = form.querySelector('[data-admin-product-preview]');
-        if (!detail) return;
-        const image = detail.querySelector('[data-preview-image]');
-        const fallback = image.dataset.fallbackImage;
-        const priceFormat = new Intl.NumberFormat('ko-KR');
-        const displayedValues = new Map(Array.from(detail.querySelectorAll('[data-preview-value]'),
-            element => [element.dataset.previewValue, element]));
-        const set = (name, value) => { displayedValues.get(name).textContent = value; };
-
-        function update() {
-            if (!detail.open) return;
-            const fields = form.elements;
-            const quantity = fields.stock.valueAsNumber;
-            const status = fields.status.value === 'SCHEDULED' ? '판매 예정'
-                : fields.status.value === 'AVAILABLE' && quantity > 0 ? '구매 가능' : '품절';
-            set('brand', fields.brand.value.trim());
-            set('name', fields.name.value.trim() || '상품명');
-            set('price', Number.isFinite(fields.price.valueAsNumber) ? priceFormat.format(fields.price.valueAsNumber) + '원' : '—');
-            set('code', '품번 ' + (fields.code.value.trim() || '—'));
-            set('stock', status + ' · 온라인 재고 ' + (Number.isFinite(quantity) ? quantity : '—') + '개');
-            set('description', fields.description.value.trim() || '등록한 상품 설명이 없습니다.');
-            const source = imagePreview.hidden ? fallback : imagePreview.src;
-            if (image.getAttribute('src') !== source) image.src = source;
-        }
-
-        image.addEventListener('error', () => {
-            if (image.getAttribute('src') !== fallback) image.src = fallback;
-        });
-        detail.addEventListener('toggle', update);
-        form.addEventListener('input', update);
-        form.addEventListener('change', update);
-        imagePreview.addEventListener('load', update);
-        imagePreview.addEventListener('error', update);
     }
 
     const stockFilter = document.querySelector('[name="filterStock"]');
