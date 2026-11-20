@@ -143,7 +143,7 @@ public final class WishlistController {
         }
     }
 
-    private static boolean validToken(HttpServletRequest request, String memberId) {
+    static boolean validToken(HttpServletRequest request, String memberId) {
         HttpSession session = request.getSession(false);
         Object expected = session.getAttribute(CSRF);
         String[] submitted = request.getParameterValues("csrf");

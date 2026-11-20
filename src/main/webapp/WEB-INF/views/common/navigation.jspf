@@ -16,14 +16,15 @@
             <a class="brand-menu" data-navigation-key="brand" href="${pageContext.request.contextPath}/list.jsp?collection=brand">브랜드</a>
             <button class="season-link" type="button" data-navigation-key="season" data-unavailable>겨울 시즌템</button>
             <a data-navigation-key="home" href="${pageContext.request.contextPath}/">홈</a>
-            <button type="button" data-navigation-key="new" data-unavailable>신상발견</button>
-            <button type="button" data-navigation-key="open-run" data-unavailable>오픈런</button>
-            <button type="button" data-navigation-key="exhibitions" data-unavailable>기획전</button>
-            <button type="button" data-navigation-key="ranking" data-unavailable>랭킹</button>
-            <button type="button" data-navigation-key="rating" data-unavailable>별점5점</button>
-            <button type="button" data-navigation-key="selling-out" data-unavailable>품절임박</button>
-            <button type="button" data-navigation-key="beauty" data-unavailable>뷰티</button>
-            <button type="button" data-navigation-key="health" data-unavailable>건강식품</button>
+            <a data-navigation-key="new" href="${pageContext.request.contextPath}/app/products?collection=new">신상발견</a>
+            <a data-navigation-key="open-run" href="${pageContext.request.contextPath}/app/products?collection=open-run">오픈런</a>
+            <a data-navigation-key="exhibitions" href="${pageContext.request.contextPath}/app/products?collection=exhibitions">기획전</a>
+            <a data-navigation-key="ranking" href="${pageContext.request.contextPath}/app/products?collection=ranking">랭킹</a>
+            <a data-navigation-key="rating" href="${pageContext.request.contextPath}/app/products?collection=rating">별점5점</a>
+            <a data-navigation-key="selling-out" href="${pageContext.request.contextPath}/app/products/selling-out"
+               <%= "selling-out".equals(navigationKey) ? "aria-current=\"page\"" : "" %>>품절임박</a>
+            <a data-navigation-key="beauty" href="${pageContext.request.contextPath}/app/products?collection=beauty">뷰티</a>
+            <a data-navigation-key="health" href="${pageContext.request.contextPath}/app/products?collection=health">건강식품</a>
         </div>
         <div class="delivery-links">
             <button type="button" data-navigation-key="pickup" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg" alt="" width="16" height="16">매장픽업</button>

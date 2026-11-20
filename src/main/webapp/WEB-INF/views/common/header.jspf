@@ -59,10 +59,10 @@
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#user" /></svg>
                 <span class="account-label">마이페이지</span>
             </button>
-            <button type="button" title="찜 한 상품" data-unavailable>
+            <a class="account-wishlist-link" href="${pageContext.request.contextPath}/app/order/mypage?productActivity=wishlist" title="찜한 상품">
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#heart" /></svg>
                 <span class="account-label">찜한 상품</span>
-            </button>
+            </a>
             <button type="button" title="장바구니" data-shopping-route="cart" data-unavailable>
                 <svg class="account-icon" aria-hidden="true"><use href="${pageContext.request.contextPath}/assets/images/icons.svg#bag" /></svg>
                 <span class="account-label">장바구니</span>

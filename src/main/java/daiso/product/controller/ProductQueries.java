@@ -9,7 +9,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.sql.DataSource;
 
 final class ProductQueries {
-    private static final Set<String> SORTS = Set.of("recommended", "newest", "priceAsc", "priceDesc", "rating", "reviews");
+    private static final Set<String> SORTS = Set.of("recommended", "newest", "priceAsc", "priceDesc", "rating", "reviews", "stockDesc");
     private static final Set<String> STATUSES = Set.of("", "AVAILABLE", "SOLD_OUT", "SCHEDULED");
 
     private ProductQueries() {
