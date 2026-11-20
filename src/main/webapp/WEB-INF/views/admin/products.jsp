@@ -1,5 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView" %>
+<%@ page import="java.util.Map,daiso.product.controller.ProductDTO,daiso.product.controller.ProductView,daiso.product.dao.StoreInventoryDAO.State" %>
 <%
     request.setAttribute("adminSection", "products");
     String blocked = (String) request.getAttribute("adminProductBlocked");
@@ -25,10 +25,11 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-wizard.js" defer></script>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
@@ -91,9 +92,9 @@
                                 </label>
                             </div>
                         </div>
-                        <div class="admin-product-actions admin-product-filter-actions">
-                            <button class="button secondary" type="submit">검색</button>
-                            <a class="text-button" href="${pageContext.request.contextPath}/app/admin/products">초기화</a>
+                        <div class="admin-product-actions admin-product-filter-actions inventory-filter-actions">
+                            <button class="button primary" type="submit">검색</button>
+                            <a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products">초기화</a>
                         </div>
                     </form>
                     <div class="admin-product-actions admin-product-toolbar-actions">
@@ -146,7 +147,7 @@
                                 </label>
                                 <p class="product-field-feedback" id="product-price-feedback" role="status">${adminPriceRange}</p>
                                 <label class="field">온라인 재고
-                                <input name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>">
+                                <input id="product-stock" name="stock" type="number" min="0" max="2147483647" required value="<%= ProductView.escape(productForm.get("stock")) %>">
                                 </label>
                                 <label class="field">판매 상태
                                 <select id="product-status" name="status" required>
@@ -302,11 +303,11 @@
                     </dialog>
                 <% } %>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
-                    <table class="admin-table">
+                    <table class="admin-table store-stock-table">
                         <caption class="visually-hidden">상품 관리</caption>
                         <thead><tr>
                             <th scope="col"><span data-bulk-select-heading>선택</span><input type="checkbox" data-bulk-select-all hidden aria-label="현재 페이지 상품 모두 선택"></th>
-                            <th scope="col">상품 ID</th><th scope="col">품번</th><th scope="col">상품명</th>
+                            <th scope="col">상품 ID</th><th scope="col">상품명·품번</th>
                             <th scope="col"<%= priceAscending ? " aria-sort=\"ascending\"" : priceDescending ? " aria-sort=\"descending\"" : "" %>>
                                 <a class="admin-price-sort" href="<%= request.getAttribute("adminPriceSortLink") %>"
                                    aria-label="가격 <%= priceAscending ? "내림차순" : "오름차순" %>으로 정렬">
@@ -327,23 +328,27 @@
                                                value="<%= ProductView.escape(item.getProductId()) %>"
                                                aria-label="<%= ProductView.escape(item.getName()) %> 선택"></td>
                                     <td><%= ProductView.escape(item.getProductId()) %></td>
-                                    <td><%= ProductView.escape(item.getProductCode()) %></td>
-                                    <td><%= ProductView.escape(item.getName()) %></td>
+                                    <td><div class="store-stock-product">
+                                        <img src="<%= ProductView.image(request.getContextPath(), item) %>" width="44" height="48" loading="lazy" alt="">
+                                        <div><strong><%= ProductView.escape(item.getName()) %></strong><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>
+                                    </div></td>
                                     <td><%= ProductView.money(item.getPrice()) %></td>
                                     <td><%= ProductView.escape(statuses.getOrDefault(item.getStatus(), item.getStatus())) %></td>
-                                    <td><%= item.getStockQuantity() %></td>
-                                    <td>
-                                        <a class="text-button" href="<%= row.getValue().get("edit") %>#product-editor" aria-label="<%= ProductView.escape(item.getName()) %> 수정">수정</a>
-                                        <a class="text-button" href="<%= row.getValue().get("delete") %>#delete-product"
+                                    <% State quantityState = State.ofQuantity(item.getStockQuantity()); %>
+                                    <td><span class="store-stock-badge" data-stock-state="<%= quantityState.name() %>"><%= quantityState.label %></span>
+                                        <strong class="inventory-stock-number"><%= item.getStockQuantity() %>개</strong></td>
+                                    <td><div class="store-stock-actions">
+                                        <a class="button secondary" href="<%= row.getValue().get("edit") %>#product-editor" aria-label="<%= ProductView.escape(item.getName()) %> 수정">수정</a>
+                                        <a class="button secondary inventory-danger-outline" href="<%= row.getValue().get("delete") %>#delete-product"
                                            data-delete-id="<%= ProductView.escape(item.getProductId()) %>"
                                            data-delete-name="<%= ProductView.escape(item.getName()) %>"
                                            aria-label="<%= ProductView.escape(item.getName()) %> 삭제">삭제</a>
                                         <a class="text-button" href="<%= row.getValue().get("history") %>#product-history"
                                            aria-label="<%= ProductView.escape(item.getName()) %> 변경 이력">이력</a>
-                                    </td>
+                                    </div></td>
                                 </tr>
                             <% } %>
-                            <% if (productRows.isEmpty()) { %><tr><td colspan="8">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                            <% if (productRows.isEmpty()) { %><tr><td colspan="7">조건에 맞는 상품이 없습니다.</td></tr><% } %>
                         </tbody>
                     </table>
                 </div>

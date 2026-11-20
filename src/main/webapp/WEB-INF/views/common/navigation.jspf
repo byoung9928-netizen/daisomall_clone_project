@@ -15,7 +15,6 @@
         <div class="navigation-links">
             <a class="brand-menu" data-navigation-key="brand" href="${pageContext.request.contextPath}/list.jsp?collection=brand">브랜드</a>
             <button class="season-link" type="button" data-navigation-key="season" data-unavailable>겨울 시즌템</button>
-            <a data-navigation-key="home" href="${pageContext.request.contextPath}/">홈</a>
             <a data-navigation-key="new" href="${pageContext.request.contextPath}/app/products?collection=new">신상발견</a>
             <a data-navigation-key="open-run" href="${pageContext.request.contextPath}/app/products?collection=open-run">오픈런</a>
             <a data-navigation-key="exhibitions" href="${pageContext.request.contextPath}/app/products?collection=exhibitions">기획전</a>

@@ -1,109 +1,95 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ page import="java.util.Map,daiso.product.controller.OnlineInventoryController,daiso.product.controller.OnlineInventoryController.Page,daiso.product.controller.ProductView,daiso.product.controller.ProductDTO,daiso.product.dao.StoreInventoryDAO.State" %>
+<%
+    if (!Boolean.TRUE.equals(request.getAttribute("onlineInventoryReady"))) {
+        request.getRequestDispatcher(OnlineInventoryController.ROUTE).forward(request, response);
+        return;
+    }
+    String inventoryContext = request.getContextPath();
+    Page online = (Page) request.getAttribute("onlineInventoryPage");
+%>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
-<script src="${pageContext.request.contextPath}/assets/js/common/admin-ui.js" defer></script>
-<script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory.js" defer></script>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
-    <%@ include file="../common/admin-navigation.jspf" %>
-        <main id="admin-content" class="admin-content" data-admin-page="inventory" tabindex="-1">
-        <p class="admin-eyebrow">
-            MOCK COMMERCE OPERATIONS
-        </p>
-        <h1 class="page-title">
-            온라인 재고 관리
-        </h1>
-        <form class="admin-search">
-            <label class="field">
-                <span>
-                    이름 또는 ID 검색
-                </span>
-                <input name="query" type="text" maxlength="120" autocomplete="off">
-            </label>
-            <button class="button" type="submit">
-                검색
-            </button>
-        </form>
-        <section class="admin-panel" hidden>
-            <h2 hidden>
-            </h2>
-            <form class="admin-editor-form" hidden>
-                <label class="field">
-                    재고 위치
-                    <select name="location">
-                    </select>
-                </label>
-                <label class="field">
-                    재고 수량
-                    <input name="quantity" type="number" required maxlength="120" autocomplete="off">
-                </label>
-                <p class="error-message" role="alert">
-                </p>
-                <p class="form-status" role="status">
-                </p>
-                <button type="submit" class="button primary">
-                    재고 저장
-                </button>
-            </form>
-        </section>
-        <p data-count>
-        </p>
-        <div class="admin-table-scroll" tabindex="0" role="region" aria-label="온라인 재고 관리 표 (가로 스크롤 가능)">
-            <table class="admin-table">
-                <caption class="visually-hidden">
-                    온라인 재고 관리
-                </caption>
-                <thead>
-                    <tr>
-                        <th scope="col">
-                            상품 ID
-                        </th>
-                        <th scope="col">
-                            상품명
-                        </th>
-                        <th scope="col">
-                            온라인
-                        </th>
-                        <th scope="col">
-                            서울
-                        </th>
-                        <th scope="col">
-                            부산
-                        </th>
-                        <th scope="col">
-                            제주
-                        </th>
-                        <th scope="col">
-                            관리
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
-        <button type="button" class="button secondary" data-more>
-            재고 더 보기
-        </button>
-    </main>
+        <%@ include file="../common/admin-navigation.jspf" %>
+        <main id="admin-content" class="admin-content store-admin" tabindex="-1">
+            <h1 class="page-title">온라인 재고 관리</h1>
+            <p>온라인 판매 재고입니다. 재고 수정은 상품 관리에서 저장되며 기존 상품 변경 이력에 남습니다.</p>
+            <% if (request.getAttribute("onlineInventoryError") != null) { %>
+                <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("onlineInventoryError")) %></p>
+            <% } %>
+            <% if (online != null) { %>
+                <form class="admin-search store-admin-filters" method="get" action="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">
+                    <label class="field">상품명·품번
+                        <input name="q" type="search" maxlength="120" value="<%= ProductView.escape(online.keyword) %>">
+                    </label>
+                    <label class="field">카테고리
+                        <select name="category">
+                            <option value="">전체 카테고리</option>
+                            <% for (Map.Entry<String, String> category : online.categories.entrySet()) { %>
+                                <option value="<%= ProductView.escape(category.getKey()) %>" <%= category.getKey().equals(online.category) ? "selected" : "" %>><%= ProductView.escape(category.getValue()) %></option>
+                            <% } %>
+                        </select>
+                    </label>
+                    <label class="field">재고 상태
+                        <select name="state">
+                            <% for (State state : State.values()) { %>
+                                <option value="<%= state.name() %>" <%= state == online.state ? "selected" : "" %>><%= state.label %></option>
+                            <% } %>
+                        </select>
+                    </label>
+                    <label class="field">정렬
+                        <select name="sort">
+                            <option value="">상품명순</option>
+                            <option value="low" <%= online.lowFirst ? "selected" : "" %>>재고 적은 순</option>
+                        </select>
+                    </label>
+                    <div class="inventory-filter-actions">
+                        <button class="button primary" type="submit">검색</button>
+                        <a class="button secondary" href="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">초기화</a>
+                    </div>
+                </form>
+                <p class="inventory-range" role="status">전체 <strong><%= online.total %></strong>종
+                    <% if (online.total > 0) { %><span> · <%= online.first %>–<%= online.last %>번째 상품 표시</span><% } %></p>
+                <div class="admin-table-scroll" tabindex="0" role="region" aria-label="온라인 재고 상품 표">
+                    <table class="admin-table store-stock-table">
+                        <thead><tr>
+                            <th scope="col">상품</th><th scope="col">온라인 재고</th><th scope="col">재고 상태</th><th scope="col">관리</th>
+                        </tr></thead>
+                        <tbody>
+                            <% for (ProductDTO item : online.products) {
+                                   State state = State.ofQuantity(item.getStockQuantity()); %>
+                                <tr>
+                                    <td><div class="store-stock-product">
+                                        <img src="<%= ProductView.image(inventoryContext, item) %>" width="48" height="52" loading="lazy" alt="">
+                                        <div><strong><%= ProductView.escape(item.getName()) %></strong><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>
+                                    </div></td>
+                                    <td><%= item.getStockQuantity() %>개</td>
+                                    <td><span class="store-stock-badge" data-stock-state="<%= state.name() %>"><%= state.label %></span></td>
+                                    <td><a class="button secondary"
+                                           href="<%= online.editUrl(inventoryContext, item.getProductId()) %>#product-stock">재고 수정</a></td>
+                                </tr>
+                            <% } %>
+                            <% if (online.products.isEmpty()) { %><tr><td colspan="4">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <% if (online.previous != null || online.next != null) { %>
+                    <nav class="admin-product-pagination" aria-label="온라인 재고 페이지">
+                        <% if (online.previous != null) { %><a class="button secondary" rel="prev" href="<%= online.previous %>">이전</a><% } %>
+                        <span aria-current="page"><%= online.page %> / <%= online.pages %></span>
+                        <% if (online.next != null) { %><a class="button secondary" rel="next" href="<%= online.next %>">다음</a><% } %>
+                    </nav>
+                <% } %>
+            <% } %>
+        </main>
     </div>
-    <script>
-    // 공통 defer 스크립트 실행 후, 이 페이지의 HTML에 Mock 데이터와 이벤트를 연결합니다.
-    document.addEventListener("DOMContentLoaded", function () {
-        "use strict";
-        const app = window.Daiso;
-        const root = document.getElementById("admin-content");
-        const { link, button } = app.ui;
-        app.ready.then(function (repository) {
-            if (!app.admin.requireAdmin(root, repository)) return;
-            app.admin.bindInventory(root, repository);
-        }).catch(function (error) { app.ui.error(root, error); });
-    });
-    </script>
 </body>
 </html>

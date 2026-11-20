@@ -34,6 +34,10 @@ final class AdminProductFilter {
                 stock, quantity, sort.isEmpty() ? Sort.NEWEST : Sort.valueOf(sort));
     }
 
+    static AdminProductFilter forInventory(String keyword, String category, Stock stock, boolean lowFirst) {
+        return new AdminProductFilter(keyword, category, "", stock, null, lowFirst ? Sort.STOCK_ASC : Sort.NAME);
+    }
+
     static AdminProductFilter defaults() {
         return new AdminProductFilter("", "", "", Stock.ALL, null, Sort.NEWEST);
     }
@@ -71,7 +75,9 @@ final class AdminProductFilter {
         IN_STOCK("재고 있음", " AND p.stock_quantity > 0", false),
         EMPTY("재고 없음", " AND p.stock_quantity = 0", false),
         AT_LEAST("입력 수량 이상", " AND p.stock_quantity >= ?", true),
-        AT_MOST("입력 수량 이하", " AND p.stock_quantity <= ?", true);
+        AT_MOST("입력 수량 이하", " AND p.stock_quantity <= ?", true),
+        NORMAL("정상 (6개 이상)", " AND p.stock_quantity >= 6", false),
+        LOW("부족 (1~5개)", " AND p.stock_quantity BETWEEN 1 AND 5", false);
 
         final String label;
         final String predicate;

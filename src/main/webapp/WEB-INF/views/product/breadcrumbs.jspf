@@ -4,12 +4,15 @@
     String breadcrumbContext = request.getContextPath();
     Object breadcrumbPath = request.getAttribute("categoryPath");
     List<?> breadcrumbTrail = breadcrumbPath instanceof List ? (List<?>) breadcrumbPath : Collections.emptyList();
+    if (!breadcrumbTrail.isEmpty()) {
 %>
 <nav class="breadcrumbs" aria-label="현재 위치">
-    <a href="<%= ProductView.url(breadcrumbContext, "/", Map.of()) %>">홈</a>
-    <% for (Object entry : breadcrumbTrail) {
+    <% boolean firstBreadcrumb = true;
+       for (Object entry : breadcrumbTrail) {
            Category crumb = (Category) entry; %>
-        <span aria-hidden="true">›</span>
+        <% if (!firstBreadcrumb) { %><span aria-hidden="true">›</span><% } %>
         <a href="<%= ProductView.url(breadcrumbContext, "/list.jsp", Map.of("category", crumb.id)) %>"><%= ProductView.escape(crumb.name) %></a>
-    <% } %>
+    <% firstBreadcrumb = false;
+       } %>
 </nav>
+<% } %>

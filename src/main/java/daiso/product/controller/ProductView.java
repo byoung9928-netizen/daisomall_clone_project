@@ -44,7 +44,10 @@ public final class ProductView {
     }
 
     public static String image(String context, ProductDTO product) {
-        String value = product.getImage();
+        return image(context, product.getImage());
+    }
+
+    public static String image(String context, String value) {
         if (daiso.product.service.ProductImageStorage.isImagePath(value)) return escape(context + "/" + value);
         if (value != null) {
             try {
