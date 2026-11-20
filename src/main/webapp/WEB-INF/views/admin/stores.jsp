@@ -1,5 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.List,java.util.Map,java.time.format.DateTimeFormatter,daiso.product.controller.ProductView,daiso.product.controller.StoreInventoryController,daiso.product.controller.StoreInventoryController.Page,daiso.product.controller.StoreInventoryController.Preview,daiso.product.dao.StoreInventoryDAO.Change,daiso.product.dao.StoreInventoryDAO.State,daiso.product.dao.StoreInventoryDAO.Location,daiso.product.dao.StoreInventoryDAO.Stock,daiso.product.dao.StoreInventoryDAO.History" %>
+<%@ page import="java.util.List,java.util.Map,java.time.format.DateTimeFormatter,daiso.product.controller.ProductView,daiso.product.controller.StoreInventoryController,daiso.product.controller.StoreInventoryController.Page,daiso.product.controller.StoreInventoryController.Preview,daiso.product.dao.StoreInventoryDAO.Change,daiso.product.dao.StoreInventoryDAO.Assortment,daiso.product.dao.StoreInventoryDAO.State,daiso.product.dao.StoreInventoryDAO.Location,daiso.product.dao.StoreInventoryDAO.Stock,daiso.product.dao.StoreInventoryDAO.History" %>
 <%
     if (!Boolean.TRUE.equals(request.getAttribute("storeInventoryReady"))) {
         request.getRequestDispatcher(StoreInventoryController.ROUTE).forward(request, response);
@@ -39,6 +39,7 @@
                 <form class="admin-search store-admin-filters" method="get" action="<%= ProductView.escape(storeRoute) %>">
                     <input type="hidden" name="city" value="<%= ProductView.escape(inventoryPage.city) %>">
                     <% if (inventoryPage.showingHistory) { %><input type="hidden" name="mode" value="history"><% } %>
+                    <% if (inventoryPage.showingAssortment) { %><input type="hidden" name="mode" value="assortment"><% } %>
                     <label class="field">매장
                         <select name="store" required>
                             <% for (Location location : inventoryPage.locations) {
@@ -50,7 +51,7 @@
                     <label class="field">상품명·품번
                         <input name="q" type="search" maxlength="100" value="<%= ProductView.escape(inventoryPage.keyword) %>">
                     </label>
-                    <% if (!inventoryPage.showingHistory) { %>
+                    <% if (!inventoryPage.showingHistory && !inventoryPage.showingAssortment) { %>
                         <label class="field">재고 상태
                             <select name="state">
                                 <% for (State option : State.values()) { %>
@@ -65,8 +66,15 @@
                     <p class="empty-state">표시할 매장이 없습니다.</p>
                 <% } else { %>
                     <h2><%= ProductView.escape(inventoryPage.selected.name) %></h2>
+                    <div class="store-metrics" aria-label="매장 재고 요약">
+                        <div><span>취급 상품</span><strong><%= inventoryPage.summary.kinds %>종</strong></div>
+                        <div><span>총 재고</span><strong><%= inventoryPage.summary.units %>개</strong></div>
+                        <a href="<%= inventoryPage.summaryUrl(State.LOW) %>"><span>재고 부족 (1~5개)</span><strong><%= inventoryPage.summary.low %>종</strong></a>
+                        <a href="<%= inventoryPage.summaryUrl(State.SOLD_OUT) %>"><span>품절 (0개)</span><strong><%= inventoryPage.summary.soldOut %>종</strong></a>
+                    </div>
                     <nav class="store-admin-links" aria-label="매장 관리 화면">
-                        <a class="button secondary" href="<%= inventoryPage.inventoryUrl %>" <%= !inventoryPage.showingHistory ? "aria-current=\"page\"" : "" %>>취급 상품</a>
+                        <a class="button secondary" href="<%= inventoryPage.inventoryUrl %>" <%= !inventoryPage.showingHistory && !inventoryPage.showingAssortment ? "aria-current=\"page\"" : "" %>>취급 상품</a>
+                        <a class="button secondary" href="<%= inventoryPage.assortmentUrl %>" <%= inventoryPage.showingAssortment ? "aria-current=\"page\"" : "" %>>취급 상품 등록·재개</a>
                         <a class="button secondary" href="<%= inventoryPage.historyUrl %>" <%= inventoryPage.showingHistory ? "aria-current=\"page\"" : "" %>>재고 변경 이력</a>
                     </nav>
                     <% if (inventoryPage.editing != null) {
@@ -148,24 +156,75 @@
                         </div>
                     <% } else { %>
                         <div class="admin-table-scroll" tabindex="0" role="region" aria-label="매장 취급 상품 표">
-                            <table class="admin-table">
+                            <table class="admin-table store-stock-table">
                                 <thead><tr>
-                                    <th scope="col">품번</th><th scope="col">상품명</th><th scope="col">매장 재고</th>
-                                    <th scope="col">재고 상태</th><th scope="col">관리</th>
+                                    <th scope="col">상품</th><th scope="col">매장 재고</th>
+                                    <th scope="col">상태</th><th scope="col">관리</th>
                                 </tr></thead>
                                 <tbody>
-                                    <% for (Stock stock : inventoryPage.inventory) { %>
+                                    <% for (Stock stock : inventoryPage.inventory) {
+                                           State state = State.ofQuantity(stock.quantity);
+                                           boolean activeList = !inventoryPage.showingAssortment;
+                                           Assortment action = activeList ? Assortment.UNLIST
+                                                   : stock.version < 0 ? Assortment.REGISTER : Assortment.RESUME; %>
                                         <tr>
-                                            <td><%= ProductView.escape(stock.code) %></td>
-                                            <td><%= ProductView.escape(stock.name) %></td>
-                                            <td><%= stock.quantity %>개</td>
-                                            <td><%= stock.stateLabel() %></td>
-                                            <td><a class="button secondary" href="<%= inventoryPage.editUrl(stock.id) %>#store-adjustment"
-                                                   aria-label="<%= ProductView.escape(stock.name) %> 재고 조정">재고 조정</a></td>
+                                            <td><div class="store-stock-product">
+                                                <img src="<%= ProductView.image(inventoryPage.context, stock.image) %>" width="48" height="52" loading="lazy" alt="">
+                                                <div><strong><%= ProductView.escape(stock.name) %></strong><small>품번 <%= ProductView.escape(stock.code) %></small></div>
+                                            </div></td>
+                                            <td><%= stock.carried || stock.version >= 0 ? stock.quantity + "개" : "—" %></td>
+                                            <td>
+                                                <% if (activeList) { %>
+                                                    <span class="store-stock-badge" data-stock-state="<%= state.name() %>"><%= state.label %></span>
+                                                <% } else { %>
+                                                    <%= stock.carried ? "취급 중" : stock.version < 0 ? "미등록" : "취급 해제" %>
+                                                <% } %>
+                                            </td>
+                                            <td>
+                                                <div class="store-stock-actions">
+                                                    <% if (activeList) { %>
+                                                        <a class="button secondary" href="<%= inventoryPage.editUrl(stock.id) %>#store-adjustment"
+                                                           aria-label="<%= ProductView.escape(stock.name) %> 재고 조정">재고 조정</a>
+                                                    <% } %>
+                                                    <% if (activeList && stock.quantity > 0) { %>
+                                                        <button class="button secondary" type="button" disabled>취급 해제</button>
+                                                        <span class="store-stock-hint">취급 해제는 재고 0개에서 가능</span>
+                                                    <% } else if (activeList || !stock.carried) { %>
+                                                        <details class="store-assortment">
+                                                            <summary><%= action.label %></summary>
+                                                            <form class="store-assortment-form" method="post" action="<%= ProductView.escape(storeRoute) %>/assortment">
+                                                                <% for (Map.Entry<String, String> field : inventoryPage.filters.entrySet()) { %>
+                                                                    <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
+                                                                <% } %>
+                                                                <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("storeInventoryCsrf")) %>">
+                                                                <input type="hidden" name="product" value="<%= ProductView.escape(stock.id) %>">
+                                                                <input type="hidden" name="version" value="<%= stock.version %>">
+                                                                <input type="hidden" name="operation" value="<%= action.name() %>">
+                                                                <% if (action == Assortment.UNLIST) { %>
+                                                                    <p>재고 0개 · 해제 후 매장 검색에서 미취급으로 표시됩니다.</p>
+                                                                <% } else { %>
+                                                                    <% if (action == Assortment.RESUME) { %>
+                                                                        <p>해제 상태에서 남은 수량은 <%= stock.quantity %>개입니다. 재개 시 실제 수량을 입력하세요.</p>
+                                                                    <% } %>
+                                                                    <label class="field">초기 재고
+                                                                        <input type="number" name="amount" min="0" max="2147483647" step="1" required>
+                                                                    </label>
+                                                                <% } %>
+                                                                <label class="field">변경 사유
+                                                                    <textarea name="reason" rows="2" maxlength="255" required></textarea>
+                                                                </label>
+                                                                <button class="button primary" type="submit"><%= action.label %> 확인</button>
+                                                            </form>
+                                                        </details>
+                                                    <% } else { %>
+                                                        <span class="store-stock-hint">이미 등록된 상품</span>
+                                                    <% } %>
+                                                </div>
+                                            </td>
                                         </tr>
                                     <% } %>
                                     <% if (inventoryPage.inventory.isEmpty()) { %>
-                                        <tr><td colspan="5">조건에 맞는 취급 상품이 없습니다.</td></tr>
+                                        <tr><td colspan="4">조건에 맞는 상품이 없습니다.</td></tr>
                                     <% } %>
                                 </tbody>
                             </table>

@@ -38,3 +38,39 @@
 .store-admin time {
     white-space: nowrap;
 }
+
+.store-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .65rem;
+    margin-block: 1rem;
+}
+
+.store-metrics > * {
+    display: grid;
+    gap: .4rem;
+    padding: .85rem 1rem;
+    border: 1px solid #ead7dc;
+    border-radius: .65rem;
+    background: white;
+}
+
+.store-metrics a { text-decoration: none; }
+.store-metrics a:hover { border-color: #9d072b; text-decoration: underline; }
+.store-metrics strong { font-size: 1.3rem; }
+
+.store-stock-table { min-width: 34rem; }
+.store-stock-product { display: flex; align-items: center; gap: .65rem; min-width: 10rem; }
+.store-stock-product img { flex: none; object-fit: contain; border-radius: .25rem; background: #f5f4f4; }
+.store-stock-product strong { display: block; overflow-wrap: anywhere; }
+.store-stock-product small { display: block; margin-top: .15rem; }
+.store-stock-badge { display: inline-block; padding: .25rem .5rem; border-radius: .35rem; font-weight: 700; }
+.store-stock-badge[data-stock-state="NORMAL"] { background: #e7f5ed; color: #185c39; }
+.store-stock-badge[data-stock-state="LOW"] { background: #fff2d5; color: #794800; }
+.store-stock-badge[data-stock-state="SOLD_OUT"] { background: #fdebef; color: #8b1835; }
+.store-stock-actions { display: flex; flex-wrap: wrap; align-items: start; gap: .5rem; }
+.store-stock-hint { font-size: .875rem; color: #56515a; margin-block: .35rem; }
+.store-assortment summary { min-height: 2.35rem; padding: .4rem .25rem; color: #8b1835; cursor: pointer; font-weight: 700; }
+.store-assortment-form { display: grid; gap: .65rem; max-width: 19rem; padding-block: .4rem; }
+.store-assortment-form p { margin: 0; }
+.store-assortment-form :is(textarea, input) { width: 100%; min-width: 0; }

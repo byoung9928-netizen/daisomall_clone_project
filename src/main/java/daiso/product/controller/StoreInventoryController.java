@@ -18,11 +18,13 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.product.dao.StoreInventoryDAO;
+import daiso.product.dao.StoreInventoryDAO.Assortment;
 import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.History;
 import daiso.product.dao.StoreInventoryDAO.Location;
 import daiso.product.dao.StoreInventoryDAO.State;
 import daiso.product.dao.StoreInventoryDAO.Stock;
+import daiso.product.dao.StoreInventoryDAO.Summary;
 
 @DaisoController
 public final class StoreInventoryController {
@@ -59,7 +61,7 @@ public final class StoreInventoryController {
         Filters filters;
         try {
             filters = new Filters(request);
-            if (filters.store.isEmpty() || filters.product.isEmpty() || filters.history) {
+            if (filters.store.isEmpty() || filters.product.isEmpty() || filters.history || filters.assortment) {
                 throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException error) {
@@ -81,8 +83,11 @@ public final class StoreInventoryController {
         Preview preview = null;
         try (Connection connection = ProductQueries.connect()) {
             try {
+                if (confirm && !dao.lockStore(connection, filters.store, filters.city)) {
+                    throw new IllegalArgumentException("선택한 지역의 매장을 다시 골라 주세요.");
+                }
                 Stock before = dao.find(connection, filters.store, filters.product, confirm);
-                if (before == null || before.version != adjustment.version) {
+                if (before == null || !before.carried || before.version != adjustment.version) {
                     connection.rollback();
                     return problem(request, response, session, filters, 409,
                             "재고가 변경됐거나 취급이 종료됐습니다. 현재 재고를 다시 확인해 주세요.");
@@ -116,6 +121,79 @@ public final class StoreInventoryController {
         return show(request, response, session, filters, preview);
     }
 
+    @DaisoPostMapping(MAPPING + "/assortment")
+    public String changeAssortment(HttpServletRequest request, HttpServletResponse response)
+            throws UnsupportedEncodingException {
+        request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        initialize(request);
+        HttpSession session = AdminProductController.adminSession(request);
+        if (session == null || !AdminProductController.validToken(request, session)) {
+            return blocked(request, response, 403, "관리자 권한 또는 요청 확인 정보가 유효하지 않습니다.");
+        }
+
+        Filters filters;
+        Assortment action;
+        long expectedVersion;
+        int quantity;
+        String reason;
+        try {
+            filters = new Filters(request);
+            action = Assortment.valueOf(ProductQueries.text(request, "operation", 12));
+            expectedVersion = Long.parseLong(ProductQueries.text(request, "version", 19));
+            reason = ProductQueries.text(request, "reason", 255);
+            Integer entered = action == Assortment.UNLIST ? 0
+                    : ProductQueries.integer(request, "amount", null, 0, Integer.MAX_VALUE);
+            if (filters.store.isEmpty() || filters.product.isEmpty() || filters.history || reason.isEmpty()
+                    || entered == null || (action == Assortment.REGISTER ? expectedVersion != -1 : expectedVersion < 0)) {
+                throw new IllegalArgumentException();
+            }
+            quantity = entered;
+        } catch (IllegalArgumentException error) {
+            return blocked(request, response, 400, "매장, 상품, 수량과 변경 사유를 확인해 주세요.");
+        }
+
+        try (Connection connection = ProductQueries.connect()) {
+            try {
+                if (!dao.lockStore(connection, filters.store, filters.city)) {
+                    throw new IllegalArgumentException("선택한 지역의 매장을 다시 골라 주세요.");
+                }
+                Stock before = dao.find(connection, filters.store, filters.product, true);
+                if (action == Assortment.REGISTER && before == null) {
+                    before = dao.findProduct(connection, filters.product);
+                }
+                validateAssortment(before, action, expectedVersion);
+                dao.changeAssortment(connection, filters.store, before, quantity, action, reason,
+                        session.getAttribute("member_id").toString());
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            }
+        } catch (IllegalArgumentException error) {
+            return problem(request, response, session, filters, 409, error.getMessage());
+        } catch (SQLException | NamingException error) {
+            return unavailable(request, response, error);
+        }
+
+        session.setAttribute(SAVED, filters.store);
+        Map<String, String> params = filters.parameters();
+        params.remove("page");
+        return "redirect:" + ProductView.rawUrl("", MAPPING, params);
+    }
+
+    private static void validateAssortment(Stock before, Assortment action, long expectedVersion) {
+        if (before == null || before.version != expectedVersion || before.carried != (action == Assortment.UNLIST)) {
+            throw new IllegalArgumentException("상품의 취급 상태가 바뀌었습니다. 목록을 확인한 후 다시 시도해 주세요.");
+        }
+        if (before.quantity != 0) {
+            throw new IllegalArgumentException("재고를 0개로 처리한 뒤 취급 상태를 변경해 주세요.");
+        }
+    }
+
     private String show(HttpServletRequest request, HttpServletResponse response, HttpSession session,
             Filters filters, Preview preview) {
         try (Connection connection = ProductQueries.connect()) {
@@ -133,14 +211,20 @@ public final class StoreInventoryController {
             if (preview != null && !preview.stock.id.equals(filters.product)) {
                 throw new IllegalStateException("Preview stock does not match the selection");
             }
-            List<Stock> inventory = selected == null || filters.history ? List.of()
-                    : dao.inventory(connection, selectedId, filters.keyword, filters.state, PAGE_SIZE + 1, filters.offset());
+            Summary summary = selected == null ? null : dao.summary(connection, selectedId);
+            List<Stock> inventory = List.of();
+            if (selected != null && !filters.history) {
+                inventory = filters.assortment
+                        ? dao.assortment(connection, selectedId, filters.keyword, PAGE_SIZE + 1, filters.offset())
+                        : dao.inventory(connection, selectedId, filters.keyword, filters.state, PAGE_SIZE + 1, filters.offset());
+            }
             List<History> history = selected == null || !filters.history ? List.of()
                     : dao.history(connection, selectedId, filters.keyword, PAGE_SIZE + 1, filters.offset());
-            Stock editing = selected == null || filters.history || filters.product.isEmpty() ? null
-                    : preview == null ? dao.find(connection, selectedId, filters.product, false) : preview.stock;
+            Stock editing = selected == null || filters.history || filters.assortment || filters.product.isEmpty()
+                    ? null : preview == null ? dao.find(connection, selectedId, filters.product, false) : preview.stock;
+            if (editing != null && !editing.carried) editing = null;
             request.setAttribute("storeInventoryPage", new Page(request.getContextPath(), filters, locations, selected,
-                    inventory, history, editing, preview));
+                    inventory, history, editing, preview, summary));
             request.setAttribute("storeInventoryCsrf", AdminProductController.token(session));
             if (selectedId.equals(session.getAttribute(SAVED))) {
                 request.setAttribute("storeInventorySaved", true);
@@ -172,6 +256,10 @@ public final class StoreInventoryController {
     }
 
     private static String unavailable(HttpServletRequest request, HttpServletResponse response, Exception error) {
+        if (error instanceof SQLException && ((SQLException) error).getErrorCode() == 1054
+                && "42S22".equals(((SQLException) error).getSQLState())) {
+            return blocked(request, response, 503, "매장 취급 상태 마이그레이션을 확인한 뒤 다시 시도해 주세요.");
+        }
         request.getServletContext().log("매장 재고 처리 실패", error);
         return blocked(request, response, 500, "매장 재고를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
@@ -184,6 +272,7 @@ public final class StoreInventoryController {
         final State state;
         final int page;
         final boolean history;
+        final boolean assortment;
 
         Filters(HttpServletRequest request) {
             city = ProductQueries.text(request, "city", 20);
@@ -194,7 +283,9 @@ public final class StoreInventoryController {
             String stateValue = ProductQueries.text(request, "state", 20);
             state = stateValue.isEmpty() ? State.ALL : State.valueOf(stateValue);
             page = ProductQueries.integer(request, "page", 1, 1, 1_000_000);
-            history = "history".equals(request.getParameter("mode"));
+            String mode = request.getParameter("mode");
+            history = "history".equals(mode);
+            assortment = "assortment".equals(mode);
         }
 
         int offset() { return (page - 1) * PAGE_SIZE; }
@@ -204,8 +295,8 @@ public final class StoreInventoryController {
             params.put("city", city);
             params.put("store", store);
             params.put("q", keyword);
-            params.put("state", state == State.ALL || history ? "" : state.name());
-            params.put("mode", history ? "history" : "");
+            params.put("state", state == State.ALL || history || assortment ? "" : state.name());
+            params.put("mode", history ? "history" : assortment ? "assortment" : "");
             params.put("page", page > 1 ? Integer.toString(page) : "");
             return params;
         }
@@ -258,6 +349,8 @@ public final class StoreInventoryController {
         public final State state;
         public final int page;
         public final boolean showingHistory;
+        public final boolean showingAssortment;
+        public final Summary summary;
         public final List<Location> locations;
         public final Location selected;
         public final List<Stock> inventory;
@@ -269,9 +362,10 @@ public final class StoreInventoryController {
         public final String next;
         public final String inventoryUrl;
         public final String historyUrl;
+        public final String assortmentUrl;
 
         private Page(String context, Filters query, List<Location> locations, Location selected,
-                List<Stock> inventory, List<History> history, Stock editing, Preview preview) {
+                List<Stock> inventory, List<History> history, Stock editing, Preview preview, Summary summary) {
             this.context = context;
             this.city = query.city;
             this.store = selected == null ? "" : selected.id;
@@ -279,6 +373,8 @@ public final class StoreInventoryController {
             this.state = query.state;
             this.page = query.page;
             this.showingHistory = query.history;
+            this.showingAssortment = query.assortment;
+            this.summary = summary;
             this.locations = List.copyOf(locations);
             this.selected = selected;
             this.inventory = firstPage(inventory);
@@ -294,12 +390,19 @@ public final class StoreInventoryController {
             inventoryUrl = ProductView.url(context, ROUTE, ProductView.with(params, "mode", ""));
             params.remove("state");
             historyUrl = ProductView.url(context, ROUTE, ProductView.with(params, "mode", "history"));
+            params.remove("q");
+            assortmentUrl = ProductView.url(context, ROUTE, ProductView.with(params, "mode", "assortment"));
         }
 
         public String editUrl(String id) { return url("product", id); }
 
         public String regionUrl(String region) {
-            return ProductView.url(context, ROUTE, Map.of("city", region, "mode", showingHistory ? "history" : ""));
+            return ProductView.url(context, ROUTE, Map.of("city", region, "mode", showingHistory ? "history" : showingAssortment ? "assortment" : ""));
+        }
+
+        public String summaryUrl(State state) {
+            return ProductView.url(context, ROUTE,
+                    Map.of("city", city, "store", store, "state", state == State.ALL ? "" : state.name()));
         }
 
         private String url(String key, String value) {
