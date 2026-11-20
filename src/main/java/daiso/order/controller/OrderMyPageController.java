@@ -113,6 +113,7 @@ public class OrderMyPageController {
                     "statusLabel",
                     statusLabel((String) selected.get("status"))
                 );
+                selected.put("returnStatusLabel", returnStatusLabel((String)selected.get("returnStatus")));
             }
         }
 
@@ -265,6 +266,8 @@ public class OrderMyPageController {
             case "FAILED":
             case "PAYMENT_FAILED":
                 return "결제실패";
+            case"REFUNDING":return"환불처리중";
+            case"REFUNDED": return"환불완료";
             default:
                 return "상태 확인 필요";
         }
@@ -592,6 +595,19 @@ public class OrderMyPageController {
 
         } catch (RuntimeException e) {
             return "배송조회 설정 또는 응답을 확인해 주세요.";
+        }
+    }
+    private String returnStatusLabel(String status) {
+        if (status == null) return "";
+
+        switch (status) {
+            case "REQUESTED": return "반품접수";
+            case "APPROVED": return "반품승인";
+            case "RECEIVED": return "회수완료";
+            case "REFUNDING": return "환불처리중";
+            case "REFUNDED": return "환불완료";
+            case "REJECTED": return "반품반려";
+            default: return "반품 상태 확인 필요";
         }
     }
 }

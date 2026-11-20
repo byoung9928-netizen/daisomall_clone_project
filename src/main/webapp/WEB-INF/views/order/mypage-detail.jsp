@@ -2590,6 +2590,19 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<%
 					}
 					%>
+					<% if (myOrder.get("returnStatus") != null) { %>
+					    <p>
+					        반품 처리 상태
+					        <strong><%= ProductView.escape(
+					            myOrder.get("returnStatusLabel")) %></strong>
+					    </p>
+					
+					    <% if ("REJECTED".equals(myOrder.get("returnStatus"))
+					            && myOrder.get("returnAdminNote") != null) { %>
+					        <p>반려 사유 <%= ProductView.escape(
+					            myOrder.get("returnAdminNote")) %></p>
+					    <% } %>
+					<% } %>
 				</section>
 				<%
 				for (CartBean item : myItems) {
@@ -2629,6 +2642,19 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 							   (String) myOrder.get("orderNo"), "UTF-8") %>">
 						주문취소 </a>
 					<% } %>
+						<% if ("DELIVERED".equals(myOrder.get("status"))
+        					&& "APPROVED".equals(myOrder.get("paymentStatus"))
+        					&& myOrder.get("returnStatus") == null) { %>
+					
+					    <a class="my-outline-button"
+					       style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;"
+					       href="<%= myContext %>/app/order/return/form?orderNo=<%= java.net.URLEncoder.encode(
+					           (String) myOrder.get("orderNo"), "UTF-8") %>">
+					        반품 신청
+					    </a>
+					
+					<% } %>
+					
 					<button class="my-outline-button" type="button" data-my-unavailable>
 						문의하기</button>
 				</div>
