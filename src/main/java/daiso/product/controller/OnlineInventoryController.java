@@ -6,10 +6,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
@@ -21,6 +23,7 @@ public final class OnlineInventoryController {
     public static final String ROUTE = "/app/admin/inventory";
     static final String MAPPING = "/admin/inventory";
     private static final String VIEW = "admin/inventory";
+    private static final String SAVED = OnlineInventoryController.class.getName() + ".saved";
     private static final int PAGE_SIZE = 20;
     private static final Map<State, Stock> STOCK = Map.of(State.ALL, Stock.ALL, State.NORMAL, Stock.NORMAL,
             State.LOW, Stock.LOW, State.SOLD_OUT, Stock.EMPTY);
@@ -30,7 +33,8 @@ public final class OnlineInventoryController {
     public String list(HttpServletRequest request, HttpServletResponse response) {
         request.setAttribute("onlineInventoryReady", true);
         request.setAttribute("adminSection", "inventory");
-        if (AdminProductController.adminSession(request) == null) {
+        HttpSession session = AdminProductController.adminSession(request);
+        if (session == null) {
             return problem(request, response, 403, "관리자 권한이 필요합니다.");
         }
         try (Connection connection = ProductQueries.connect()) {
@@ -52,6 +56,14 @@ public final class OnlineInventoryController {
             request.setAttribute("onlineInventoryPage",
                     new Page(request.getContextPath(), result, keyword, category, categories, state, page, pages, lowFirst));
             connection.commit();
+            synchronized (session) {
+                String receipt = request.getParameter("saved");
+                if (receipt != null && receipt.equals(session.getAttribute(SAVED))) {
+                    session.removeAttribute(SAVED);
+                    response.setHeader("Cache-Control", "no-store");
+                    request.setAttribute("onlineInventorySaved", true);
+                }
+            }
         } catch (IllegalArgumentException error) {
             return problem(request, response, 400, "조회 조건을 확인해 주세요.");
         } catch (SQLException | NamingException error) {
@@ -59,6 +71,14 @@ public final class OnlineInventoryController {
             return problem(request, response, 500, "온라인 재고를 조회할 수 없습니다.");
         }
         return VIEW;
+    }
+
+    static String markSaved(HttpSession session) {
+        String receipt = UUID.randomUUID().toString();
+        synchronized (session) {
+            session.setAttribute(SAVED, receipt);
+        }
+        return receipt;
     }
 
     private static String problem(HttpServletRequest request, HttpServletResponse response, int status, String message) {

@@ -8,6 +8,8 @@
     Page inventoryPage = (Page) request.getAttribute("storeInventoryPage");
     String storeRoute = request.getContextPath() + StoreInventoryController.ROUTE;
     Object storeError = request.getAttribute("storeInventoryError");
+    Object storeSuccess = request.getAttribute("storeInventorySaved");
+    Object savedProduct = request.getAttribute("storeInventorySavedProduct");
     Map<?, ?> storeDraft = request.getAttribute("storeDraft") instanceof Map<?, ?>
             ? (Map<?, ?>) request.getAttribute("storeDraft") : Map.of();
     Object storeFieldError = request.getAttribute("storeFieldError");
@@ -18,21 +20,17 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-store-ux.js" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
-        <%@ include file="../common/admin-navigation.jspf" %>
+        <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content store-admin" tabindex="-1">
             <h1 class="page-title">매장별 재고 관리</h1>
             <p>오프라인 매장 재고입니다. 매장 미취급 상품은 목록에 표시되지 않으며, 취급 상품의 재고가 0개면 품절로 표시됩니다.</p>
             <% if (storeError != null && !editingStock) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(storeError) %></p>
-            <% } %>
-            <% if (Boolean.TRUE.equals(request.getAttribute("storeInventorySaved"))) { %>
-                <p class="form-status" role="status">매장 재고와 변경 이력을 저장했습니다.</p>
             <% } %>
             <% if (storeError != null && !editingStock && !storeDraft.isEmpty()) {
                    boolean rowVisible = inventoryPage != null && inventoryPage.inventory.stream().anyMatch(stock ->
@@ -113,16 +111,17 @@
                     <% if (inventoryPage.editing != null) {
                            Stock stock = inventoryPage.editing;
                            Preview preview = inventoryPage.preview; %>
-                        <dialog id="store-adjustment" class="store-adjustment store-drawer" open aria-labelledby="store-adjustment-title">
+                        <dialog id="store-adjustment" class="store-adjustment store-drawer" open aria-labelledby="store-adjustment-title"
+                                data-row-anchor="<%= Page.rowAnchor(stock.id) %>">
                             <header class="store-drawer-heading">
                                 <h3 id="store-adjustment-title" tabindex="-1">재고 조정</h3>
-                                <a class="button secondary" href="<%= inventoryPage.closeEditorUrl() %>#store-inventory-table" data-drawer-close>닫기</a>
+                                <a class="button secondary" href="<%= inventoryPage.closeDrawerUrl(stock.id) %>" data-drawer-close>닫기</a>
                             </header>
                             <p><%= ProductView.escape(inventoryPage.selected.name) %> · <strong><%= ProductView.escape(stock.name) %></strong></p>
                             <% if (storeError != null) { %>
                                 <p class="error-message" id="store-adjustment-error" role="alert"><%= ProductView.escape(storeError) %></p>
                             <% } %>
-                            <form method="post" data-stock-editor data-before="<%= stock.quantity %>" action="<%= ProductView.escape(storeRoute) %>/adjust">
+                            <form method="post" data-stock-editor data-store-write data-before="<%= stock.quantity %>" action="<%= ProductView.escape(storeRoute) %>/adjust">
                                 <% for (Map.Entry<String, String> field : inventoryPage.filters.entrySet()) { %>
                                     <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
                                 <% } %>
@@ -158,7 +157,7 @@
                                     </label>
                                     <div class="store-admin-links">
                                         <button class="button primary" type="submit" name="action" value="preview">변경 전후 확인</button>
-                                        <a class="button secondary" href="<%= inventoryPage.closeEditorUrl() %>#store-inventory-table">취소</a>
+                                        <a class="button secondary" href="<%= inventoryPage.closeDrawerUrl(stock.id) %>" data-drawer-close>취소</a>
                                     </div>
                                 <% } else { %>
                                     <input type="hidden" name="change" value="<%= preview.adjustment.change.name() %>">
@@ -206,7 +205,12 @@
                         </div>
                     <% } else { %>
                         <% if (!inventoryPage.showingAssortment) { %><p class="store-stock-hint">재고가 0개인 상품은 취급 해제할 수 있어요.</p><% } %>
-                        <div class="admin-table-scroll" id="store-inventory-table" tabindex="0" role="region" aria-label="매장 취급 상품 표">
+                        <div id="store-inventory-table" tabindex="-1">
+                            <% if (storeSuccess != null && savedProduct == null) { %>
+                                <p class="inventory-success" role="status"><%= ProductView.escape(storeSuccess) %></p>
+                            <% } %>
+                        </div>
+                        <div class="admin-table-scroll" tabindex="0" role="region" aria-label="매장 취급 상품 표">
                             <table class="admin-table store-stock-table">
                                 <thead><tr>
                                     <th scope="col">상품</th><th scope="col">매장 재고</th>
@@ -220,8 +224,9 @@
                                                    : stock.version < 0 ? Assortment.REGISTER : Assortment.RESUME;
                                            boolean editingAssortment = stock.id.equals(storeDraft.get("product"))
                                                    && action.name().equals(storeDraft.get("operation"));
-                                           boolean confirmUnlist = stock.id.equals(request.getAttribute("storeUnlistConfirmation")); %>
-                                        <tr>
+                                           boolean confirmUnlist = stock.id.equals(request.getAttribute("storeUnlistConfirmation"));
+                                           boolean savedRow = stock.id.equals(savedProduct); %>
+                                        <tr id="<%= Page.rowAnchor(stock.id) %>" tabindex="-1"<%= savedRow ? " data-saved-row aria-describedby=\"store-row-result\"" : "" %>>
                                             <td><div class="store-stock-product">
                                                 <img src="<%= ProductView.image(inventoryPage.context, stock.image) %>" width="48" height="52" loading="lazy" alt="">
                                                 <div><strong><%= ProductView.escape(stock.name) %></strong><small>품번 <%= ProductView.escape(stock.code) %></small></div>
@@ -235,15 +240,18 @@
                                                 <% } %>
                                             </td>
                                             <td>
+                                                <% if (savedRow) { %>
+                                                    <p id="store-row-result" class="inventory-success" role="status"><%= ProductView.escape(storeSuccess) %></p>
+                                                <% } %>
                                                 <div class="store-stock-actions">
                                                     <% if (activeList) { %>
                                                         <a class="button secondary" href="<%= inventoryPage.editUrl(stock.id) %>#store-adjustment"
-                                                           aria-label="<%= ProductView.escape(stock.name) %> 재고 조정">재고 조정</a>
+                                                           data-open-store-drawer aria-label="<%= ProductView.escape(stock.name) %> 재고 조정">재고 조정</a>
                                                     <% } %>
                                                     <% if (activeList ? stock.quantity == 0 : !stock.carried) { %>
                                                         <details class="store-assortment" <%= editingAssortment ? "open" : "" %>>
                                                             <summary><%= action.label %></summary>
-                                                            <form class="store-assortment-form" method="post" action="<%= ProductView.escape(storeRoute) %>/assortment">
+                                                            <form class="store-assortment-form" data-store-write method="post" action="<%= ProductView.escape(storeRoute) %>/assortment">
                                                                 <% for (Map.Entry<String, String> field : inventoryPage.filters.entrySet()) { %>
                                                                     <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
                                                                 <% } %>
@@ -273,7 +281,7 @@
                                                                 <% } %>
                                                                 <% if (action == Assortment.UNLIST) { %>
                                                                     <button class="button <%= confirmUnlist ? "inventory-danger" : "secondary" %>" type="submit" name="action" value="<%= confirmUnlist ? "save" : "preview" %>"><%= confirmUnlist ? "취급 해제 확정" : "해제 내용 확인" %></button>
-                                                                    <% if (confirmUnlist) { %><a class="button secondary" href="<%= inventoryPage.closeEditorUrl() %>#store-inventory-table">취소</a><% } %>
+                                                                    <% if (confirmUnlist) { %><a class="button secondary" href="<%= inventoryPage.closeDrawerUrl(stock.id) %>" data-drawer-close>취소</a><% } %>
                                                                 <% } else { %>
                                                                     <button class="button primary" type="submit" name="action" value="save"><%= action.label %></button>
                                                                 <% } %>

@@ -147,7 +147,9 @@ public final class AdminProductController {
                     "상품과 최하위 카테고리를 확인해 주세요.", form);
             Map<String, String> inventoryReturn = create ? Map.of() : OnlineInventoryController.returnParameters(request);
             if (!inventoryReturn.isEmpty()) {
-                return "redirect:" + ProductView.rawUrl("", OnlineInventoryController.MAPPING, inventoryReturn);
+                String receipt = OnlineInventoryController.markSaved(session);
+                return "redirect:" + ProductView.rawUrl("", OnlineInventoryController.MAPPING,
+                        ProductView.with(inventoryReturn, "saved", receipt));
             }
             session.setAttribute(NOTICE, create ? "상품을 등록했습니다." : "상품을 수정했습니다.");
             return redirectToList(request);
@@ -160,16 +162,16 @@ public final class AdminProductController {
             request.setAttribute("adminProductBlocked", "사진 업로드 요청을 확인해 주세요.");
             return VIEW;
         } catch (java.io.IOException error) {
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), form);
         } catch (SQLException error) {
             if (error.getErrorCode() == 1062) {
                 return problem(request, response, session, HttpServletResponse.SC_CONFLICT, "이미 사용 중인 품번입니다.", form);
             }
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } catch (NamingException error) {
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } finally {
             if (!saved) {
                 for (String path : uploadedImages) {
@@ -403,6 +405,16 @@ public final class AdminProductController {
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
         }
+    }
+
+    private String saveFailure(HttpServletRequest request, HttpServletResponse response, HttpSession session,
+            Exception error, Map<String, String> form) {
+        if (!form.getOrDefault("id", "").isEmpty() && !OnlineInventoryController.returnParameters(request).isEmpty()) {
+            request.getServletContext().log("온라인 재고 저장 실패", error);
+            return problem(request, response, session, 500,
+                    "온라인 재고를 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해 주세요.", form);
+        }
+        return unavailable(request, response, error);
     }
 
     private String problem(HttpServletRequest request, HttpServletResponse response, HttpSession session,

@@ -18,9 +18,12 @@
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
-        <%@ include file="../common/admin-navigation.jspf" %>
+        <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content store-admin" tabindex="-1">
             <h1 class="page-title">온라인 재고 관리</h1>
+            <% if (Boolean.TRUE.equals(request.getAttribute("onlineInventorySaved"))) { %>
+                <p class="inventory-success" role="status">온라인 재고가 수정되었습니다.</p>
+            <% } %>
             <p>온라인 판매 재고입니다. 재고 수정은 상품 관리에서 저장되며 기존 상품 변경 이력에 남습니다.</p>
             <% if (request.getAttribute("onlineInventoryError") != null) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("onlineInventoryError")) %></p>

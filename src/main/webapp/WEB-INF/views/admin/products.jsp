@@ -33,7 +33,7 @@
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
-        <%@ include file="../common/admin-navigation.jspf" %>
+        <%@ include file="product-admin-menu.jspf" %>
         <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1">
             <h1 class="page-title">상품 관리</h1>
             <% if (blocked != null) { %>

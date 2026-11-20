@@ -4,6 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -126,8 +127,7 @@ public final class StoreInventoryController {
         }
 
         if (confirm) {
-            session.setAttribute(SAVED, filters.store);
-            return "redirect:" + ProductView.rawUrl("", MAPPING, filters.parameters());
+            return savedRedirect(session, filters, "매장 재고를 조정했습니다.");
         }
         return show(request, response, session, filters, preview);
     }
@@ -210,10 +210,33 @@ public final class StoreInventoryController {
         }
 
         if (!confirm) return show(request, response, session, filters, null);
-        session.setAttribute(SAVED, filters.store);
-        Map<String, String> params = filters.parameters();
-        params.remove("page");
-        return "redirect:" + ProductView.rawUrl("", MAPPING, params);
+        return savedRedirect(session, filters, action.label + "을 완료했습니다.");
+    }
+
+    private static String savedRedirect(HttpSession session, Filters filters, String message) {
+        String receipt = UUID.randomUUID().toString();
+        synchronized (session) {
+            session.setAttribute(SAVED, Map.of("receipt", receipt, "store", filters.store,
+                    "product", filters.product, "message", message));
+        }
+        String target = ProductView.rawUrl("", MAPPING, ProductView.with(filters.parameters(), "saved", receipt));
+        return "redirect:" + target + "#store-inventory-table";
+    }
+
+    private static void showSaved(HttpServletRequest request, HttpServletResponse response, HttpSession session,
+            String store, List<Stock> stock) {
+        synchronized (session) {
+            Object value = session.getAttribute(SAVED);
+            if (!(value instanceof Map<?, ?>)) return;
+            Map<?, ?> receipt = (Map<?, ?>) value;
+            if (!receipt.get("receipt").equals(request.getParameter("saved")) || !receipt.get("store").equals(store)) return;
+            session.removeAttribute(SAVED);
+            response.setHeader("Cache-Control", "no-store");
+            request.setAttribute("storeInventorySaved", receipt.get("message"));
+            if (stock.stream().limit(PAGE_SIZE).anyMatch(item -> item.id.equals(receipt.get("product")))) {
+                request.setAttribute("storeInventorySavedProduct", receipt.get("product"));
+            }
+        }
     }
 
     private static boolean validUnlist(HttpServletRequest request, HttpSession session, Filters filters,
@@ -288,11 +311,8 @@ public final class StoreInventoryController {
             request.setAttribute("storeInventoryPage", new Page(request.getContextPath(), filters, locations, selected,
                     inventory, history, editing, preview, summary));
             request.setAttribute("storeInventoryCsrf", AdminProductController.token(session));
-            if (selectedId.equals(session.getAttribute(SAVED))) {
-                request.setAttribute("storeInventorySaved", true);
-                session.removeAttribute(SAVED);
-            }
             connection.commit();
+            showSaved(request, response, session, selectedId, inventory);
             return VIEW;
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
@@ -472,6 +492,16 @@ public final class StoreInventoryController {
 
         public String editUrl(String id) { return url("product", id); }
         public String closeEditorUrl() { return ProductView.url(context, ROUTE, filters); }
+
+        public String closeDrawerUrl(String id) {
+            boolean rowVisible = inventory.stream().anyMatch(item -> item.id.equals(id));
+            return closeEditorUrl() + "#" + (rowVisible ? rowAnchor(id) : "store-inventory-table");
+        }
+
+        public static String rowAnchor(String id) {
+            return "store-row-" + Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(id.getBytes(StandardCharsets.UTF_8));
+        }
         public String resetUrl() {
             return ProductView.url(context, ROUTE, Map.of("city", city, "store", store,
                     "mode", showingHistory ? "history" : showingAssortment ? "assortment" : ""));
