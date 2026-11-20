@@ -1,0 +1,87 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.OnlineInventoryController.Preview,daiso.product.dao.StoreInventoryDAO.Change" %>
+<% ProductDTO stockProduct = (ProductDTO) request.getAttribute("onlineStockProduct");
+   if (stockProduct != null) {
+       Preview stockPreview = (Preview) request.getAttribute("onlinePreview");
+       Map<?, ?> stockDraft = request.getAttribute("onlineDraft") instanceof Map<?, ?>
+               ? (Map<?, ?>) request.getAttribute("onlineDraft") : Map.of();
+       String stockAction = ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE + "/change"); %>
+    <dialog class="store-drawer" id="online-stock-editor" open aria-labelledby="online-stock-title">
+        <header class="store-drawer-heading">
+            <h3 id="online-stock-title" tabindex="-1">온라인 재고 조정</h3>
+            <a class="button secondary" href="<%= online.resetEditor %>" data-drawer-close>닫기</a>
+        </header>
+        <div class="store-stock-product">
+            <img src="<%= ProductView.image(inventoryContext, stockProduct) %>" width="56" height="60" alt="">
+            <div><strong><%= ProductView.escape(stockProduct.getName()) %></strong>
+                <small>품번 <%= ProductView.escape(stockProduct.getProductCode()) %></small>
+                <p>현재 온라인 재고 <strong><%= stockProduct.getStockQuantity() %>개</strong></p></div>
+        </div>
+        <% if (request.getAttribute("onlineInventoryError") != null) { %>
+            <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("onlineInventoryError")) %></p>
+        <% } %>
+        <form method="post" action="<%= stockAction %>" data-stock-editor data-store-write data-before="<%= stockProduct.getStockQuantity() %>">
+            <% for (Map.Entry<String, String> field : online.filters.entrySet()) { %>
+                <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
+            <% } %>
+            <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("onlineStockCsrf")) %>">
+            <input type="hidden" name="edit" value="<%= ProductView.escape(stockProduct.getProductId()) %>">
+            <input type="hidden" name="expected" value="<%= stockPreview == null ? stockProduct.getStockQuantity() : stockPreview.before %>">
+            <% if (stockPreview == null) { %>
+                <div class="store-adjustment-fields">
+                    <label class="field">변경 유형
+                        <select name="operation" required>
+                            <% for (Change option : Change.values()) { %>
+                                <option value="<%= option.name() %>" <%= option.name().equals(stockDraft.get("operation")) ? "selected" : "" %>><%= OnlineInventoryController.operationLabel(option) %></option>
+                            <% } %>
+                        </select>
+                    </label>
+                    <label class="field"><span data-amount-label>조정 수량</span>
+                        <input type="number" name="amount" step="1" min="0" max="2147483647" required
+                               aria-describedby="store-amount-hint" value="<%= ProductView.escape(stockDraft.get("amount")) %>">
+                    </label>
+                </div>
+                <p id="store-amount-hint">재고 조사는 최종 수량을 입력하세요. 그 외에는 늘리거나 줄일 수량을 입력하세요.</p>
+                <dl class="store-adjustment-summary" data-live-stock hidden>
+                    <div><dt>변경 전</dt><dd><%= stockProduct.getStockQuantity() %>개</dd></div>
+                    <div><dt>예상 변경량</dt><dd data-stock-delta>—</dd></div>
+                    <div><dt>변경 후</dt><dd data-stock-after>—</dd></div>
+                </dl>
+                <p data-stock-invalid class="error-message" role="status" hidden></p>
+                <label class="field">변경 사유
+                    <textarea name="reason" rows="2" maxlength="255" required><%= ProductView.escape(stockDraft.get("reason")) %></textarea>
+                </label>
+                <button class="button primary" name="action" value="preview" type="submit">저장 전 확인</button>
+            <% } else { %>
+                <input type="hidden" name="operation" value="<%= stockPreview.operation.name() %>">
+                <input type="hidden" name="amount" value="<%= stockPreview.amount %>">
+                <input type="hidden" name="reason" value="<%= ProductView.escape(stockPreview.reason) %>">
+                <input type="hidden" name="confirmation" value="<%= ProductView.escape(stockPreview.token) %>">
+                <p><strong><%= OnlineInventoryController.operationLabel(stockPreview.operation) %></strong> · <%= ProductView.escape(stockPreview.reason) %></p>
+                <dl class="store-adjustment-summary">
+                    <div><dt>변경 전</dt><dd><%= stockPreview.before %>개</dd></div>
+                    <div><dt>변경량</dt><dd><%= stockPreview.after > stockPreview.before ? "+" : "" %><%= stockPreview.after - stockPreview.before %>개</dd></div>
+                    <div><dt>변경 후</dt><dd><%= stockPreview.after %>개</dd></div>
+                </dl>
+                <div class="store-admin-links">
+                    <button class="button primary" name="action" value="save" type="submit">재고 반영</button>
+                    <button class="button secondary" name="action" value="revise" type="submit">다시 작성</button>
+                </div>
+            <% } %>
+        </form>
+        <hr>
+        <form method="post" action="<%= stockAction %>" data-store-write>
+            <% for (Map.Entry<String, String> field : online.filters.entrySet()) { %>
+                <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
+            <% } %>
+            <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("onlineStockCsrf")) %>">
+            <input type="hidden" name="edit" value="<%= ProductView.escape(stockProduct.getProductId()) %>">
+            <input type="hidden" name="expected" value="<%= stockProduct.getLowStockThreshold() %>">
+            <label class="field">재고 부족 기준 (개 이하)
+                <input type="number" name="threshold" step="1" min="1" max="2147483647" required
+                       value="<%= ProductView.escape(stockDraft.containsKey("threshold") ? stockDraft.get("threshold") : stockProduct.getLowStockThreshold()) %>">
+            </label>
+            <button class="button secondary" name="action" value="threshold" type="submit">부족 기준 저장</button>
+        </form>
+    </dialog>
+<% } %>

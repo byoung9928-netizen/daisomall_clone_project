@@ -43,7 +43,7 @@
         </template>
     <% } %>
     <div class="container category-anchor">
-        <section id="category-panel" class="category-panel" aria-label="전체 카테고리 탐색" data-source="${pageContext.request.contextPath}/assets/mock/categories.json" hidden>
+        <section id="category-panel" class="category-panel" aria-label="전체 카테고리 탐색" data-source="${pageContext.request.contextPath}/api/products/categories" hidden>
             <div class="category-heading">
                 <button id="category-close" class="category-close" type="button" aria-label="카테고리 닫기">
                     <span aria-hidden="true"></span>

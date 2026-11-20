@@ -26,20 +26,17 @@
             });
             return categories;
         }
-        if (window.Daiso && window.Daiso.repository) {
-            return window.Daiso.repository.getVisibleCategories();
-        }
         return fetch(url, { credentials: "same-origin" }).then(function (response) {
             if (!response.ok) {
                 throw new Error("Category response: " + response.status);
             }
             return response.json();
         }).then(function (payload) {
-            if (!Array.isArray(payload.categories) || payload.categories.length === 0) {
+            if (!Array.isArray(payload)) {
                 throw new Error("Invalid category payload");
             }
             const ids = Object.create(null);
-            payload.categories.forEach(function (item) {
+            payload.forEach(function (item) {
                 if (typeof item.id !== "string" || ids[item.id]
                         || typeof item.name !== "string" || [1, 2, 3].indexOf(item.level) === -1
                         || !Number.isInteger(item.displayOrder)) {
@@ -47,13 +44,15 @@
                 }
                 ids[item.id] = item;
             });
-            payload.categories.forEach(function (item) {
+            payload.forEach(function (item) {
                 const parent = ids[item.parentId];
                 if (item.level === 1 ? item.parentId !== null : !parent || parent.level !== item.level - 1) {
                     throw new Error("Invalid category parent");
                 }
             });
-            return payload.categories;
+            const parents = new Set(payload.map(item => item.parentId));
+            payload.forEach(item => { item.isLeaf = !parents.has(item.id); });
+            return payload;
         });
     }
 

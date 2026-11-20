@@ -47,6 +47,9 @@
                         <p class="source-note" data-product="source"><%= ProductView.escape(product.getSourceNote()) %></p>
                     <% } %>
                     <p data-product="id">품번 <%= ProductView.escape(product.getProductCode()) %></p>
+                    <% if ("DISCONTINUED".equals(product.getStatus())) { %>
+                        <p class="source-note">판매 종료된 상품입니다.</p>
+                    <% } %>
                     <p class="stock-status" data-product="stock"><%= ProductView.status(product) %> · 온라인 재고 <%= product.getStockQuantity() %>개</p>
                     <% boolean wishlistDetailSelected = request.getAttribute("wishlistSelected") instanceof java.util.Set<?>
                             && ((java.util.Set<?>) request.getAttribute("wishlistSelected")).contains(product.getProductId()); %>

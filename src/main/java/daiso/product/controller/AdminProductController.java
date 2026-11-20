@@ -40,7 +40,7 @@ public final class AdminProductController {
     private static final int MAX_PRICE = 5000;
     private static final String PRICE_RANGE = "가격은 1,000원 이상 5,000원 이하로 입력해 주세요.";
     private static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
-            "SCHEDULED", "판매 예정");
+            "SCHEDULED", "판매 예정", "DISCONTINUED", "판매 종료");
     private final ProductDAO dao = new ProductDAO();
     private final ProductDetailImages detailImages = new ProductDetailImages();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
@@ -129,8 +129,11 @@ public final class AdminProductController {
                 detailUploads.add(path);
             }
             saved = write(conn -> {
+                if (!dao.lockLeafCategory(conn, product.getCategoryId())) return false;
                 ProductDTO before = create ? null : dao.lockAdminProduct(conn, product.getProductId());
                 if (!create && before == null) return false;
+                verifyDiscontinuation(request, product.getStatus(), before);
+                if (!create) product.setStockQuantity(before.getStockQuantity());
                 Map<Long, String> currentImages = create ? Map.of() : detailImages.list(conn, product.getProductId());
                 if (!ProductDetailImages.baseline(currentImages).equals(imageBaseline)) {
                     throw new IllegalArgumentException("다른 작업에서 상세 이미지가 변경되었습니다. 현재 목록을 다시 확인해 주세요.");
@@ -147,7 +150,9 @@ public final class AdminProductController {
                     "상품과 최하위 카테고리를 확인해 주세요.", form);
             Map<String, String> inventoryReturn = create ? Map.of() : OnlineInventoryController.returnParameters(request);
             if (!inventoryReturn.isEmpty()) {
-                return "redirect:" + ProductView.rawUrl("", OnlineInventoryController.MAPPING, inventoryReturn);
+                String receipt = OnlineInventoryController.markSaved(session);
+                return "redirect:" + ProductView.rawUrl("", OnlineInventoryController.MAPPING,
+                        ProductView.with(inventoryReturn, "saved", receipt));
             }
             session.setAttribute(NOTICE, create ? "상품을 등록했습니다." : "상품을 수정했습니다.");
             return redirectToList(request);
@@ -160,16 +165,16 @@ public final class AdminProductController {
             request.setAttribute("adminProductBlocked", "사진 업로드 요청을 확인해 주세요.");
             return VIEW;
         } catch (java.io.IOException error) {
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), form);
         } catch (SQLException error) {
             if (error.getErrorCode() == 1062) {
                 return problem(request, response, session, HttpServletResponse.SC_CONFLICT, "이미 사용 중인 품번입니다.", form);
             }
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } catch (NamingException error) {
-            return unavailable(request, response, error);
+            return saveFailure(request, response, session, error, form);
         } finally {
             if (!saved) {
                 for (String path : uploadedImages) {
@@ -240,6 +245,7 @@ public final class AdminProductController {
                         throw new IllegalArgumentException("선택 목록에 삭제됐거나 찾을 수 없는 상품이 있습니다.");
                     }
                     if (status.equals(before.getStatus())) continue;
+                    verifyDiscontinuation(request, status, before);
                     dao.updateAdminStatus(conn, id, status);
                     ProductDTO after = dao.lockAdminProduct(conn, id);
                     changes.record(conn, administrator(session), Action.BULK_STATUS, before, after);
@@ -253,6 +259,17 @@ public final class AdminProductController {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
+        }
+    }
+
+    private static boolean discontinuationEnabled(HttpServletRequest request) {
+        return "true".equalsIgnoreCase(request.getServletContext().getInitParameter("daiso.product.discontinuationEnabled"));
+    }
+
+    private static void verifyDiscontinuation(HttpServletRequest request, String requested, ProductDTO current) {
+        if ("DISCONTINUED".equals(requested) && (current == null || !"DISCONTINUED".equals(current.getStatus()))
+                && !discontinuationEnabled(request)) {
+            throw new IllegalArgumentException("결제 승인 단계의 판매 상태 검증이 준비될 때까지 판매 종료 전환은 보류됩니다.");
         }
     }
 
@@ -398,11 +415,22 @@ public final class AdminProductController {
             request.setAttribute("adminProductList", inventoryReturn.isEmpty() ? ProductView.url(context, url, filters)
                     : ProductView.url(context, OnlineInventoryController.ROUTE, inventoryReturn));
             request.setAttribute("productStatuses", STATUSES);
+            request.setAttribute("productDiscontinuationEnabled", discontinuationEnabled(request));
             request.setAttribute(CSRF, token(session));
             return VIEW;
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
         }
+    }
+
+    private String saveFailure(HttpServletRequest request, HttpServletResponse response, HttpSession session,
+            Exception error, Map<String, String> form) {
+        if (!form.getOrDefault("id", "").isEmpty() && !OnlineInventoryController.returnParameters(request).isEmpty()) {
+            request.getServletContext().log("온라인 재고 저장 실패", error);
+            return problem(request, response, session, 500,
+                    "온라인 재고를 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해 주세요.", form);
+        }
+        return unavailable(request, response, error);
     }
 
     private String problem(HttpServletRequest request, HttpServletResponse response, HttpSession session,

@@ -12,18 +12,29 @@ import java.util.Objects;
 
 public final class AdminProductChanges {
     private static final int PAGE_SIZE = 30;
-    enum Action { CREATE, UPDATE, BULK_STATUS, DELETE }
+    enum Action { CREATE, UPDATE, BULK_STATUS, DELETE, STOCK_ADJUST }
+
+    void recordStock(Connection connection, String administrator, ProductDTO before, ProductDTO after,
+            String operation, String reason) throws SQLException {
+        record(connection, administrator, Action.STOCK_ADJUST, before, after, operation, reason);
+    }
 
     void record(Connection connection, String administrator, Action action, ProductDTO before, ProductDTO after)
             throws SQLException {
+        record(connection, administrator, action, before, after, null, null);
+    }
+
+    private void record(Connection connection, String administrator, Action action, ProductDTO before, ProductDTO after,
+            String operation, String reason) throws SQLException {
         if (action == Action.UPDATE && before.getPrice() == after.getPrice()
                 && before.getStockQuantity() == after.getStockQuantity()
                 && Objects.equals(before.getStatus(), after.getStatus())) return;
 
         ProductDTO product = after == null ? before : after;
         String sql = "INSERT INTO product_admin_changes (product_id, product_code, product_name, admin_member_id, "
-                + "action, before_price, after_price, before_stock, after_stock, before_status, after_status) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "action, before_price, after_price, before_stock, after_stock, before_status, after_status"
+                + (operation == null ? ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        : ", stock_operation, stock_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         try (PreparedStatement query = connection.prepareStatement(sql)) {
             query.setString(1, product.getProductId());
             query.setString(2, product.getProductCode());
@@ -32,6 +43,10 @@ public final class AdminProductChanges {
             query.setString(5, action.name());
             setSnapshot(query, 6, before);
             setSnapshot(query, 7, after);
+            if (operation != null) {
+                query.setString(12, operation);
+                query.setString(13, reason);
+            }
             query.executeUpdate();
         }
     }
@@ -94,6 +109,8 @@ public final class AdminProductChanges {
         public final Integer afterStock;
         public final String beforeStatus;
         public final String afterStatus;
+        public final String stockOperation;
+        public final String stockReason;
 
         Entry(ResultSet rows) throws SQLException {
             id = rows.getLong("change_id");
@@ -108,6 +125,8 @@ public final class AdminProductChanges {
             afterStock = rows.getObject("after_stock", Integer.class);
             beforeStatus = rows.getString("before_status");
             afterStatus = rows.getString("after_status");
+            stockOperation = "STOCK_ADJUST".equals(action) ? rows.getString("stock_operation") : null;
+            stockReason = "STOCK_ADJUST".equals(action) ? rows.getString("stock_reason") : null;
         }
 
         public boolean priceChanged() { return !Objects.equals(beforePrice, afterPrice); }

@@ -6,6 +6,10 @@ public class ProductDTO {
     private String name;
     private int price;
     private int stockQuantity;
+    private int lowStockThreshold = 5;
+
+    public int getLowStockThreshold() { return lowStockThreshold; }
+    public void setLowStockThreshold(int value) { lowStockThreshold = value; }
 
     String categoryId;
     String productCode;

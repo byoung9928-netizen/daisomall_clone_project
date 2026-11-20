@@ -98,7 +98,8 @@
     const set = (key, text) => { values.get(key).textContent = text; };
     function renderPreview() {
         const quantity = fields.stock.valueAsNumber;
-        const status = fields.status.value === 'SCHEDULED' ? '판매 예정'
+        const status = fields.status.value === 'DISCONTINUED' ? '판매 종료'
+            : fields.status.value === 'SCHEDULED' ? '판매 예정'
             : fields.status.value === 'AVAILABLE' && quantity > 0 ? '구매 가능' : '품절';
         const money = format.format(fields.price.valueAsNumber) + '원';
         set('brand', fields.brand.value.trim());

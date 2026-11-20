@@ -1,0 +1,7 @@
+<%@ page pageEncoding="UTF-8" %>
+<script src="${pageContext.request.contextPath}/assets/js/common/admin-store-ux.js" defer></script>
+<button type="button" class="product-admin-menu-toggle" data-product-admin-menu aria-expanded="false" hidden>
+    <span data-menu-action>관리 메뉴 열기</span>
+    <span data-menu-current></span>
+</button>
+<%@ include file="../common/admin-navigation.jspf" %>
