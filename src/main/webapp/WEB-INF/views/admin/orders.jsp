@@ -26,6 +26,8 @@ int orderPage =
 		?((Number) request.getAttribute("adminOrderPage")).intValue()
 		:1;
 boolean hasNext = Boolean.TRUE.equals(request.getAttribute("adminOrderHasNext"));
+boolean awaitingShipment =
+Boolean.TRUE.equals(request.getAttribute("adminOrderAwaitingShipment"));
 %>
 
 <!DOCTYPE html>
@@ -61,9 +63,14 @@ boolean hasNext = Boolean.TRUE.equals(request.getAttribute("adminOrderHasNext"))
                        name="query"
                        maxlength="120"
                        value="<%= ProductView.escape(query) %>">
-            </label>
-
-            <button class="button" type="submit">검색</button>
+            </label> <label class="field"> <span>주문 상태</span> <select name="filter">
+						<option value="" <%=awaitingShipment ? "" : "selected"%>>전체
+							주문</option>
+						<option value="awaiting-shipment"
+							<%=awaitingShipment ? "selected" : ""%>>발송 대기</option>
+				</select>
+				</label>
+				<button class="button" type="submit">검색</button>
         </form>
 
         <% if (error != null) { %>
@@ -145,34 +152,28 @@ boolean hasNext = Boolean.TRUE.equals(request.getAttribute("adminOrderHasNext"))
                 </table>
             </div>
             <nav aria-label="주문 목록 페이지"
-            	style="dispaly:flex;justify-content:center; align-items:center; gap:16px; margin-top:24px;">
-            	<%if(orderPage>1){ %>
-            		<form method="get"
-            				action="${pageContext.request.contextPath}/app/admin/orders">
-            				<input type="hidden" name="query"
-            						value="<%=ProductView.escape(query) %>">
-            				<input type="hidden" name="page"
-            						value="<%=orderPage -1 %>">
-            				<button class="button secondary" type="submit">
-            					이전
-            				</button>
-            		</form>
-            		<%} %>
-            		<span aria-current="page"><%=orderPage %>페이지</span>
-            		<% if(hasNext){ %>
-            		<form method="get">
-            			action="${pageContext.request.contextPath }/app/admin/orders"
-            			<input type="hidden" name="query"
-            				value="<%=ProductView.escape(query) %>">
-            				
-            			<input type="hidden" name="page"
-            				value="<%=orderPage+1L %>">
-            			<button class ="button secondary" type="submit">
-            				다음
-            			</button>
-            		</form>
-            		<%} %>
-            	</nav>
+     style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px;">
+
+    <% if (orderPage > 1) { %>
+        <form method="get" action="${pageContext.request.contextPath}/app/admin/orders">
+            <input type="hidden" name="filter" value="<%= awaitingShipment ? "awaiting-shipment" : "" %>">
+            <input type="hidden" name="query" value="<%= ProductView.escape(query) %>">
+            <input type="hidden" name="page" value="<%= orderPage - 1 %>">
+            <button class="button secondary" type="submit">이전</button>
+        </form>
+    <% } %>
+
+    <span aria-current="page"><%= orderPage %>페이지</span>
+
+    <% if (hasNext) { %>
+        <form method="get" action="${pageContext.request.contextPath}/app/admin/orders">
+            <input type="hidden" name="filter" value="<%= awaitingShipment ? "awaiting-shipment" : "" %>">
+            <input type="hidden" name="query" value="<%= ProductView.escape(query) %>">
+            <input type="hidden" name="page" value="<%= orderPage + 1L %>">
+            <button class="button secondary" type="submit">다음</button>
+        </form>
+    <% } %>
+</nav>
         <% } %>
     </main>
 </div>

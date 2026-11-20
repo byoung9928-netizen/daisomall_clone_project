@@ -25,6 +25,10 @@ javax.servlet.http.HttpSession adminSession = request.getSession(false);
         response.sendError(404);
         return;
     }
+    if ("dashboard".equals(adminSection)) {
+        response.sendRedirect(request.getContextPath() + "/app/admin/dashboard");
+        return;
+    }
     if ("products".equals(adminSection)) {
         request.getRequestDispatcher("/app/admin/products").forward(request, response);
         return;

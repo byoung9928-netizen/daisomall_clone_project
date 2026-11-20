@@ -750,6 +750,26 @@ public class UserController {
             return "redirect:/member/login";
         }
 
+        request.setAttribute("adminSection", "dashboard");
+
+        try {
+            AdminDashboardDAO.Summary summary = new AdminDashboardDAO().findSummary();
+            java.text.NumberFormat number =
+                    java.text.NumberFormat.getIntegerInstance(java.util.Locale.KOREA);
+
+            request.setAttribute("dashboardProductCount", number.format(summary.productCount));
+            request.setAttribute("dashboardCategoryCount", number.format(summary.categoryCount));
+            request.setAttribute("dashboardOrderCount", number.format(summary.orderCount));
+            request.setAttribute("dashboardPaidAmount", number.format(summary.paidAmount));
+            request.setAttribute("dashboardAwaitingShipmentCount",
+                    number.format(summary.awaitingShipmentCount));
+            request.setAttribute("dashboardOnlineSoldOutCount",
+                    number.format(summary.onlineSoldOutCount));
+        } catch (javax.naming.NamingException | java.sql.SQLException e) {
+            request.getServletContext().log("관리자 대시보드 집계 조회 실패", e);
+            request.setAttribute("dashboardLoadFailed", true);
+        }
+
         return "admin/dashboard";
     }
     
