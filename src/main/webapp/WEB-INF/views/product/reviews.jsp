@@ -6,7 +6,9 @@
     ProductDTO product = (ProductDTO) request.getAttribute("reviewProduct");
     ProductReviewPage reviews = (ProductReviewPage) request.getAttribute("reviewPage");
     String id = product == null ? (String) request.getAttribute("reviewReturnId") : product.getProductId();
-    String reviewHref = id == null ? null : ProductView.url(context, route, Map.of("id", id));
+    boolean fromMyPage = Boolean.TRUE.equals(request.getAttribute("reviewFromMyPage"));
+    String reviewHref = id == null ? null : ProductView.url(context, route,
+            Map.of("id", id, "from", fromMyPage ? "my-reviews" : ""));
     String token = ProductView.escape(request.getAttribute("reviewToken"));
     String base = ProductView.escape(context + route);
 %>
@@ -23,7 +25,10 @@
     <%@ include file="../common/navigation.jspf" %>
     <main id="main-content" class="container shop-page" tabindex="-1">
         <h1 class="page-title">구매 인증 리뷰 작성·관리</h1>
-        <% if (product != null) { %>
+        <% if (fromMyPage) { %>
+            <p><a href="<%= ProductView.url(context, "/app/order/mypage",
+                    Map.of("productActivity", "reviews", "reviewTab", reviews != null && reviews.ownReview != null ? "written" : "")) %>">내 리뷰 목록으로 돌아가기</a></p>
+        <% } else if (product != null) { %>
             <p><a href="<%= ProductView.url(context, "/product.jsp", Map.of("id", id)) %>#product-reviews"><%= ProductView.escape(product.getName()) %> 상품 리뷰로 돌아가기</a></p>
         <% } else if (reviewHref != null) { %>
             <p><a href="<%= reviewHref %>">리뷰 작성·관리로 돌아가기</a></p>
@@ -52,6 +57,7 @@
                         <div class="review-dialog__body">
                             <input type="hidden" name="id" value="<%= ProductView.escape(id) %>">
                             <input type="hidden" name="csrf" value="<%= token %>">
+                            <% if (fromMyPage) { %><input type="hidden" name="from" value="my-reviews"><% } %>
                             <% if (editing) { %>
                                 <input type="hidden" name="reviewId" value="<%= own.id %>">
                                 <input type="hidden" name="version" value="<%= own.version %>">
@@ -139,6 +145,7 @@
                         <form method="post" action="<%= base %>/delete">
                             <input type="hidden" name="id" value="<%= ProductView.escape(id) %>">
                             <input type="hidden" name="csrf" value="<%= token %>">
+                            <% if (fromMyPage) { %><input type="hidden" name="from" value="my-reviews"><% } %>
                             <input type="hidden" name="reviewId" value="<%= own.id %>">
                             <input type="hidden" name="version" value="<%= own.version %>">
                             <button type="submit" class="button secondary">리뷰 삭제 확인</button>

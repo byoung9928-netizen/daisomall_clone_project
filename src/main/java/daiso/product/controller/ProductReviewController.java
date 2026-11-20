@@ -39,6 +39,7 @@ public final class ProductReviewController {
     @DaisoGetMapping(ROUTE)
     public String list(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "private, no-store");
+        request.setAttribute("reviewFromMyPage", MyReviewsController.RETURN_SOURCE.equals(request.getParameter("from")));
         String productId;
         Sort sort;
         int page;
@@ -108,6 +109,8 @@ public final class ProductReviewController {
             if (!validToken(request, session, member)) {
                 return error(request, response, 403, "보안 확인에 실패했습니다. 리뷰 화면을 다시 열어 주세요.");
             }
+            boolean fromMyPage = MyReviewsController.RETURN_SOURCE.equals(request.getParameter("from"));
+            request.setAttribute("reviewFromMyPage", fromMyPage);
             String productId = productId(request);
             request.setAttribute("reviewReturnId", productId);
             long id = action == Action.CREATE ? 0 : Long.parseLong(request.getParameter("reviewId"));
@@ -129,6 +132,7 @@ public final class ProductReviewController {
             }
             switch (result) {
                 case SAVED:
+                    if (fromMyPage) return "redirect:" + MyReviewsController.returnPath(action != Action.DELETE);
                     return "redirect:/products/detail?id="
                             + URLEncoder.encode(productId, StandardCharsets.UTF_8) + "#product-reviews";
                 case PURCHASE_REQUIRED:

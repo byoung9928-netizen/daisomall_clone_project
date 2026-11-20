@@ -68,6 +68,18 @@ public final class WishlistDAO {
         }
     }
 
+    public void removeSelected(Connection connection, String memberId, Collection<String> productIds) throws SQLException {
+        if (productIds.isEmpty()) return;
+        String sql = "DELETE FROM product_wishlists WHERE member_id = ? AND product_id IN ("
+                + String.join(",", Collections.nCopies(productIds.size(), "?")) + ")";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, memberId);
+            int index = 2;
+            for (String productId : productIds) query.setString(index++, productId);
+            query.executeUpdate();
+        }
+    }
+
     // 품절 및 숨겨진 카테고리 상품도 찜 목록에는 유지
     public int count(Connection connection, String memberId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
