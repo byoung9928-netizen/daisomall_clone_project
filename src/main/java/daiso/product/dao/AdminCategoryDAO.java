@@ -55,17 +55,30 @@ public final class AdminCategoryDAO {
         }
     }
 
+    public boolean hasProducts(Connection connection, String id) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement(
+                "SELECT product_id FROM products WHERE category_id = ? LIMIT 1 FOR UPDATE")) {
+            query.setString(1, id);
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next();
+            }
+        }
+    }
+
+    public void delete(Connection connection, Row category) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("DELETE FROM categories WHERE category_id = ?")) {
+            query.setString(1, category.id);
+            if (query.executeUpdate() != 1) throw new SQLException("Category delete failed");
+        }
+    }
+
     public void insert(Connection connection, String id, Row parent, String name, int displayOrder,
             boolean visible) throws SQLException {
         int level = parent == null ? 1 : parent.level + 1;
         if (level > 3) throw new IllegalArgumentException("카테고리는 최대 3단계까지 등록할 수 있습니다.");
         if (parent != null && parent.leaf) {
-            try (PreparedStatement query = connection.prepareStatement(
-                    "SELECT product_id FROM products WHERE category_id = ? LIMIT 1 FOR UPDATE")) {
-                query.setString(1, parent.id);
-                try (ResultSet rows = query.executeQuery()) {
-                    if (rows.next()) throw new IllegalArgumentException("상품이 연결된 최하위 카테고리에는 하위 카테고리를 추가할 수 없습니다.");
-                }
+            if (hasProducts(connection, parent.id)) {
+                throw new IllegalArgumentException("상품이 연결된 최하위 카테고리에는 하위 카테고리를 추가할 수 없습니다.");
             }
             try (PreparedStatement query = connection.prepareStatement("UPDATE categories SET is_leaf=0 WHERE category_id=?")) {
                 query.setString(1, parent.id);

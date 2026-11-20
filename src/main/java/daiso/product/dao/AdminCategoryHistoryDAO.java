@@ -12,7 +12,7 @@ import daiso.product.dao.AdminCategoryDAO.Row;
 
 public final class AdminCategoryHistoryDAO {
     public enum Action {
-        CREATE("신규 등록"), NAME("이름 변경"), VISIBILITY("노출 변경"), ORDER("표시 순서 변경");
+        CREATE("신규 등록"), NAME("이름 변경"), VISIBILITY("노출 변경"), ORDER("표시 순서 변경"), DELETE("카테고리 삭제");
 
         public final String label;
         Action(String label) { this.label = label; }
@@ -23,6 +23,23 @@ public final class AdminCategoryHistoryDAO {
                 + "AND table_name = 'category_admin_changes'";
         try (PreparedStatement query = connection.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
             return rows.next();
+        }
+    }
+
+    public boolean supportsDeletion(Connection connection) throws SQLException {
+        String sql = "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                + "AND TABLE_NAME = 'category_admin_changes' AND COLUMN_NAME = 'operation'";
+        try (PreparedStatement query = connection.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
+            return rows.next() && rows.getString(1).contains("'DELETE'");
+        }
+    }
+
+    public int highestIssuedId(Connection connection) throws SQLException {
+        String sql = "SELECT COALESCE(MAX(CAST(SUBSTRING(category_id, 6) AS UNSIGNED)), 0) "
+                + "FROM category_admin_changes WHERE category_id REGEXP '^CTGR_[0-9]{5}$'";
+        try (PreparedStatement query = connection.prepareStatement(sql); ResultSet rows = query.executeQuery()) {
+            rows.next();
+            return rows.getInt(1);
         }
     }
 

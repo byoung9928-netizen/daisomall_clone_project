@@ -54,8 +54,8 @@ public final class AdminCategoryModel {
         return true;
     }
 
-    String nextId() {
-        int largest = 0;
+    String nextId(int highestIssued) {
+        int largest = highestIssued;
         for (String id : nodes.keySet()) {
             if (id.matches("CTGR_[0-9]{5}")) largest = Math.max(largest, Integer.parseInt(id.substring(5)));
         }
@@ -95,6 +95,8 @@ public final class AdminCategoryModel {
             for (Node child : children) child.branch(list);
         }
 
+        public boolean hasChildren() { return !children.isEmpty(); }
+
         public boolean canParent() { return row.level < 3 && (!row.leaf || row.products == 0); }
 
         String version() {
@@ -133,6 +135,7 @@ public final class AdminCategoryModel {
         public final List<TreeItem> tree;
         public final List<Node> parents;
         public final boolean historyReady;
+        public final boolean deleteReady;
         public final boolean create;
         public final Map<String, String> form;
         public final boolean canUp;
@@ -151,7 +154,7 @@ public final class AdminCategoryModel {
         private final String context;
 
         Page(String context, String keyword, AdminCategoryModel model, Node selected, Map<String, String> form,
-                boolean create, boolean historyReady, List<Entry> history, Entry latest, int page, int pageSize,
+                boolean create, boolean historyReady, boolean deleteReady, List<Entry> history, Entry latest, int page, int pageSize,
                 Impact impact, String confirmToken) {
             this.context = context;
             this.keyword = keyword;
@@ -159,6 +162,7 @@ public final class AdminCategoryModel {
             this.create = create;
             this.form = form;
             this.historyReady = historyReady;
+            this.deleteReady = deleteReady;
             this.impact = impact;
             this.confirmToken = confirmToken;
             this.latest = latest;

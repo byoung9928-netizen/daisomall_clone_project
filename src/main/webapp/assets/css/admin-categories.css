@@ -19,6 +19,8 @@
 }
 .category-section-heading { justify-content: space-between; margin-block-end: .8rem; }
 .category-section-heading h2 { margin: 0; overflow-wrap: anywhere; }
+.category-products-link { font-size: .875rem; text-decoration: underline; text-underline-offset: .15em; }
+.category-form-title { margin: 0; }
 .category-search input { flex: 1 1 9rem; min-width: 0; }
 .category-tree-note { color: #55505a; font-size: .875rem; margin-block: .6rem; }
 .category-tree, .category-tree ul { list-style: none; margin: 0; padding: 0; }

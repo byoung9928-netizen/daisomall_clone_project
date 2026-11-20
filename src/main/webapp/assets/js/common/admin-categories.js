@@ -56,6 +56,7 @@
             const next = document.importNode(source, true);
             panel.replaceWith(next);
             panel = next;
+            document.querySelector('[data-category-saved]')?.remove();
             if (push) history.pushState(null, '', url);
             highlight();
             const heading = panel.querySelector(url.hash === '#category-history-heading'

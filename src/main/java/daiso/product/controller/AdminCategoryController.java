@@ -37,6 +37,7 @@ public final class AdminCategoryController {
     private static final String VIEW = "admin/categories";
     private static final String SAVED = AdminCategoryController.class.getName() + ".saved";
     private static final String CONFIRM = AdminCategoryController.class.getName() + ".confirm";
+    private static final String DELETE_CONFIRM = AdminCategoryController.class.getName() + ".delete";
     private static final int HISTORY_SIZE = 10;
     private final AdminCategoryDAO dao = new AdminCategoryDAO();
     private final AdminCategoryHistoryDAO history = new AdminCategoryHistoryDAO();
@@ -100,7 +101,7 @@ public final class AdminCategoryController {
                             String parentId = ProductQueries.text(request, "parent", 100);
                             Node parent = parentId.isEmpty() ? null : requiredNode(model, parentId);
                             List<Node> siblings = model.siblings(parent);
-                            id = model.nextId();
+                            id = model.nextId(history.highestIssuedId(connection));
                             dao.insert(connection, id, parent == null ? null : parent.row, name, siblings.size() + 1, visible);
                             renumber(connection, siblings, actor);
                             history.record(connection, id, name, actor, Action.CREATE, null, name + " · " + visibility(visible));
@@ -141,9 +142,9 @@ public final class AdminCategoryController {
                 return show(request, response, session, draft, preview);
             }
             if ("confirm".equals(intent)) session.removeAttribute(CONFIRM);
-            String receipt = UUID.randomUUID().toString();
-            session.setAttribute(SAVED, receipt);
-            return "redirect:" + ProductView.rawUrl("", MAPPING, Map.of("q", keyword, "edit", id, "saved", receipt));
+            String message = create ? "카테고리가 등록되었습니다."
+                    : move ? "카테고리 순서가 변경되었습니다." : "카테고리 정보가 수정되었습니다.";
+            return savedRedirect(session, keyword, id, message);
         } catch (IllegalArgumentException error) {
             response.setStatus(400);
             request.setAttribute("categoryError", error.getMessage());
@@ -156,6 +157,78 @@ public final class AdminCategoryController {
             request.setAttribute("categoryError", "변경을 저장하지 못했습니다. 현재 상태를 다시 확인해 주세요.");
         }
         return show(request, response, session, move ? null : draft, null);
+    }
+
+    @DaisoPostMapping(MAPPING + "/delete")
+    public String delete(HttpServletRequest request, HttpServletResponse response) throws UnsupportedEncodingException {
+        request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        initialize(request);
+        HttpSession session = AdminProductController.adminSession(request);
+        if (session == null || !AdminProductController.validToken(request, session)) {
+            return blocked(request, response, 403, "관리자 권한 또는 요청 확인 정보가 유효하지 않습니다.");
+        }
+        try {
+            String keyword = ProductQueries.text(request, "q", 120);
+            String id = ProductQueries.text(request, "id", 100);
+            String intent = request.getParameter("intent");
+            boolean confirm = "confirm".equals(intent);
+            if (!confirm && !"preview".equals(intent)) throw new IllegalArgumentException("삭제 확인 단계를 다시 진행해 주세요.");
+            String parentId;
+            try (Connection connection = ProductQueries.connect()) {
+                try {
+                    if (!history.supportsDeletion(connection)) {
+                        throw new IllegalStateException("삭제 이력 마이그레이션을 적용한 뒤 삭제할 수 있습니다.");
+                    }
+                    Node selected = requiredNode(new AdminCategoryModel(dao.lockTree(connection)), id);
+                    if (selected.hasChildren() || dao.hasProducts(connection, id)) {
+                        throw new IllegalStateException("하위 카테고리나 연결 상품이 있어 삭제할 수 없습니다. 숨기려면 비노출로 설정해 주세요.");
+                    }
+                    parentId = selected.row.parent == null ? "" : selected.row.parent;
+                    if (confirm) {
+                        Object value = session.getAttribute(DELETE_CONFIRM);
+                        if (!(value instanceof PendingDelete) || !((PendingDelete) value).matches(
+                                request.getParameter("confirmation"), selected)) {
+                            throw new IllegalStateException("카테고리 정보가 변경됐거나 확인이 만료됐습니다. 삭제 내용을 다시 확인해 주세요.");
+                        }
+                        dao.delete(connection, selected.row);
+                        history.record(connection, selected.row, session.getAttribute("member_id").toString(), Action.DELETE,
+                                selected.row.name + " · " + visibility(selected.row.visible), "삭제");
+                    } else {
+                        PendingDelete pending = new PendingDelete(selected);
+                        session.setAttribute(DELETE_CONFIRM, pending);
+                        request.setAttribute("categoryDeleteToken", pending.token);
+                    }
+                    connection.commit();
+                } catch (SQLException | RuntimeException error) {
+                    try { connection.rollback(); }
+                    catch (SQLException rollback) { error.addSuppressed(rollback); }
+                    throw error;
+                }
+            }
+            if (confirm) {
+                session.removeAttribute(DELETE_CONFIRM);
+                return savedRedirect(session, keyword, parentId, "카테고리가 삭제되었습니다.");
+            }
+        } catch (IllegalArgumentException error) {
+            response.setStatus(400);
+            request.setAttribute("categoryError", error.getMessage());
+        } catch (IllegalStateException error) {
+            response.setStatus(409);
+            request.setAttribute("categoryError", error.getMessage());
+        } catch (SQLException | NamingException error) {
+            boolean linked = error instanceof SQLException && ((SQLException) error).getErrorCode() == 1451;
+            if (!linked) request.getServletContext().log("관리자 카테고리 삭제 실패", error);
+            response.setStatus(linked ? 409 : 500);
+            request.setAttribute("categoryError", linked ? "연결된 데이터가 있어 삭제할 수 없습니다. 비노출 설정을 이용해 주세요."
+                    : "카테고리를 삭제하지 못했습니다. 다시 시도해 주세요.");
+        }
+        return show(request, response, session, null, null);
+    }
+
+    private static String savedRedirect(HttpSession session, String keyword, String id, String message) {
+        String receipt = UUID.randomUUID().toString();
+        session.setAttribute(SAVED, new SavedNotice(receipt, message));
+        return "redirect:" + ProductView.rawUrl("", MAPPING, Map.of("q", keyword, "edit", id, "saved", receipt));
     }
 
     private void renumber(Connection connection, List<Node> siblings, String actor) throws SQLException {
@@ -173,7 +246,7 @@ public final class AdminCategoryController {
     private void update(Connection connection, Node node, String name, boolean visible, String actor) throws SQLException {
         boolean nameChanged = !node.row.name.equals(name);
         boolean visibilityChanged = node.row.visible != visible;
-        if (!nameChanged && !visibilityChanged) return;
+        if (!nameChanged && !visibilityChanged) throw new IllegalArgumentException("변경된 카테고리 정보가 없습니다.");
         dao.update(connection, node.row, name, visible);
         if (nameChanged) history.record(connection, node.row.id, name, actor, Action.NAME, node.row.name, name);
         if (visibilityChanged) history.record(connection, node.row.id, name, actor, Action.VISIBILITY,
@@ -232,6 +305,7 @@ public final class AdminCategoryController {
                 form = Map.of("name", selected.row.name, "visible", selected.row.visible ? "1" : "0");
             }
             boolean ready = history.available(connection);
+            boolean deleteReady = ready && history.supportsDeletion(connection);
             int page = ProductQueries.integer(request, "historyPage", 1, 1, 1_000_000);
             List<Entry> entries = ready && selected != null
                     ? history.list(connection, selected.row.id, HISTORY_SIZE + 1, (page - 1) * HISTORY_SIZE) : List.of();
@@ -241,16 +315,17 @@ public final class AdminCategoryController {
                 if (!first.isEmpty()) latest = first.get(0);
             }
             request.setAttribute("categoryPage", new Page(request.getContextPath(), keyword, model, selected, form,
-                    create, ready, entries, latest, page, HISTORY_SIZE, preview == null ? null : preview.impact,
+                    create, ready, deleteReady, entries, latest, page, HISTORY_SIZE, preview == null ? null : preview.impact,
                     preview == null ? "" : preview.token));
             request.setAttribute("categoryCsrf", AdminProductController.token(session));
             response.setHeader("Cache-Control", "no-store");
             connection.commit();
             synchronized (session) {
                 String receipt = request.getParameter("saved");
-                if (receipt != null && receipt.equals(session.getAttribute(SAVED))) {
+                Object value = session.getAttribute(SAVED);
+                if (value instanceof SavedNotice && ((SavedNotice) value).receipt.equals(receipt)) {
                     session.removeAttribute(SAVED);
-                    request.setAttribute("categorySaved", true);
+                    request.setAttribute("categorySaved", ((SavedNotice) value).message);
                 }
             }
             return VIEW;
@@ -279,6 +354,31 @@ public final class AdminCategoryController {
         response.setStatus(status);
         request.setAttribute("categoryError", error);
         return VIEW;
+    }
+
+    private static final class SavedNotice {
+        private final String receipt;
+        private final String message;
+
+        private SavedNotice(String receipt, String message) {
+            this.receipt = receipt;
+            this.message = message;
+        }
+    }
+
+    private static final class PendingDelete {
+        private final String token = UUID.randomUUID().toString();
+        private final String id;
+        private final String revision;
+
+        private PendingDelete(Node selected) {
+            id = selected.row.id;
+            revision = selected.version();
+        }
+
+        boolean matches(String token, Node selected) {
+            return this.token.equals(token) && id.equals(selected.row.id) && revision.equals(selected.version());
+        }
     }
 
     private static final class Pending {

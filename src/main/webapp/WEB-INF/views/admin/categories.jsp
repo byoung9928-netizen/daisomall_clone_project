@@ -24,23 +24,21 @@
         <%@ include file="product-admin-menu.jspf" %>
         <main class="admin-content category-admin" id="admin-content" tabindex="-1">
             <h1 class="page-title">카테고리 관리</h1>
-            <% if (Boolean.TRUE.equals(request.getAttribute("categorySaved"))) { %>
-                <p class="inventory-success" role="status">카테고리를 저장했습니다.</p>
+            <% if (request.getAttribute("categorySaved") != null) { %>
+                <p class="inventory-success" role="status" data-category-saved><%= ProductView.escape(request.getAttribute("categorySaved")) %></p>
             <% } %>
             <% if (request.getAttribute("categoryError") != null) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("categoryError")) %></p>
             <% } %>
             <% if (categoryPage != null) { %>
                 <% if (!categoryPage.historyReady) { %>
-                    <p class="category-guide" role="status">카테고리 이력 SQL을 적용하면 등록·수정·순서 이동을 사용할 수 있습니다.</p>
+                    <p class="category-guide" role="status">이력 테이블이 없어 현재 조회만 가능합니다. 카테고리 이력 SQL을 적용하면 변경을 사용할 수 있습니다.</p>
                 <% } %>
                 <div class="category-workspace">
                     <section class="category-browser" aria-labelledby="category-browser-heading">
                         <div class="category-section-heading">
                             <h2 id="category-browser-heading">카테고리 트리</h2>
-                            <% if (categoryPage.historyReady) { %>
-                                <a class="button secondary" href="<%= categoryPage.newUrl %>#category-detail" data-category-nav>대분류 추가</a>
-                            <% } %>
+                            <a class="button primary" href="<%= categoryPage.newUrl %>#category-detail" data-category-nav>카테고리 등록</a>
                         </div>
                         <form class="category-search" method="get" action="<%= categoryRoute %>" role="search" aria-label="카테고리 검색">
                             <label class="visually-hidden" for="category-search">카테고리명 또는 ID</label>
@@ -90,11 +88,12 @@
                                Node selected = categoryPage.selected;
                                Map<String, String> form = categoryPage.form;
                                String keyword = ProductView.escape(categoryPage.keyword);
+                               Object deleteToken = request.getAttribute("categoryDeleteToken");
                                DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"); %>
                             <div class="category-section-heading">
                                 <h2 id="category-detail-heading" tabindex="-1"><%= categoryPage.create ? "카테고리 등록" : selected == null ? "카테고리 수정" : ProductView.escape(selected.row.name) %></h2>
                                 <% if (!categoryPage.create && categoryPage.productsUrl != null) { %>
-                                    <a class="button secondary" href="<%= categoryPage.productsUrl %>">이 분류 상품 관리</a>
+                                    <a class="text-button category-products-link" href="<%= categoryPage.productsUrl %>">이 분류 상품 관리 <span aria-hidden="true">↗</span></a>
                                 <% } %>
                             </div>
                             <% if (selected != null && !categoryPage.create) { %>
@@ -112,14 +111,14 @@
                                     <p class="category-tree-note">마지막 변경 · <%= ProductView.escape(categoryPage.latest.action) %> ·
                                         <time datetime="<%= categoryPage.latest.time %>"><%= format.format(categoryPage.latest.time) %></time></p>
                                 <% } %>
-                                <% if (categoryPage.historyReady && categoryPage.impact == null) { %>
+                                <% if (categoryPage.impact == null && deleteToken == null) { %>
                                     <div class="category-actions">
                                         <form class="category-actions" method="post" action="<%= categoryRoute %>/save">
                                             <input type="hidden" name="csrf" value="<%= csrf %>">
                                             <input type="hidden" name="q" value="<%= keyword %>">
                                             <input type="hidden" name="id" value="<%= ProductView.escape(selected.row.id) %>">
-                                            <button class="button secondary" type="submit" name="intent" value="up" <%= categoryPage.canUp ? "" : "disabled" %>>↑ 위로</button>
-                                            <button class="button secondary" type="submit" name="intent" value="down" <%= categoryPage.canDown ? "" : "disabled" %>>↓ 아래로</button>
+                                            <button class="button secondary" type="submit" name="intent" value="up" <%= categoryPage.historyReady && categoryPage.canUp ? "" : "disabled" %>>↑ 위로</button>
+                                            <button class="button secondary" type="submit" name="intent" value="down" <%= categoryPage.historyReady && categoryPage.canDown ? "" : "disabled" %>>↓ 아래로</button>
                                         </form>
                                         <% if (categoryPage.childUrl != null) { %>
                                             <a class="button secondary" href="<%= categoryPage.childUrl %>#category-detail" data-category-nav>하위 카테고리 추가</a>
@@ -127,8 +126,9 @@
                                     </div>
                                 <% } %>
                             <% } %>
-                            <% if (categoryPage.historyReady && (categoryPage.create || selected != null)) { %>
+                            <% if (deleteToken == null && (categoryPage.create || selected != null)) { %>
                                 <form class="category-form" method="post" action="<%= categoryRoute %>/save">
+                                    <% if (!categoryPage.create && categoryPage.impact == null) { %><h3 class="category-form-title">카테고리 정보 수정</h3><% } %>
                                     <input type="hidden" name="csrf" value="<%= csrf %>">
                                     <input type="hidden" name="q" value="<%= keyword %>">
                                     <input type="hidden" name="create" value="<%= categoryPage.create ? "1" : "0" %>">
@@ -164,7 +164,7 @@
                                             <input name="name" maxlength="120" required value="<%= ProductView.escape(form.get("name")) %>">
                                         </label>
                                         <label class="field">고객 메뉴 노출
-                                            <select name="visible" <%= selected != null && selected.parent != null && !selected.parent.effectiveVisible ? "aria-describedby=\"category-parent-hidden\"" : "" %>>
+                                            <select id="category-visibility" name="visible" <%= selected != null && selected.parent != null && !selected.parent.effectiveVisible ? "aria-describedby=\"category-parent-hidden\"" : "" %>>
                                                 <option value="1" <%= "1".equals(form.get("visible")) ? "selected" : "" %>>노출</option>
                                                 <option value="0" <%= "0".equals(form.get("visible")) ? "selected" : "" %>>비노출</option>
                                             </select>
@@ -175,11 +175,40 @@
                                             <p class="category-guide">지정된 상위 분류가 고객에게 보이지 않습니다.</p>
                                         <% } %>
                                         <div class="category-actions">
-                                            <button type="submit" name="intent" value="save" class="button primary">저장</button>
+                                            <button type="submit" name="intent" value="save" class="button primary" <%= categoryPage.historyReady ? "" : "disabled" %>><%= categoryPage.create ? "카테고리 등록" : "카테고리 정보 저장" %></button>
                                             <% if (categoryPage.create) { %><a class="button secondary" href="<%= categoryPage.resetUrl %>#category-detail" data-category-nav>취소</a><% } %>
                                         </div>
                                     <% } %>
                                 </form>
+                            <% } %>
+                            <% if (!categoryPage.create && selected != null && categoryPage.impact == null) { %>
+                                <section class="category-history" aria-labelledby="category-delete-heading">
+                                    <h3 id="category-delete-heading"><%= deleteToken == null ? "카테고리 삭제" : "카테고리 삭제 확인" %></h3>
+                                    <% if (deleteToken != null) { %>
+                                        <div class="category-confirm">
+                                            <p><strong><%= ProductView.escape(selected.path) %></strong>을 삭제합니다. 하위 분류 0개, 연결 상품 0개이며 변경 이력은 보존됩니다.</p>
+                                            <form class="category-actions" method="post" action="<%= categoryRoute %>/delete">
+                                                <input type="hidden" name="csrf" value="<%= csrf %>">
+                                                <input type="hidden" name="q" value="<%= keyword %>">
+                                                <input type="hidden" name="id" value="<%= ProductView.escape(selected.row.id) %>">
+                                                <input type="hidden" name="confirmation" value="<%= ProductView.escape(deleteToken) %>">
+                                                <button class="button inventory-danger" type="submit" name="intent" value="confirm">카테고리 삭제 확정</button>
+                                                <a class="button secondary" href="<%= categoryPage.resetUrl %>#category-detail" data-category-nav>취소</a>
+                                            </form>
+                                        </div>
+                                    <% } else if (selected.hasChildren() || selected.row.products != 0) { %>
+                                        <p class="category-tree-note">하위 분류나 연결 상품이 있는 카테고리는 삭제할 수 없습니다. 고객 메뉴에서 숨기려면 <a href="#category-visibility">비노출 설정</a>을 이용하세요.</p>
+                                    <% } else if (!categoryPage.deleteReady) { %>
+                                        <p class="category-tree-note">삭제 이력 마이그레이션을 적용하면 빈 카테고리를 삭제할 수 있습니다.</p>
+                                    <% } else { %>
+                                        <form method="post" action="<%= categoryRoute %>/delete">
+                                            <input type="hidden" name="csrf" value="<%= csrf %>">
+                                            <input type="hidden" name="q" value="<%= keyword %>">
+                                            <input type="hidden" name="id" value="<%= ProductView.escape(selected.row.id) %>">
+                                            <button class="button secondary inventory-danger-outline" type="submit" name="intent" value="preview">삭제 내용 확인</button>
+                                        </form>
+                                    <% } %>
+                                </section>
                             <% } %>
                             <% if (!categoryPage.create && selected != null && categoryPage.historyReady) { %>
                                 <section class="category-history" aria-labelledby="category-history-heading">
