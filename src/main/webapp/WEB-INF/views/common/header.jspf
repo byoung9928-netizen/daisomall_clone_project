@@ -31,8 +31,19 @@
             <input id="search-query" type="search" name="q" maxlength="100" autocomplete="off" value="<%= daiso.product.controller.ProductView.escape(request.getParameter("q")) %>" placeholder="상품명, 품번, 브랜드 검색">
             <button type="submit" aria-label="검색"><span class="search-icon" aria-hidden="true"></span></button>
         </form>
-        <button class="delivery-button" type="button" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg" alt="" width="16" height="16">배송이나 픽업 어때요? <span aria-hidden="true">⌄</span></button>
-        <div class="account-tools" aria-label="회원 메뉴">
+		<div class="header-service-tools">
+			<button id="open-ai-chat" class="ai-chat-trigger" type="button"
+				aria-haspopup="dialog" aria-controls="ai-chat-dialog">
+				<span aria-hidden="true">✦</span> AI 챗봇
+			</button>
+			<button class="delivery-button" type="button" data-unavailable>
+				<img class="delivery-icon"
+					src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg"
+					alt="" width="16" height="16"> 배송이나 픽업 어때요? <span
+					aria-hidden="true">⌄</span>
+			</button>
+		</div>
+		<div class="account-tools" aria-label="회원 메뉴">
 			<%
 			if (session.getAttribute("member_id") == null) {
 			%>
@@ -70,4 +81,31 @@
         </div>
     </div>
 </header>
+<dialog id="ai-chat-dialog" class="ai-chat-dialog" aria-labelledby="ai-chat-title">
+    <div class="ai-chat-heading">
+        <h2 id="ai-chat-title">AI 챗봇</h2>
+        <form method="dialog">
+            <button type="submit" class="ai-chat-close" aria-label="채팅 닫기">×</button>
+        </form>
+    </div>
+
+    <% if (session.getAttribute("member_id") != null) { %>
+        <div id="ai-chat-log" class="ai-chat-log" role="log" aria-label="대화 내역">
+            <p class="ai-chat-bubble">안녕하세요! 궁금한 걸 물어보세요. 매장 재고도 찾아드려요.</p>
+        </div>
+        <p id="ai-chat-status" class="visually-hidden" role="status"></p>
+        <form id="ai-chat-form" class="ai-chat-form" method="post"
+              action="${pageContext.request.contextPath}/app/stores/chat">
+            <label for="ai-chat-question" class="visually-hidden">질문 입력</label>
+            <input id="ai-chat-question" name="question" type="text"
+                   maxlength="200" required placeholder="무엇이 궁금한가요?">
+            <button type="submit">보내기</button>
+        </form>
+    <% } else { %>
+        <a class="ai-chat-login" href="${pageContext.request.contextPath}/app/member/login">
+            로그인하고 대화하기
+        </a>
+    <% } %>
+</dialog>
+<script src="${pageContext.request.contextPath}/assets/js/common/ai-chat.js" defer></script>
 <p id="common-feature-status" class="feature-status" role="status" aria-live="polite"></p>

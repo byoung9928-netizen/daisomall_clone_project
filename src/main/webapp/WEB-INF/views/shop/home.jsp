@@ -76,6 +76,7 @@ document.addEventListener("DOMContentLoaded", function () {
             </div>
             <a class="button secondary" href="<%= ProductView.url(context, "/list.jsp", Map.of("sort", "newest", "collection", "new")) %>">상품 더 보기</a>
         </section>
+        <section class="product-section" aria-labelledby="stock-chat-title">
     </main>
     <%@ include file="../common/footer.jspf" %>
 </body>
