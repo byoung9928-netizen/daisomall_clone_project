@@ -18,6 +18,8 @@
                <% if ("product-reviews".equals(request.getAttribute("adminSection"))) { %>aria-current="page"<% } %>>리뷰 관리</a>
         <% } %>
     <% } %>
+    <a href="${pageContext.request.contextPath}/app/admin/sales"
+       <% if ("sales".equals(request.getAttribute("adminSection"))) { %>aria-current="page"<% } %>>판매순위</a>
     <a href="${pageContext.request.contextPath}/app/admin/returns"
    <% if ("returns".equals(request.getAttribute("adminSection"))) { %>
        aria-current="page"

@@ -5,5 +5,18 @@
         <span>관리자</span>
     </a>
     <span>체험용 관리자 · 실제 운영 시스템이 아닙니다</span>
-    <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
+    <%-- ===== 엑셀 다운로드 버튼은 이 공통 헤더 한 곳에서만 표시 ===== --%>
+    <%
+        String headerExcelUrl = daiso.admin.report.AdminExcelController.downloadUrl(request);
+    %>
+    <div class="admin-header-actions">
+        <% if (headerExcelUrl != null) { %>
+            <a class="admin-excel-link"
+               href="<%= daiso.product.controller.ProductView.escape(headerExcelUrl) %>">
+                <span class="admin-excel-icon" aria-hidden="true">↓</span>
+                <span>엑셀 다운로드</span>
+            </a>
+        <% } %>
+        <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
+    </div>
 </header>

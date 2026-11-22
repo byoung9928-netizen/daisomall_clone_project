@@ -40,6 +40,16 @@ public class ProductDAO {
             + "JOIN selected_categories s ON v.parent_id = s.category_id)";
 
     CatalogPage findAdminProducts(Connection conn, AdminProductFilter filter, int limit, int offset) throws SQLException {
+        return queryAdminProducts(conn, filter, limit, offset);
+    }
+
+    // ===== 엑셀에서도 같은 상품·재고 필터와 정렬을 사용 =====
+    List<ProductDTO> findAdminProductsForExport(Connection conn, AdminProductFilter filter) throws SQLException {
+        return queryAdminProducts(conn, filter, null, 0).products;
+    }
+
+    private CatalogPage queryAdminProducts(Connection conn, AdminProductFilter filter, Integer limit, int offset)
+            throws SQLException {
         String prefix = "";
         StringBuilder scope = new StringBuilder(" FROM products p");
         List<Object> terms = new ArrayList<>();
@@ -61,21 +71,27 @@ public class ProductDAO {
         }
         scope.append(filter.stock.predicate);
         if (filter.stockQuantity != null) terms.add(filter.stockQuantity);
-        int total;
-        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT COUNT(*)" + scope)) {
-            bind(query, terms);
-            try (ResultSet rows = query.executeQuery()) {
-                rows.next();
-                total = rows.getInt(1);
+        int total = 0;
+        if (limit != null) {
+            try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT COUNT(*)" + scope)) {
+                bind(query, terms);
+                try (ResultSet rows = query.executeQuery()) {
+                    rows.next();
+                    total = rows.getInt(1);
+                }
             }
         }
         String columns = ADMIN_COLUMNS + (filter.onlineInventory ? ", p.low_stock_threshold" : "");
+        String pagination = limit == null ? "" : " LIMIT ? OFFSET ?";
         try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + columns + scope
-                + " ORDER BY " + filter.sort.orderBy + ", p.product_id LIMIT ? OFFSET ?")) {
+                + " ORDER BY " + filter.sort.orderBy + ", p.product_id" + pagination)) {
             bind(query, terms);
-            query.setInt(terms.size() + 1, limit);
-            query.setInt(terms.size() + 2, offset);
-            return new CatalogPage(readProducts(query, filter.onlineInventory), total);
+            if (limit != null) {
+                query.setInt(terms.size() + 1, limit);
+                query.setInt(terms.size() + 2, offset);
+            }
+            List<ProductDTO> products = readProducts(query, filter.onlineInventory);
+            return new CatalogPage(products, limit == null ? products.size() : total);
         }
     }
 
