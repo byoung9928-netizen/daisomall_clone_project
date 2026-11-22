@@ -1908,7 +1908,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 								<tr>
 									<th scope="row"><label for="profile-phone">휴대폰</label></th>
 									<td><input id="profile-phone" name="phone" type="tel"
-										maxlength="30"
+										maxlength="30" readonly
 										value="<%=ProductView.escape(profile.getPhone())%>" required>
 									</td>
 								</tr>
@@ -1968,9 +1968,8 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<dialog id="profileVerifyDialog"
 						aria-labelledby="profileVerifyTitle">
 					<h2 id="profileVerifyTitle">본인인증</h2>
-					<p>
-						시연용 인증번호 <strong>123456</strong>을 입력해 주세요.
-					</p>
+					<p>등록된 휴대폰 번호로 인증번호를 받으세요.</p>
+					<button type="button" id="sendProfileCode">인증번호 받기</button>
 					<label for="profileVerifyCode">인증번호</label> <input
 						id="profileVerifyCode" inputmode="numeric" maxlength="6"
 						autocomplete="one-time-code">
@@ -2843,7 +2842,35 @@ document.addEventListener('DOMContentLoaded',function(){
  const verifyCode = document.getElementById('profileVerifyCode');
  const verifyMessage = document.getElementById('profileVerifyMessage');
  const profileForm = document.getElementById('basicProfileForm');
- 
+ const profileCsrf = '<%= ProductView.escape(orderCsrfToken) %>';
+ const sendProfileCodeButton = document.getElementById('sendProfileCode');
+
+ if (sendProfileCodeButton) {
+     sendProfileCodeButton.addEventListener('click', async function () {
+         sendProfileCodeButton.disabled = true;
+         verifyMessage.textContent = '인증번호를 요청하는 중입니다.';
+
+         const data = new URLSearchParams();
+         data.set('csrfToken', profileCsrf);
+
+         try {
+             const response = await fetch(
+                 '<%=myContext%>/app/member/profile/send-code',
+                 { method: 'POST', body: data }
+             );
+             if (!response.ok) throw new Error();
+
+             const result = (await response.text()).trim();
+             verifyMessage.textContent = result === 'OK'
+                     ? '인증번호를 요청했습니다. 받은 문자를 확인해 주세요.'
+                     : result;
+         } catch (error) {
+             verifyMessage.textContent = '문자 요청 중 오류가 발생했습니다.';
+         } finally {
+             sendProfileCodeButton.disabled = false;
+         }
+     });
+ }
 
  if (openVerifyButton && verifyDialog) {
    openVerifyButton.addEventListener('click', function () {
@@ -2860,21 +2887,22 @@ document.addEventListener('DOMContentLoaded',function(){
    verifyButton.addEventListener('click', async function () {
      const data = new URLSearchParams();
      data.set('code', verifyCode.value.trim());
-
+     data.set('csrfToken', profileCsrf);
+     
      try {
        const response = await fetch(
-         '<%=myContext%>/app/member/profile/verify-demo',
+         '<%=myContext%>/app/member/profile/verify-code',
          { method: 'POST', body: data }
        );
        const result = (await response.text()).trim();
 
        if (result === 'OK') {
-         location.reload();
-       } else if (result === 'INVALID_CODE') {
-         verifyMessage.textContent = '인증번호가 올바르지 않습니다.';
-       } else {
-         verifyMessage.textContent = '로그인 상태를 확인해 주세요.';
-       }
+    	    location.reload();
+    	} else {
+    	    verifyMessage.textContent = response.ok
+    	            ? result
+    	            : '인증 요청 중 오류가 발생했습니다.';
+    	}
      } catch (error) {
        verifyMessage.textContent = '인증 요청 중 오류가 발생했습니다.';
      }
@@ -2886,7 +2914,8 @@ document.addEventListener('DOMContentLoaded',function(){
      event.preventDefault();
 
      const data = new URLSearchParams(new FormData(profileForm));
-
+     data.set('csrfToken', profileCsrf);
+     
      try {
        const response = await fetch(
          '<%=myContext%>/app/member/profile/update',

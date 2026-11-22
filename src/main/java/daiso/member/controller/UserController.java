@@ -778,39 +778,128 @@ public class UserController {
         return "redirect:/order/mypage?section=profile";
     }
     
-    @DaisoPostMapping("/member/profile/verify-demo")
+    private static final java.security.SecureRandom PROFILE_SMS_RANDOM =
+            new java.security.SecureRandom();
+
+    private static final String PROFILE_SMS_CHALLENGE = "profileSmsChallenge";
+    private static final String PROFILE_SMS_LAST_SENT = "profileSmsLastSent";
+    private static final String PROFILE_VERIFIED_PHONE = "profileVerifiedPhone";
+
+    private static final class ProfileSmsChallenge {
+        final String memberId;
+        final String phone;
+        final String code;
+        final long expiresAt;
+        int attempts;
+
+        ProfileSmsChallenge(String memberId, String phone, String code, long expiresAt) {
+            this.memberId = memberId;
+            this.phone = phone;
+            this.code = code;
+            this.expiresAt = expiresAt;
+        }
+    }
+
+    private static boolean validProfileCsrf(HttpServletRequest request, HttpSession session) {
+        Object expected = session.getAttribute("orderCsrf");
+        return expected instanceof String && expected.equals(request.getParameter("csrfToken"));
+    }
+
+    private static String profilePhone(MemberProfileInfo profile) {
+        return profile == null || profile.getPhone() == null
+                ? "" : profile.getPhone().replaceAll("\\D", "");
+    }
+
+    @DaisoPostMapping("/member/profile/send-code")
     @DaisoResponseBody
-    public String verifyBasicProfileDemo(HttpServletRequest request)
-            throws java.io.UnsupportedEncodingException {
-
-        request.setCharacterEncoding("UTF-8");
-
+    public String sendProfileCode(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
-        if (session == null) {
-            return "LOGIN_REQUIRED";
+        if (session == null || !(session.getAttribute("member_id") instanceof String)) {
+            return "다시 로그인해 주세요.";
+        }
+        if (!validProfileCsrf(request, session)) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
         }
 
-        Object memberIdValue = session.getAttribute("member_id");
-        if (!(memberIdValue instanceof String)
-                || ((String) memberIdValue).isBlank()) {
-            return "LOGIN_REQUIRED";
+        String memberId = (String) session.getAttribute("member_id");
+
+        synchronized (session) {
+            long now = System.currentTimeMillis();
+            Object lastSent = session.getAttribute(PROFILE_SMS_LAST_SENT);
+            if (lastSent instanceof Long && now - (Long) lastSent < 60_000L) {
+                return "인증번호는 60초 후에 다시 요청할 수 있습니다.";
+            }
+
+            try {
+                String phone = profilePhone(memberService.findProfileByMemberId(memberId));
+                if (!phone.matches("010[0-9]{8}")) {
+                    return "등록된 휴대폰 번호를 확인해 주세요.";
+                }
+
+                String code = String.format(java.util.Locale.ROOT, "%06d",
+                        PROFILE_SMS_RANDOM.nextInt(1_000_000));
+
+                session.setAttribute(PROFILE_SMS_LAST_SENT, now);
+                session.removeAttribute(PROFILE_SMS_CHALLENGE);
+                new SolapiSmsClient().sendVerificationCode(phone, code);
+
+                session.setAttribute(PROFILE_SMS_CHALLENGE, new ProfileSmsChallenge(
+                        memberId, phone, code, System.currentTimeMillis() + 5 * 60_000L));
+                session.removeAttribute("profileVerificationMemberId");
+                session.removeAttribute("profileVerificationExpiresAt");
+                session.removeAttribute(PROFILE_VERIFIED_PHONE);
+                return "OK";
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "문자 발송이 중단되었습니다. 잠시 후 다시 시도해 주세요.";
+            } catch (Exception e) {
+                request.getServletContext().log(
+                        "회원정보 인증 문자 발송 실패 (" + e.getClass().getSimpleName() + ")");
+                return "문자를 보낼 수 없습니다. 잠시 후 다시 시도해 주세요.";
+            }
+        }
+    }
+
+    @DaisoPostMapping("/member/profile/verify-code")
+    @DaisoResponseBody
+    public String verifyProfileCode(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null || !(session.getAttribute("member_id") instanceof String)) {
+            return "다시 로그인해 주세요.";
+        }
+        if (!validProfileCsrf(request, session)) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
         }
 
-        String code = request.getParameter("code");
-        if (!"123456".equals(code)) {
-            return "INVALID_CODE";
+        synchronized (session) {
+            Object value = session.getAttribute(PROFILE_SMS_CHALLENGE);
+            if (!(value instanceof ProfileSmsChallenge)) {
+                return "인증번호를 먼저 요청해 주세요.";
+            }
+
+            ProfileSmsChallenge challenge = (ProfileSmsChallenge) value;
+            if (!challenge.memberId.equals(session.getAttribute("member_id"))
+                    || System.currentTimeMillis() >= challenge.expiresAt) {
+                session.removeAttribute(PROFILE_SMS_CHALLENGE);
+                return "인증번호가 만료되었습니다. 다시 요청해 주세요.";
+            }
+
+            if (!challenge.code.equals(request.getParameter("code"))) {
+                challenge.attempts++;
+                if (challenge.attempts >= 5) {
+                    session.removeAttribute(PROFILE_SMS_CHALLENGE);
+                    return "입력 횟수를 초과했습니다. 인증번호를 다시 요청해 주세요.";
+                }
+                return "인증번호가 올바르지 않습니다.";
+            }
+
+            session.removeAttribute(PROFILE_SMS_CHALLENGE);
+            session.setAttribute(PROFILE_VERIFIED_PHONE, challenge.phone);
+            session.setAttribute("profileVerificationMemberId", challenge.memberId);
+            session.setAttribute("profileVerificationExpiresAt",
+                    System.currentTimeMillis() + 10 * 60_000L);
+            return "OK";
         }
-
-        session.setAttribute(
-                "profileVerificationMemberId",
-                memberIdValue
-        );
-        session.setAttribute(
-                "profileVerificationExpiresAt",
-                System.currentTimeMillis() + 10 * 60 * 1000L
-        );
-
-        return "OK";
     }
 
     @DaisoPostMapping("/member/profile/update")
@@ -829,7 +918,9 @@ public class UserController {
         if (!(memberIdValue instanceof String)) {
             return "LOGIN_REQUIRED";
         }
-
+        if (!validProfileCsrf(request, session)) {
+            return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
+        }
         String memberId = (String) memberIdValue;
         Object verifiedMemberId =
                 session.getAttribute("profileVerificationMemberId");
@@ -844,7 +935,12 @@ public class UserController {
 
         try {
             String name = request.getParameter("name");
-            String phone = request.getParameter("phone");
+            MemberProfileInfo currentProfile = memberService.findProfileByMemberId(memberId);
+            String phone = profilePhone(currentProfile);
+            if (!phone.matches("010[0-9]{8}")
+                    || !phone.equals(session.getAttribute(PROFILE_VERIFIED_PHONE))) {
+                return "휴대폰 인증을 다시 진행해 주세요.";
+            }
             String birthDate = request.getParameter("birthDate");
             String gender = request.getParameter("gender");
 
@@ -859,6 +955,7 @@ public class UserController {
             session.setAttribute("name", name.trim());
             session.removeAttribute("profileVerificationMemberId");
             session.removeAttribute("profileVerificationExpiresAt");
+            session.removeAttribute(PROFILE_VERIFIED_PHONE);
 
             return "OK";
 
