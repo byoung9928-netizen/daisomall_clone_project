@@ -196,6 +196,17 @@ public final class OnlineInventoryController {
         request.setAttribute("adminSection", "inventory");
     }
 
+    // ===== 온라인 재고 엑셀은 화면과 같은 검색 조건을 해석 =====
+    static AdminProductFilter readInventoryFilter(HttpServletRequest request, ProductDAO dao, Connection con)
+            throws SQLException {
+        String keyword = ProductQueries.text(request, "q", 120);
+        String category = ProductQueries.text(request, "category", 100);
+        if (!category.isEmpty() && !dao.findAdminCategories(con, false).containsKey(category)) {
+            throw new IllegalArgumentException("카테고리를 확인해 주세요.");
+        }
+        return AdminProductFilter.forInventory(keyword, category, STOCK.get(readState(request)), readSort(request, "sort"));
+    }
+
     private static OnlineStockState readState(HttpServletRequest request) {
         String value = ProductQueries.text(request, "state", 20);
         return value.isEmpty() ? OnlineStockState.ALL : OnlineStockState.valueOf(value);

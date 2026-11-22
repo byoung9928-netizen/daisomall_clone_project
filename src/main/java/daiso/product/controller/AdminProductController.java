@@ -39,7 +39,7 @@ public final class AdminProductController {
     private static final int MIN_PRICE = 1000;
     private static final int MAX_PRICE = 5000;
     private static final String PRICE_RANGE = "가격은 1,000원 이상 5,000원 이하로 입력해 주세요.";
-    private static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
+    static final Map<String, String> STATUSES = Map.of("AVAILABLE", "판매 중", "SOLD_OUT", "품절",
             "SCHEDULED", "판매 예정", "DISCONTINUED", "판매 종료");
     private final ProductDAO dao = new ProductDAO();
     private final ProductDetailImages detailImages = new ProductDetailImages();

@@ -25,10 +25,18 @@ public class AdminOrderDAO {
 	//검색어가 있으면 주문 번호 또는 회원번호로 검색
 	public List<OrderBean> getOrderList(String keyword, int page, boolean awaitingShipment)
 	        throws SQLException {
-		if(page < 1) {
+        if (page < 1) {
 			throw new IllegalArgumentException("페이지 번호를 확인해 주세요.");
 		}
-		long offset = (page - 1L)*50;
+        return queryOrders(keyword, awaitingShipment, (page - 1L) * 50);
+    }
+
+    // ===== 엑셀용: 화면과 조회 조건을 공유하고 페이지 제한만 제외 =====
+    public List<OrderBean> getOrdersForExport(String keyword, boolean awaitingShipment) throws SQLException {
+        return queryOrders(keyword, awaitingShipment, null);
+    }
+
+    private List<OrderBean> queryOrders(String keyword, boolean awaitingShipment, Long offset) throws SQLException {
 				
 		String query = keyword == null ? "" : keyword.trim();
 		
@@ -63,7 +71,7 @@ public class AdminOrderDAO {
 			            + "AND o.status IN ('PAID', 'PREPARING') "
 						+ "AND o.canceled_at IS NULL)) "
 			            + "ORDER BY o.created_at DESC, o.order_id DESC "
-			            + "LIMIT 51 OFFSET ?";
+			            + (offset == null ? "" : "LIMIT 51 OFFSET ?");
 		List<OrderBean> orders = new ArrayList<>();
 		
 		try(
@@ -75,7 +83,9 @@ public class AdminOrderDAO {
 			pstmt.setString(3, query);//회원번호 검색
 			pstmt.setString(4, query);//상품명 검색
 			pstmt.setBoolean(5, awaitingShipment);
-			pstmt.setLong(6, offset);
+			if (offset != null) {
+                pstmt.setLong(6, offset);
+            }
 			
 			try (ResultSet rs=pstmt.executeQuery()){
 				while(rs.next()) {
