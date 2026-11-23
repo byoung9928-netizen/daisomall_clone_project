@@ -1,6 +1,10 @@
 package daiso.admin.report;
 
 import java.sql.Timestamp;
+import javax.naming.NamingException;
+import daiso.member.controller.AdminMemberInfo;
+import daiso.member.controller.MemberDAO;
+import daiso.member.controller.AdminDashboardDAO;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,7 +34,57 @@ public final class AdminReport {
         this.valueLabel = valueLabel;
         this.chart = chart;
     }
-
+    //대시보드 엑셀: 화면과 같은 DAO로 운영현황을 조회
+    static AdminReport dashboard()throws NamingException, java.sql.SQLException{
+    	AdminDashboardDAO.Summary summary = new AdminDashboardDAO().findSummary();
+    	
+    	AdminReport report = new AdminReport(
+    			"대시보드",
+    			List.of("항목","값","단위"),
+    			"전체 주문과 배송 대기 주문",
+    			"주문 구분",
+    			"주문 건수",
+    			new LinkedHashMap<>());
+    	report.rows.add(new Object[] {"전체 상품", summary.productCount, "개"});
+    	report.rows.add(new Object[] {"전체 카테고리", summary.categoryCount, "개"});
+    	report.rows.add(new Object[] {"전체 주문", summary.orderCount, "건"});
+    	report.rows.add(new Object[] {"결제된 주문 금액", summary.paidAmount, "원"});
+    	report.rows.add(new Object[] {"배송 처리 대기", summary.awaitingShipmentCount, "건"});
+    	report.rows.add(new Object[] {"온라인 품절 상품", summary.onlineSoldOutCount, "종"});
+    	
+    	// 차트에는 단위가 같은 주문 건수만 넣는다.
+    	report.chart.put("전체 주문", summary.orderCount);
+    	report.chart.put("배송 처리 대기", summary.awaitingShipmentCount);
+    	return report;
+    }
+    
+    //사용자 관리 엑셀: 검색어와 회원상태 필터 적용
+    static AdminReport users(String query, String status) throws NamingException, java.sql.SQLException{
+    	String keyword = query == null ?"":query.trim();
+    	if(keyword.length()>120){
+    		throw new IllegalArgumentException("검색어는 120자 이내로 입력해주세요.");
+    	}
+    	AdminReport report = new AdminReport(
+    			"사용자 관리",
+    			List.of("회원번호","로그인 ID","권한","회원 상태", "가입일"),
+    			"회원 상태별 인원",
+    			"회원 상태",
+    			"인원",
+    			new LinkedHashMap<>());
+    	for (AdminMemberInfo member : new MemberDAO().findAdminMembers(keyword, status)) {
+    		String state = member.getStatus();
+    		String label = "ACTIVE".equals(state)?"활성"
+    					:"SUSPENDED".equals(state)?"정지":"기타";
+    		
+    		report.rows.add(new Object[]{
+    			member.getMemberId(),member.getLoginId(),
+    			member.getRole(), label,member.getCreatedAt()
+    		});
+    		report.chart.merge(label, 1L,Long::sum);
+    	}
+    	return report;
+    }
+    
     // ===== 메뉴별 조회 결과를 엑셀 데이터와 차트용 집계로 변환 =====
     static AdminReport orders(String query, boolean awaitingShipment) throws java.sql.SQLException {
         AdminReport report = new AdminReport("주문 관리",

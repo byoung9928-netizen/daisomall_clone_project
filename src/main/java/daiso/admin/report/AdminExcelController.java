@@ -18,12 +18,15 @@ import javax.servlet.http.HttpSession;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.AdminProductReports;
-
+import daiso.product.controller.StoreInventoryController;
 @DaisoController
 public class AdminExcelController {
     private static final String EXPORT = "/app/admin/export";
     private static final Map<String, List<String>> FILTERS = Map.of(
-            "orders", List.of("query", "filter"),
+            "dashboard",List.of(),
+            "users",List.of("query","status"),
+            "stores",List.of("city","store","q","state"),
+    		"orders", List.of("query", "filter"),
             "products", List.of("query", "filterCategory", "filterStatus", "filterStock", "stockQuantity", "sort"),
             "inventory", List.of("q", "category", "state", "sort"),
             "returns", List.of(),
@@ -85,6 +88,14 @@ public class AdminExcelController {
     // ===== 메뉴 추가 시 FILTERS와 이 메서드에 조회를 연결 =====
     private AdminReport reportFor(String section, HttpServletRequest request) throws SQLException, NamingException {
         switch (section) {
+        	case "dashboard":
+        		return AdminReport.dashboard();
+        	case "users":
+        		return AdminReport.users(
+        				request.getParameter("query"),
+        				request.getParameter("status"));
+        	case "stores":
+        		return StoreInventoryController.exportInventory(request);
             case "orders":
                 return AdminReport.orders(request.getParameter("query"),
                         "awaiting-shipment".equals(request.getParameter("filter")));
