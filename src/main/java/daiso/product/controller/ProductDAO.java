@@ -360,7 +360,9 @@ public class ProductDAO {
         }
         StringBuilder scope = new StringBuilder(" FROM products p JOIN " + categories
                 + " c ON p.category_id = c.category_id" + ACTIVE_REVIEW_STATS);
-        if (filter.salesDays > 0) {
+        boolean sortBySales = "sales".equals(filter.sort);
+        boolean sortByWishlists = "wishlists".equals(filter.sort);
+        if (filter.salesDays > 0 || sortBySales) {
             sql += ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
                     + "FROM orders o JOIN payment_attempts pa ON pa.order_id = o.order_id "
                     + "WHERE o.status = 'PAID' AND o.canceled_at IS NULL AND pa.status = 'APPROVED' "
@@ -370,13 +372,15 @@ public class ProductDAO {
                     ? "SUM(CASE WHEN a.approved_at >= CURRENT_TIMESTAMP - INTERVAL 1 DAY "
                         + "THEN i.quantity ELSE -i.quantity END)"
                     : "SUM(i.quantity)";
-            scope.append(" JOIN (SELECT i.product_id, ").append(units)
+            scope.append(filter.salesDays > 0 ? " JOIN " : " LEFT JOIN ")
+                    .append("(SELECT i.product_id, ").append(units)
                     .append(" AS units FROM approved_orders a JOIN order_items i ON i.order_id = a.order_id "
                     + "GROUP BY i.product_id HAVING units > 0) sales_rank ON sales_rank.product_id = p.product_id");
-            parameters.add(-filter.salesDays);
+            parameters.add(filter.salesDays > 0 ? -filter.salesDays : -30);
         }
-        if (filter.wishlistRank) {
-            scope.append(" JOIN (SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
+        if (filter.wishlistRank || sortByWishlists) {
+            scope.append(filter.wishlistRank ? " JOIN " : " LEFT JOIN ")
+                    .append("(SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
                     + "wishlist_rank ON wishlist_rank.product_id = p.product_id");
         }
         scope.append(" WHERE p.status <> 'DISCONTINUED'");
@@ -408,6 +412,15 @@ public class ProductDAO {
         if (filter.withReviews || filter.topRated || filter.ratingBand != null) {
             scope.append(" AND ").append(REVIEW_COUNT).append(" > 0");
         }
+        if (filter.facets.matchingCodes != null) {
+            scope.append(" AND p.product_code IN (SELECT matched.product_code FROM "
+                    + "JSON_TABLE(?, '$[*]' COLUMNS (product_code VARCHAR(100) PATH '$')) AS matched)");
+            parameters.add(filter.facets.matchingCodes);
+        }
+        if (filter.minimumRating != null) {
+            scope.append(" AND ").append(REVIEW_AVERAGE).append(" >= ?");
+            parameters.add(filter.minimumRating);
+        }
         if (filter.topRated) scope.append(" AND ").append(REVIEW_AVERAGE).append(" = 5");
         if (filter.ratingBand != null) {
             String score = filter.ratingBand.compareTo(java.math.BigDecimal.valueOf(5)) == 0
@@ -432,8 +445,8 @@ public class ProductDAO {
         }
 
         String order = sortSql(filter.sort);
-        if (filter.salesDays > 0) order = "sales_rank.units DESC, " + order;
-        if (filter.wishlistRank) order = "wishlist_rank.saves DESC, " + order;
+        if (filter.salesDays > 0 || sortBySales) order = "COALESCE(sales_rank.units, 0) DESC, " + order;
+        if (filter.wishlistRank || sortByWishlists) order = "COALESCE(wishlist_rank.saves, 0) DESC, " + order;
         if (filter.salesDays == 0 && !filter.wishlistRank && "recommended".equals(filter.sort)
                 && !filter.keyword.isEmpty()) {
             order = "CASE WHEN p.product_code = ? THEN 0 ELSE 1 END, " + order;
@@ -515,6 +528,8 @@ public class ProductDAO {
         String status = "";
         String sort = "recommended";
         Integer maxPrice;
+        Integer minimumRating;
+        ProductCatalogFacets.Selection facets = ProductCatalogFacets.Selection.EMPTY;
         boolean available;
         boolean lowStock;
         boolean stockWatch;

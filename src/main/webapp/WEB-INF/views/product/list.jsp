@@ -12,9 +12,10 @@
     <script src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-collections.css">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-browse.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/stock-watch.js" defer></script>
     <% if (lowStockPage) { %>
         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/stock-watch.css">
-        <script src="${pageContext.request.contextPath}/assets/js/common/stock-watch.js" defer></script>
     <% } %>
 </head>
 <body>
@@ -22,6 +23,8 @@
     <%@ include file="../common/header.jspf" %>
     <%@ include file="../common/navigation.jspf" %>
     <div class="wishlist-tools<%= lowStockPage ? " stock-watch-wishlist" : "" %>" data-wishlist-config
+         data-cart-preview-url="${pageContext.request.contextPath}/app/products/cart/preview"
+         data-cart-view-url="${pageContext.request.contextPath}/app/cart"
          data-cart-url="${pageContext.request.contextPath}/app/cart/add"
          data-base-url="${pageContext.request.contextPath}/app/products/wishlist"
          data-login-url="${pageContext.request.contextPath}/app/member/login"

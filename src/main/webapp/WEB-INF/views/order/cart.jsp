@@ -7,10 +7,14 @@
         (List<CartBean>) request.getAttribute("cartList");
 
 	long subtotal = 0;
+    int purchasableCount = 0;
 
 	if (cartList != null) {
     	for (CartBean cart : cartList) {
-        	subtotal += cart.getItemTotal();
+            if (cart.isPurchasable()) {
+                subtotal += cart.getItemTotal();
+                purchasableCount++;
+            }
    		}	
 	}
 
@@ -77,6 +81,12 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
 .cart-cautions{background:#f6f7f9;border-radius:3px;padding:18px 20px;color:#758395;font-size:12px;line-height:1.7}
 .cart-cautions p{margin:4px 0 0}
 .cart-table-wrap{overflow-x:auto}
+.cart-item-thumb{position:relative;display:inline-flex;flex-shrink:0}
+.cart-item-thumb img{display:block}
+.cart-item-sold-out{position:absolute;inset:0;display:grid;place-items:center;background:#17202a99;color:#fff;font-size:12px;font-weight:700}
+.cart-product-table .cart-unavailable .cart-table-money{color:#657080}
+.cart-product-table .cart-unavailable .cart-stepper{border-color:#e2e5e9;background:#f5f6f8;color:#657080}
+.cart-stepper button:disabled{opacity:.55;cursor:default}
 @media(max-width:1100px){.cart-col-price{width:85px}.cart-col-quantity{width:105px}.cart-col-total{width:90px}
 				.cart-stepper{width:96px}.cart-table-product{gap:8px}.cart-table-product img{width:60px;height:80px}
 				.cart-table-money{font-size:14px}}@media(max-width:800px){.cart-product-table{min-width:620px}
@@ -211,7 +221,7 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
 <progress max="30000" value="<%= Math.min(subtotal, 30000) %>" aria-label="무료배송 기준 달성 금액"></progress>
 <div class="cart-progress-caption"><strong><%= subtotal < 30000 ? cartMoney.format(30000 - subtotal) + "원 더 담으면! 무료배송" : "무료배송 금액을 달성했어요" %></strong><span>30,000원</span></div>
 </div>
-<div class="cart-selection-toolbar"><label><input id="cart-select-all" type="checkbox" checked> 전체 선택 <span id="cart-selected-count"><%= cartList.size() %>/<%= cartList.size() %>개</span></label><button id="cart-delete-selected" type="button">선택삭제</button></div>
+<div class="cart-selection-toolbar"><label><input id="cart-select-all" type="checkbox" <%= purchasableCount == 0 ? "disabled" : "checked" %>> 전체 선택 <span id="cart-selected-count"><%= purchasableCount %>/<%= cartList.size() %>개</span></label><button id="cart-delete-selected" type="button">선택삭제</button></div>
 <div class="cart-table-wrap">
 <table class="cart-product-table">
 <colgroup><col class="cart-col-check"><col><col class="cart-col-price"><col class="cart-col-quantity"><col class="cart-col-total"><col class="cart-col-delete"></colgroup>
@@ -222,16 +232,21 @@ String cartImage = cart.getImageUrl();
 if (cartImage == null || cartImage.isBlank()) cartImage = "assets/images/mock-product-0.svg";
 String cartImageSrc = cartImage.startsWith("https://") ? cartImage : cartContext + "/" + cartImage;
 String cartProductName = cart.getProductName() == null ? "상품" : cart.getProductName();
+boolean cartSoldOut = cart.isTemporarilySoldOut();
+boolean canPurchaseCartItem = cart.isPurchasable();
+boolean canReduceCartItem = "AVAILABLE".equals(cart.getProductStatus()) && !cartSoldOut && cart.getQuantity() > 1;
+long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 %>
-<tr data-cart-amount="<%= cart.getItemTotal() %>">
-<td class="cart-check-cell"><input class="cart-item-check" type="checkbox" value="<%=cart.getCartItemId() %>" checked aria-label="상품 선택"></td>
-<td><a class="cart-table-product" href="<%= cartContext %>/product.jsp?id=<%= java.net.URLEncoder.encode(cart.getProductId(), "UTF-8") %>"><img src="<%= daiso.product.controller.ProductView.escape(cartImageSrc) %>" alt=""><span><%= daiso.product.controller.ProductView.escape(cartProductName) %></span></a></td>
+<tr class="<%= canPurchaseCartItem ? "" : "cart-unavailable" %>" data-cart-amount="<%= cartRowTotal %>">
+<td class="cart-check-cell"><input class="cart-item-check" type="checkbox" value="<%=cart.getCartItemId() %>" <%= canPurchaseCartItem ? "checked" : "disabled" %> aria-label="상품 선택"></td>
+<td><a class="cart-table-product" href="<%= cartContext %>/product.jsp?id=<%= java.net.URLEncoder.encode(cart.getProductId(), "UTF-8") %>"><span class="cart-item-thumb"><img src="<%= daiso.product.controller.ProductView.escape(cartImageSrc) %>" alt="">
+    <% if (cartSoldOut) { %><span class="cart-item-sold-out">일시품절</span><% } %></span><span><%= daiso.product.controller.ProductView.escape(cartProductName) %></span></a></td>
 <td class="cart-table-money"><%= cartMoney.format(cart.getPrice()) %>원</td>
 <td><div class="cart-stepper" data-cart-item-id="<%=cart.getCartItemId() %>">
-	<button type="button" data-quantity-change="-1" aria-label="수량 줄이기" <%=cart.getQuantity()<=1?"disabled":"" %>>−</button>
-	<span><%= cart.getQuantity() %></span>
+	<button type="button" data-quantity-change="-1" aria-label="수량 줄이기" <%= canReduceCartItem ? "" : "disabled" %>>−</button>
+	<span><%= cartSoldOut ? 0 : cart.getQuantity() %></span>
 	<button type="button" data-quantity-change="1" aria-label="수량 늘리기"<%=cart.getQuantity()>=99 ||cart.getQuantity()>=cart.getStockQuantity()||!"AVAILABLE".equals(cart.getProductStatus()) ? "disabled" : "" %>>＋</button></div></td>
-<td class="cart-table-money"><%= cartMoney.format(cart.getItemTotal()) %>원</td>
+<td class="cart-table-money"><%= cartMoney.format(cartRowTotal) %>원</td>
 <td><button class="cart-remove" type="button" data-cart-delete="<%=cart.getCartItemId() %>" aria-label="상품 삭제" >×</button></td>
 </tr>
 <% } %>
@@ -249,7 +264,7 @@ String cartProductName = cart.getProductName() == null ? "상품" : cart.getProd
 <div class="cart-price-line cart-base-shipping"><span>└ 기본 배송비</span><span><%= cartMoney.format(shippingFee) %>원</span></div>
 </div>
 <div class="cart-grand-total"><span>결제 예상 금액</span><strong><%= cartMoney.format(totalAmount) %>원</strong></div>
-<% if (hasCartItems) { %>
+<% if (purchasableCount > 0) { %>
 <a class="cart-order-button" href="<%= cartContext %>/app/order/form">주문하기</a>
 <% } else { %>
 <button class="cart-order-button" type="button" disabled>주문하기</button>
@@ -263,7 +278,8 @@ String cartProductName = cart.getProductName() == null ? "상품" : cart.getProd
 document.addEventListener('DOMContentLoaded', function () {
  const all = document.getElementById('cart-select-all');
  if (!all) return;
- const checks = Array.from(document.querySelectorAll('.cart-item-check'));
+ const allItems = Array.from(document.querySelectorAll('.cart-item-check'));
+ const checks = allItems.filter(function (checkbox) { return !checkbox.disabled; });
  const count = document.getElementById('cart-selected-count');
  const order = document.querySelector('a.cart-order-button');
  try {
@@ -293,12 +309,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
 	    const selectedCount = selectedItems.length;
 
-	    all.checked = selectedCount === checks.length;
+	    all.checked = checks.length > 0 && selectedCount === checks.length;
 	    all.indeterminate =
 	        selectedCount > 0 && selectedCount < checks.length;
 
 	    count.textContent =
-	        selectedCount + "/" + checks.length + "개";
+	        selectedCount + "/" + allItems.length + "개";
 
 	    // 선택한 상품의 가격 × 수량 합계
 	    let selectedSubtotal = 0;

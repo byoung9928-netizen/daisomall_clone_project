@@ -15,13 +15,26 @@ import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.controller.ProductDAO.Category;
 
 public final class ProductCatalogView {
-    private static final List<Integer> STANDARD_PRICES = List.of(1000, 3000, 5000);
+    private static final List<Integer> STANDARD_PRICES = List.of(1000, 1500, 2000, 3000, 5000);
     private static final List<Map.Entry<String, String>> SORT_OPTIONS = List.of(
             Map.entry("recommended", "추천순"), Map.entry("newest", "신상품순"),
             Map.entry("priceAsc", "가격낮은순"), Map.entry("priceDesc", "가격높은순"),
             Map.entry("rating", "별점순"), Map.entry("reviews", "리뷰많은순"));
 
+    private static final List<Map.Entry<String, String>> BROWSE_SORT_OPTIONS = List.of(
+            Map.entry("recommended", "추천순"), Map.entry("newest", "신상품순"),
+            Map.entry("sales", "최근 30일 판매순"), Map.entry("reviews", "리뷰 많은 순"),
+            Map.entry("wishlists", "찜 많은 순"), Map.entry("rating", "별점순"),
+            Map.entry("priceAsc", "낮은 가격순"), Map.entry("priceDesc", "높은 가격순"));
+
     public final String title;
+    public final boolean browse;
+    public final boolean categoryPage;
+    public final List<List<CollectionLink>> categoryGroups;
+    public final List<CollectionLink> sortLinks;
+    public final String sort;
+    public final List<Option> ratings;
+    public final ProductCatalogFacets.Selection facets;
     public final boolean storeSearch;
     public final boolean stockWatch;
     public final boolean recentOnly;
@@ -52,8 +65,7 @@ public final class ProductCatalogView {
     public final String nextUrl;
 
     ProductCatalogView(String context, String route, String title, String collection, CatalogFilter filter,
-            List<Category> categories, CatalogPage result, int page, int pages) {
-        this.title = title;
+            List<Category> categories, List<Category> path, CatalogPage result, int page, int pages) {
         ProductCollection section = ProductCollection.forKey(collection);
         collectionDescription = section == null ? "" : section.description;
         collectionMode = filter.collectionMode;
@@ -65,6 +77,12 @@ public final class ProductCatalogView {
                 || filter.wishlistRank || filter.salesDays > 0;
         storeSearch = "store".equals(collection);
         stockWatch = filter.stockWatch;
+        browse = collection.isEmpty() && !stockWatch;
+        categoryPage = browse && filter.keyword.isEmpty() && !path.isEmpty();
+        this.title = categoryPage ? path.get(0).name : title;
+        sort = filter.sort;
+        ratings = ratingOptions(filter.minimumRating);
+        facets = filter.facets;
         recentOnly = filter.recentOnly;
         products = List.copyOf(result.products);
         brand = filter.brand;
@@ -100,7 +118,10 @@ public final class ProductCatalogView {
         params.put("sort", filter.sort);
         params.put("maxPrice", filter.maxPrice == null ? "" : filter.maxPrice.toString());
         params.put("available", filter.available ? "true" : "");
+        params.put("minRating", filter.minimumRating == null ? "" : filter.minimumRating.toString());
         if (stockWatch) params.put("recent", filter.recentOnly ? "true" : "");
+        params.put("delivery", facets.delivery);
+        params.put("attr", facets.selected.stream().sorted().collect(Collectors.joining(",")));
 
         String parentId = filter.category.isEmpty() ? null : filter.category;
         String root = section == null ? "" : section.root;
@@ -125,12 +146,52 @@ public final class ProductCatalogView {
             }
         }
         categoryLinks = Collections.unmodifiableMap(links);
+        categoryGroups = browse ? browseCategories(context, route, ProductView.with(params, "attr", ""),
+                categories, path, categoryPage) : List.of();
+        sortLinks = browse ? BROWSE_SORT_OPTIONS.stream().map(entry -> new CollectionLink(entry.getValue(),
+                ProductView.url(context, route, ProductView.with(params, "sort", entry.getKey())),
+                entry.getKey().equals(sort), "")).collect(Collectors.toUnmodifiableList()) : List.of();
 
         resultCount = NumberFormat.getIntegerInstance(Locale.KOREA).format(result.total);
         showPagination = pages > 1;
         pageLabel = page + " / " + pages;
         previousUrl = page > 1 ? pageUrl(context, route, params, page - 1) : null;
         nextUrl = page < pages ? pageUrl(context, route, params, page + 1) : null;
+    }
+
+    private static List<List<CollectionLink>> browseCategories(String context, String route,
+            Map<String, String> params, List<Category> categories, List<Category> path, boolean categoryPage) {
+        List<List<CollectionLink>> groups = new ArrayList<>();
+        Category parent = categoryPage ? path.get(0) : null;
+        for (int depth = categoryPage ? 1 : 0; depth <= path.size(); depth++) {
+            Category selected = depth < path.size() ? path.get(depth) : null;
+            String parentId = parent == null ? null : parent.id;
+            List<CollectionLink> group = new ArrayList<>();
+            for (Category category : categories) {
+                if (Objects.equals(parentId, category.parentId)) {
+                    group.add(new CollectionLink(category.name,
+                            ProductView.url(context, route, ProductView.with(params, "category", category.id)),
+                            selected != null && selected.id.equals(category.id), ""));
+                }
+            }
+            if (!group.isEmpty()) {
+                group.add(0, new CollectionLink(parent == null ? "전체 카테고리" : "전체",
+                        ProductView.url(context, route, ProductView.with(params, "category", parentId == null ? "" : parentId)),
+                        selected == null, ""));
+                groups.add(List.copyOf(group));
+            }
+            parent = selected;
+        }
+        return List.copyOf(groups);
+    }
+
+    private static List<Option> ratingOptions(Integer selected) {
+        List<Option> options = new ArrayList<>();
+        options.add(new Option("", "전체 별점", selected == null));
+        for (int rating = 5; rating > 0; rating--) {
+            options.add(new Option(Integer.toString(rating), rating + "점 이상", Integer.valueOf(rating).equals(selected)));
+        }
+        return List.copyOf(options);
     }
 
     private static CollectionLink theme(String context, String route, Map<String, String> params,

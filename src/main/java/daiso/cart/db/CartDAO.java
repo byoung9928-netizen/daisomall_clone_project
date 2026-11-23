@@ -58,6 +58,15 @@
  	 }
  	 //2. CartController cartAdd에서 addCart로 넘어옴
  	 public boolean addCart(String memberId,String productId, int quantity) throws SQLException{
+            return addCart(memberId, productId, quantity, false);
+         }
+
+         public void addSoldOutProduct(String memberId, String productId) throws SQLException {
+            addCart(memberId, productId, 1, true);
+         }
+
+         private boolean addCart(String memberId, String productId, int quantity, boolean preview) throws SQLException {
+
  		 	//수량이 1~99개 범위를 벗어나면 저장 중단
  		 	if(quantity <1 || quantity >99) {
  		 		throw new IllegalArgumentException(
@@ -90,18 +99,30 @@
  		 								);
  		 						
  		 					}
- 		 				if(!"AVAILABLE".equals(
- 		 						rs.getString("status"))) {
- 		 					throw new IllegalArgumentException(
- 		 							"판매중인 상품이 아닙니다."
- 		 							);
- 		 					
- 		 				}
- 		 				stockQuantity = rs.getInt("stock_quantity");
+                        String status = rs.getString("status");
+                        stockQuantity = rs.getInt("stock_quantity");
+                    if (preview) {
+                            if (!CartBean.isTemporarilySoldOut(status, stockQuantity)) {
+                                throw new IllegalArgumentException("현재 품절인 상품만 미리 담을 수 있습니다. 상품 목록을 새로고침해 주세요.");
+                            }
+                        } else if (!"AVAILABLE".equals(status)) {
+                            throw new IllegalArgumentException("판매중인 상품이 아닙니다.");
+                        }
  		 				
  		 				}
  		 			}
- 		 			//- 이미 장바구니에 담긴 수량 확인
+                    if (preview) {
+                        try (PreparedStatement save = con.prepareStatement(
+                                "INSERT INTO cart_items (member_id, product_id, quantity) VALUES (?, ?, 1) "
+                                + "ON DUPLICATE KEY UPDATE quantity = cart_items.quantity")) {
+                            save.setString(1, memberId);
+                            save.setString(2, productId);
+                            save.executeUpdate();
+                        }
+                        con.commit();
+                        return true;
+                    }
+                    //- 이미 장바구니에 담긴 수량 확인
  		 			String cartSql = 
  		 					"SELECT quantity FROM cart_items "
  		 					+"WHERE member_id = ? "

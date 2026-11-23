@@ -30,6 +30,7 @@ public class ProductController {
             Map.entry("beauty", "뷰티"), Map.entry("health", "건강식품"));
 
     private final ProductDAO dao = new ProductDAO();
+    private final ProductCatalogFacets catalogFacets = new ProductCatalogFacets();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
     private final ProductDetailImages detailImages = new ProductDetailImages();
     private final ProductReviewService reviews = new ProductReviewService();
@@ -191,6 +192,9 @@ public class ProductController {
                 request.setAttribute("catalogError", "존재하지 않는 카테고리입니다.");
                 request.setAttribute("catalogErrorStatus", 404);
             } else {
+                if (collection.isEmpty() && !stockWatch) {
+                    filter.facets = catalogFacets.select(request.getServletContext(), filter.category, request);
+                }
                 CatalogPage result = dao.findCatalog(conn, filter);
                 int pages = Math.max(1, (result.total + PAGE_SIZE - 1) / PAGE_SIZE);
                 if (page > pages) {
@@ -222,7 +226,7 @@ public class ProductController {
                 String route = stockWatch ? StockWatchView.ROUTE
                         : collectionPage != null ? "/app/products" : "/" + view + ".jsp";
                 request.setAttribute("catalog", new ProductCatalogView(request.getContextPath(), route,
-                        title, collection, filter, categories, result, page, pages));
+                        title, collection, filter, categories, path, result, page, pages));
             }
             conn.commit();
         }

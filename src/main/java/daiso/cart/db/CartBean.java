@@ -64,7 +64,15 @@ public class CartBean {
 		this.stockQuantity = stockQuantity;
 	}
 	
-	public boolean isPurchasable() {
+    public static boolean isTemporarilySoldOut(String status, int stockQuantity) {
+        return "SOLD_OUT".equals(status) || ("AVAILABLE".equals(status) && stockQuantity == 0);
+    }
+
+    public boolean isTemporarilySoldOut() {
+        return isTemporarilySoldOut(productStatus, stockQuantity);
+    }
+
+    public boolean isPurchasable() {
 		return "AVAILABLE".equals(productStatus)
 				&& quantity >=1
 				&& quantity<=99
