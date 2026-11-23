@@ -33,7 +33,16 @@ Object profileAddressValue = request.getAttribute("profileDeliveryAddress");
 Map<String, String> profileDeliveryAddress = profileAddressValue instanceof Map
 		? (Map<String, String>) profileAddressValue
 		: Collections.emptyMap();
+List<Map<String, String>> profileDeliveryAddresses =
+(List<Map<String, String>>) request.getAttribute("profileDeliveryAddresses");
 
+if (profileDeliveryAddresses == null) {
+profileDeliveryAddresses = Collections.emptyList();
+}
+
+String[] deliveryFields = {
+"addressName", "recipient", "phone", "postcode", "address1", "address2"
+};
 Object pickupStoreValue = request.getAttribute("profilePickupStore");
 Map<String, String> profilePickupStore = pickupStoreValue instanceof Map
 		? (Map<String, String>) pickupStoreValue
@@ -96,6 +105,8 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 <% } %>
 <script defer
 	src="${pageContext.request.contextPath}/assets/js/common/my-product-activity.js"></script>
+	<script defer
+        src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <style>
 .my-screen.container {
 	width: calc(100% - 48px);
@@ -2038,23 +2049,24 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 
 					<section id="deliveryManagementPanel">
 						<button type="button" class="delivery-add-button"
-							data-toggle-delivery-form>
+							data-add-delivery>
 							<span aria-hidden="true">⊕</span> 새 배송지 추가
 						</button>
 
 						<p class="delivery-count">
 							전체
-							<%=profileDeliveryAddress.isEmpty() ? 0 : 1%>개
+							<%=profileDeliveryAddresses.size()%>개
 						</p>
 
 						<%
-						if (!profileDeliveryAddress.isEmpty()) {
+						if (!profileDeliveryAddresses.isEmpty()) {
+						    for (Map<String, String> address : profileDeliveryAddresses) {
 						%>
 						<article class="delivery-address-card">
 							<span class="delivery-address-delete" aria-hidden="true">×</span>
 
 							<h3>
-								[<%=ProductView.escape(profileDeliveryAddress.get("addressName"))%>]
+								[<%=ProductView.escape(address.get("addressName"))%>]
 							</h3>
 
 							<div class="delivery-address-badges">
@@ -2062,23 +2074,27 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 							</div>
 
 							<p class="delivery-address-text">
-								(<%=ProductView.escape(profileDeliveryAddress.get("postcode"))%>)
-								<%=ProductView.escape(profileDeliveryAddress.get("address1"))%>
-								<%=ProductView.escape(profileDeliveryAddress.get("address2"))%>
+								(<%=ProductView.escape(address.get("postcode"))%>)
+								<%=ProductView.escape(address.get("address1"))%>
+								<%=ProductView.escape(address.get("address2"))%>
 							</p>
 
 							<p class="delivery-address-person">
-								<%=ProductView.escape(profileDeliveryAddress.get("recipient"))%>
+								<%=ProductView.escape(address.get("recipient"))%>
 								&nbsp;
-								<%=ProductView.escape(profileDeliveryAddress.get("phone"))%>
+								<%=ProductView.escape(address.get("phone"))%>
 							</p>
 
 							<p class="delivery-address-request">[요청사항] 요청사항 없음</p>
 
 							<button type="button" class="delivery-address-edit"
-								data-toggle-delivery-form>수정</button>
+								data-edit-delivery
+								data-address-id="<%=ProductView.escape(address.get("id"))%>"
+								<%for (int i = 0; i < deliveryFields.length; i++) {%>
+								data-field-<%=i%>="<%=ProductView.escape(address.get(deliveryFields[i]))%>"
+        						<%}%>>수정</button>
 						</article>
-						<%
+						<%} 
 						} else {
 						%>
 						<p class="delivery-empty-message">등록된 배송지가 없습니다.</p>
@@ -2088,13 +2104,14 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 
 						<div class="delivery-address-notice">
 							<p>• 배송지에 따라 배송 유형이 달라질 수 있습니다.</p>
-							<p>• 배송지는 현재 세션에 1개만 저장됩니다.</p>
+							<p>• 배송지는 로그인 세션에 저장됩니다.</p>
 						</div>
-
+ 
 						<form id="deliveryAddressForm" hidden>
-							<input type="hidden" name="csrfToken"
+							<input type="hidden" name="addressAction"> <input type="hidden"
+								name="addressId"> <input type="hidden" name="csrfToken"
 								value="<%=ProductView.escape(orderCsrfToken)%>"> <label>배송지명
-								<input name="addressName" maxlength="50"
+							<input name="addressName" maxlength="50"
 								value="<%=ProductView.escape(profileDeliveryAddress.get("addressName"))%>"
 								required>
 							</label> <label>받는 분 <input name="recipient" maxlength="100"
@@ -2103,10 +2120,13 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 							</label> <label>휴대폰 <input name="phone" maxlength="30"
 								value="<%=ProductView.escape(profileDeliveryAddress.get("phone"))%>"
 								required>
-							</label> <label>우편번호 <input name="postcode" maxlength="5"
+							</label>
+							<button type="button" id="findProfileAddress">주소 검색</button> 
+							<label>우편번호 <input name="postcode" maxlength="5"
 								value="<%=ProductView.escape(profileDeliveryAddress.get("postcode"))%>"
 								required>
-							</label> <label>기본 주소 <input name="address1" maxlength="255"
+							</label>
+							 <label>기본 주소 <input name="address1" maxlength="255"
 								value="<%=ProductView.escape(profileDeliveryAddress.get("address1"))%>"
 								required>
 							</label> <label>상세 주소 <input name="address2" maxlength="255"
@@ -3298,15 +3318,62 @@ document.querySelectorAll('[data-delivery-tab]').forEach(function (tab) {
 	  });
 	});
 
-document.querySelectorAll('[data-toggle-delivery-form]').forEach(function (button) {
-	  button.addEventListener('click', function () {
-	    if (deliveryForm) {
-	      deliveryForm.hidden = !deliveryForm.hidden;
-	    }
-	  });
-	});
+	if (deliveryForm) {
+		  const fields = ['addressName', 'recipient', 'phone',
+		                  'postcode', 'address1', 'address2'];
+
+		  document.querySelectorAll('[data-add-delivery], [data-edit-delivery]')
+		    .forEach(function (button) {
+		      button.addEventListener('click', function () {
+		        deliveryForm.reset();
+
+		        const editing = button.hasAttribute('data-edit-delivery');
+		        deliveryForm.elements.addressAction.value = editing ? 'edit' : 'add';
+		        deliveryForm.elements.addressId.value =
+		          editing ? button.dataset.addressId : '';
+
+		        fields.forEach(function (field, index) {
+		          deliveryForm.elements.namedItem(field).value =
+		            editing ? button.getAttribute('data-field-' + index) : '';
+		        });
+
+		        document.getElementById('deliveryAddressMessage').textContent = '';
+		        deliveryForm.hidden = false;
+		        deliveryForm.elements.addressName.focus();
+		      });
+		    });
+		}
 
 if (deliveryForm) {
+	  const findAddressButton = document.getElementById('findProfileAddress');
+
+	  findAddressButton.addEventListener('click', function () {
+	    const message = document.getElementById('deliveryAddressMessage');
+	    const Postcode = window.kakao && window.kakao.Postcode;
+
+	    if (!Postcode) {
+	      message.textContent = '주소 검색을 불러오지 못했습니다. 직접 입력해 주세요.';
+	      return;
+	    }
+
+	    message.textContent = '';
+
+	    new Postcode({
+	      oncomplete: function (data) {
+	        const address = data.userSelectedType === 'R'
+	          ? data.roadAddress
+	          : data.jibunAddress;
+
+	        if (deliveryForm.elements.address1.value !== address) {
+	          deliveryForm.elements.address2.value = '';
+	        }
+
+	        deliveryForm.elements.postcode.value = data.zonecode;
+	        deliveryForm.elements.address1.value = address;
+	        deliveryForm.elements.address2.focus();
+	      }
+	    }).open({ q: deliveryForm.elements.postcode.value.trim() });
+	  });
   deliveryForm.addEventListener('submit', async function (event) {
     event.preventDefault();
 
