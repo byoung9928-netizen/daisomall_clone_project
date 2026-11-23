@@ -194,6 +194,63 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
         text-align: right;
     }
 }
+/* ===== 장바구니 상단: 택배배송 · 매장픽업 ===== */
+.cart-delivery-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.cart-delivery-tabs .cart-delivery-tab {
+    width: 100%;
+    min-width: 0;
+    height: 48px;
+    padding: 0 12px;
+    border: 1px solid #dce1e7;
+    border-radius: 8px;
+    background: #f3f5f7;
+    color: #172434;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cart-delivery-tabs .cart-delivery-tab:hover {
+    background: #e8edf2;
+}
+
+.cart-delivery-tabs .cart-delivery-tab.is-active {
+    border-color: #172434;
+    background: #172434;
+    color: #fff;
+}
+
+.cart-delivery-tabs .cart-delivery-tab:focus-visible {
+    outline: 2px solid #315f94;
+    outline-offset: 2px;
+}
+.cart-delivery-tabs .cart-delivery-tab {
+    gap: 8px;
+}
+
+.cart-delivery-tabs .cart-delivery-tab svg,
+.cart-delivery-tabs .cart-delivery-tab img {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    margin: 0;
+}
+
+.cart-delivery-tabs .cart-delivery-tab svg {
+    fill: currentColor;
+}
+/* ===== 매장픽업 선택 시 빨간 아이콘을 흰색으로 표시 ===== */
+.cart-delivery-tabs .cart-delivery-tab.is-active img {
+    filter: brightness(0) invert(1);
+}
+.cart-screen [hidden] { display: none !important; }
+.cart-pickup-store { margin: 24px 0 0; padding-bottom: 12px; border-bottom: 2px solid #172434; }
+.cart-pickup-item { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid #e2e5e9; }
 </style>
 </head>
 <body>
@@ -208,7 +265,47 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
 <p class="error-message" role="alert">${cartError}</p>
 <div class="cart-board">
 <section aria-label="택배배송 상품">
-<div class="cart-delivery-tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h12v10h1V8h4l3 4v6h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V5zm15 5v3h3l-2-3h-1zM6 16a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm11 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>택배배송</div>
+<%-- ===== 장바구니 수령 방식: 택배배송 · 매장픽업 ===== --%>
+<div class="cart-delivery-tabs" role="group" aria-label="수령 방식">
+    <button type="button" class="cart-delivery-tab is-active"
+            aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2 5h12v10h1V8h4l3 4v6h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V5zm15 5v3h3l-2-3h-1zM6 16a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm11 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+        </svg>
+        <span>택배배송</span>
+    </button>
+    <button type="button" class="cart-delivery-tab"
+            aria-pressed="false">
+        <img src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg"
+             alt="" width="20" height="20">
+        <span>매장픽업</span>
+    </button>
+    
+</div>
+<script>
+    // ===== 택배배송과 매장픽업의 목록·요약 전환 =====
+    const deliveryTabs = document.querySelectorAll(
+        ".cart-delivery-tabs .cart-delivery-tab"
+    );
+
+    deliveryTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => {
+            const isPickup = index === 1;
+
+            deliveryTabs.forEach(item => {
+                const selected = item === tab;
+                item.classList.toggle("is-active", selected);
+                item.setAttribute("aria-pressed", String(selected));
+            });
+
+            document.getElementById("cart-delivery-content").hidden = isPickup;
+            document.getElementById("cart-delivery-summary").hidden = isPickup;
+            document.getElementById("cart-pickup-content").hidden = !isPickup;
+            document.getElementById("cart-pickup-summary").hidden = !isPickup;
+        });
+    });
+</script>
+<div id="cart-delivery-content">
 <% if (!hasCartItems) { %>
 <div class="cart-empty">
 <span class="cart-empty-icon" aria-hidden="true">!</span>
@@ -253,8 +350,103 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 </tbody></table></div>
 <div class="cart-cautions"><strong>유의사항</strong><p>· 상품의 판매 상태와 재고에 따라 주문 가능 여부가 달라질 수 있습니다.</p><p>· 상품 금액 30,000원 이상 구매 시 무료배송입니다.</p></div>
 <% } %>
+</div>
+<%-- ===== 매장별 픽업 상품 표 ===== --%>
+<%
+    List<CartBean> pickupItems =
+            (List<CartBean>) request.getAttribute("pickupCartList");
+    long pickupSubtotal = 0;
+    String previousStoreId = null;
+%>
+<div id="cart-pickup-content" hidden>
+    <% if (pickupItems == null || pickupItems.isEmpty()) { %>
+        <div class="cart-empty"><p>매장픽업으로 담은 상품이 없습니다.</p></div>
+    <% } else {
+    %>
+        <div class="cart-selection-toolbar">
+            <label><input id="cart-pickup-select-all" type="checkbox">
+                전체 선택 <span id="cart-pickup-selected-count"></span>
+            </label>
+            <button id="cart-pickup-delete-selected" type="button" disabled>선택삭제</button>
+        </div>
+    <%
+        for (CartBean item : pickupItems) {
+            if (!item.getStoreId().equals(previousStoreId)) {
+                if (previousStoreId != null) {
+    %>
+                    </tbody></table></div>
+    <%
+                }
+                previousStoreId = item.getStoreId();
+    %>
+                <h2 class="cart-pickup-store"><%= daiso.product.controller.ProductView.escape(item.getStoreName()) %></h2>
+                <div class="cart-table-wrap">
+                    <table class="cart-product-table" aria-label="픽업 상품">
+                        <colgroup><col class="cart-col-check"><col><col class="cart-col-price"><col class="cart-col-quantity"><col class="cart-col-total"><col class="cart-col-delete"></colgroup>
+                        <thead>
+                            <tr><th colspan="2" scope="col">상품정보</th><th scope="col">상품금액</th><th scope="col">수량</th><th scope="col">총 금액</th><th scope="col"><span class="visually-hidden">삭제</span></th></tr>
+                        </thead>
+                        <tbody>
+    <%
+            }
+            boolean enoughStock = item.getQuantity() <= item.getStockQuantity();
+            long pickupLineTotal = enoughStock ? item.getItemTotal() : 0;
+            pickupSubtotal += pickupLineTotal;
+            String pickupImage = item.getImageUrl();
+            if (pickupImage == null || pickupImage.isBlank()) {
+                pickupImage = "assets/images/mock-product-0.svg";
+            }
+            String pickupImageSrc = pickupImage.startsWith("https://")
+                    ? pickupImage : cartContext + "/" + pickupImage;
+            String pickupProductName =
+                    daiso.product.controller.ProductView.escape(item.getProductName());
+            String pickupStoreAttr =
+                    daiso.product.controller.ProductView.escape(item.getStoreId());
+            String pickupProductAttr =
+                    daiso.product.controller.ProductView.escape(item.getProductId());
+    %>
+                <tr class="<%= enoughStock ? "" : "cart-unavailable" %>">
+                    <td class="cart-check-cell">
+                        <input type="checkbox" data-pickup-amount="<%= pickupLineTotal %>"
+                               aria-label="<%= pickupProductName %> 선택" <%= enoughStock ? "checked" : "disabled" %>>
+                    </td>
+                    <td>
+                        <a class="cart-table-product"
+                           href="<%= cartContext %>/product.jsp?id=<%= java.net.URLEncoder.encode(item.getProductId(), "UTF-8") %>">
+                            <span class="cart-item-thumb">
+                                <img src="<%= daiso.product.controller.ProductView.escape(pickupImageSrc) %>" alt="">
+                            </span>
+                            <span><%= pickupProductName %></span>
+                        </a>
+                        <% if (!enoughStock) { %>
+                            <p class="error-message">현재 매장 재고 <%= item.getStockQuantity() %>개</p>
+                        <% } %>
+                    </td>
+                    <td class="cart-table-money"><%= cartMoney.format(item.getPrice()) %>원</td>
+                    <td>
+                        <div class="cart-stepper" data-pickup-stepper
+                             data-store-id="<%= pickupStoreAttr %>" data-product-id="<%= pickupProductAttr %>">
+                            <button type="button" data-pickup-change="-1" aria-label="픽업 수량 줄이기"
+                                    <%= item.getQuantity() <= 1 ? "disabled" : "" %>>−</button>
+                            <span><%= item.getQuantity() %></span>
+                            <button type="button" data-pickup-change="1" aria-label="픽업 수량 늘리기"
+                                    <%= item.getQuantity() >= Math.min(99, item.getStockQuantity()) ? "disabled" : "" %>>+</button>
+                        </div>
+                    </td>
+                    <td class="cart-table-money"><%= cartMoney.format(pickupLineTotal) %>원</td>
+                    <td>
+                        <button type="button" class="cart-remove" aria-label="픽업 상품 삭제"
+                                data-pickup-delete data-store-id="<%= pickupStoreAttr %>"
+                                data-product-id="<%= pickupProductAttr %>">×</button>
+                    </td>
+                </tr>
+        <% } %>
+                    </tbody></table>
+                </div>
+    <% } %>
+</div>
 </section>
-<aside class="cart-payment" aria-label="배송지 및 결제 예상 금액">
+<aside id="cart-delivery-summary" class="cart-payment" aria-label="배송지 및 결제 예상 금액">
 <div class="cart-address-title"><h2>배송지</h2>
 <button class="cart-address-link" id="cart-delivery-open" type="button">⌖ 등록</button></div>
 <p class="cart-address-message">배송지를 등록해 주세요.</p>
@@ -271,6 +463,147 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 <% } %>
 <ul class="cart-policy"><li>[상품준비중] 상태일 경우에만 주문 취소 가능합니다.</li><li>[마이페이지 &gt; 주문내역]에서 직접 취소하실 수 있습니다.</li></ul>
 </aside>
+<aside id="cart-pickup-summary" class="cart-payment"
+       aria-label="매장픽업 결제 예상 금액" hidden>
+    <div class="cart-address-title"><h2>픽업매장</h2></div>
+    <p class="cart-address-message">상품은 왼쪽 목록에 표시된 매장에서 수령해요.</p>
+
+    <div class="cart-price-lines">
+        <div class="cart-price-line">
+            <span>총 상품 금액</span>
+            <span data-pickup-total><%= cartMoney.format(pickupSubtotal) %>원</span>
+        </div>
+    </div>
+
+    <div class="cart-grand-total">
+        <span>결제 예상 금액</span>
+        <strong data-pickup-total><%= cartMoney.format(pickupSubtotal) %>원</strong>
+    </div>
+    <button class="cart-order-button" type="button" disabled>주문하기</button>
+</aside>
+<script>
+(() => {
+    // ===== 삭제 후 장바구니를 다시 열어도 픽업 탭을 유지 =====
+    const pageUrl = new URL(window.location.href);
+    if (pageUrl.searchParams.get("tab") === "pickup") {
+        document.querySelectorAll(".cart-delivery-tabs .cart-delivery-tab")[1]?.click();
+    }
+
+    const pickupContent = document.getElementById("cart-pickup-content");
+const deleteUrl = "${pageContext.request.contextPath}/app/cart/pickup/delete";
+    const updateUrl = "${pageContext.request.contextPath}/app/cart/pickup/update";
+    let pickupSaving = false;
+    // ===== 픽업 상품 전체 선택과 선택삭제 =====
+    const selectAll = document.getElementById("cart-pickup-select-all");
+    const selectionCount = document.getElementById("cart-pickup-selected-count");
+    const deleteSelected = document.getElementById("cart-pickup-delete-selected");
+    const pickupChecks = () => Array.from(pickupContent.querySelectorAll("[data-pickup-amount]"));
+
+    function syncPickupSelection() {
+        if (!selectAll) return;
+        const all = pickupChecks();
+        const selectable = all.filter(check => !check.disabled);
+        const selected = selectable.filter(check => check.checked);
+        selectAll.disabled = selectable.length === 0;
+        selectAll.checked = selected.length > 0 && selected.length === selectable.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
+        selectionCount.textContent = selected.length + "/" + all.length + "개";
+        deleteSelected.disabled = pickupSaving || selected.length === 0;
+        const subtotal = selected.reduce((sum, check) => sum + Number(check.dataset.pickupAmount), 0);
+        document.querySelectorAll("#cart-pickup-summary [data-pickup-total]").forEach(total => {
+            total.textContent = subtotal.toLocaleString("ko-KR") + "원";
+        });
+    }
+
+    pickupContent.addEventListener("change", event => {
+        if (event.target === selectAll) {
+            pickupChecks().filter(check => !check.disabled).forEach(check => {
+                check.checked = selectAll.checked;
+            });
+        } else if (!event.target.matches("[data-pickup-amount]")) {
+            return;
+        }
+        syncPickupSelection();
+    });
+
+    deleteSelected?.addEventListener("click", async () => {
+        if (pickupSaving) return;
+        const rows = pickupChecks().filter(check => check.checked && !check.disabled)
+            .map(check => check.closest("tr"));
+        if (rows.length === 0) return;
+
+        pickupSaving = true;
+        syncPickupSelection();
+        let deleted = 0;
+        try {
+            // 매장 ID와 상품 ID를 사용해 기존 개별삭제 요청을 행마다 실행한다.
+            for (const row of rows) {
+                const button = row.querySelector("[data-pickup-delete]");
+                const response = await fetch(deleteUrl, {
+                    method: "POST",
+                    body: new URLSearchParams({
+                        storeId: button.dataset.storeId,
+                        productId: button.dataset.productId
+                    })
+                });
+                if (!response.ok) throw new Error("픽업 상품을 삭제하지 못했습니다.");
+                const result = (await response.text()).trim();
+                if (result !== "OK") throw new Error(result);
+                row.remove();
+                deleted++;
+            }
+            pageUrl.searchParams.set("tab", "pickup");
+            window.location.replace(pageUrl.href);
+        } catch (error) {
+            pickupSaving = false;
+            syncPickupSelection();
+            const message = deleted > 0
+                ? deleted + "개를 삭제했습니다. 나머지 상품은 다시 시도해 주세요."
+                : error.message;
+            window.Daiso.ui.notice(message);
+        }
+    });
+    syncPickupSelection();
+
+
+    pickupContent.addEventListener("click", async event => {
+        const button = event.target.closest("[data-pickup-delete], [data-pickup-change]");
+        if (!button || button.disabled || pickupSaving) return;
+
+        const isDelete = button.hasAttribute("data-pickup-delete");
+        const item = isDelete ? button : button.closest("[data-pickup-stepper]");
+        const body = new URLSearchParams({
+            storeId: item.dataset.storeId,
+            productId: item.dataset.productId
+        });
+
+        if (!isDelete) body.set("change", button.dataset.pickupChange);
+
+        pickupSaving = true;
+        button.disabled = true;
+
+        try {
+            const response = await fetch(isDelete ? deleteUrl : updateUrl, {
+                method: "POST",
+                body
+            });
+            if (!response.ok) {
+                throw new Error("픽업 장바구니 요청에 실패했습니다.");
+            }
+
+            const result = (await response.text()).trim();
+            if (result !== "OK") throw new Error(result);
+
+            pageUrl.searchParams.set("tab", "pickup");
+            window.location.replace(pageUrl.href);
+        } catch (error) {
+            pickupSaving = false;
+            button.disabled = false;
+            window.Daiso.ui.notice(error.message);
+        }
+    });
+})();
+</script>
 </div>
 </main>
 <%@ include file="../common/footer.jspf" %>
@@ -568,6 +901,7 @@ document.addEventListener("DOMContentLoaded", function () {
         deleteButton.disabled = false;
     });
 });
+
 </script>
 <%@ include file="cart-delivery.jspf" %>
 </body>
