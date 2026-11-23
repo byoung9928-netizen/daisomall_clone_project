@@ -33,6 +33,8 @@ public class CartController {
 		    try {
 		        List<CartBean> cartList = dao.getCartList(memberId);
 		        request.setAttribute("cartList", cartList);
+		        List<CartBean> pickupCartList = dao.getPickupCartList(memberId);
+		        request.setAttribute("pickupCartList", pickupCartList);
 
 		    } catch (SQLException e) {
 		        throw new IllegalStateException(
@@ -113,9 +115,108 @@ public class CartController {
 	        return "장바구니 저장에 실패했습니다.";
 	    }
 	}
-		@DaisoPostMapping("/cart/update")
-		@DaisoResponseBody
-		public String cartUpdate(HttpServletRequest request) {
+	
+	//매장픽업
+	@DaisoPostMapping("/cart/pickup/add")
+	@DaisoResponseBody
+	public String pickupCartAdd(HttpServletRequest request) {
+		HttpSession session = request.getSession(false);
+		String memberId = session ==null
+				? null :(String)session.getAttribute("member_id");
+		if(memberId == null || memberId.isBlank()) {
+			return "로그인 후 이용해 주세요.";
+		}
+		String storeId = request.getParameter("storeId");
+		String productId = request.getParameter("productId");
+		
+		if(storeId == null || storeId.isBlank() || storeId.length()>40) {
+			return"픽업 매장을 선택해 주세요.";
+		}
+		if(productId ==null|| productId.isBlank() || productId.length()>100) {
+			return "상품 번호를 확인해 주세요.";
+		}
+		
+		try {
+			int quantity=Integer.parseInt(request.getParameter("quantity"));
+			
+			//DAO에서 선택한 매장의 재고와 이미 담은 수량을 확인한다.
+			CartDAO dao = new CartDAO();
+			dao.addPickupCart(memberId, storeId, productId, quantity);
+			return "OK";
+		}catch (NumberFormatException e) {
+			return"수량은 정수로 입력해 주세요.";
+		}catch (IllegalArgumentException e) {
+			return e.getMessage();
+		}catch(SQLException e) {
+			request.getServletContext().log("매장픽업 장바구니 저장 실패", e);
+			return "매장 픽업 장바구니에 담지 못했습니다.";
+		}
+		
+	}
+	//로그인한 회원의 픽업 장바구니에서 상품 한 건 삭제
+	@DaisoPostMapping("/cart/pickup/delete")
+	@DaisoResponseBody
+	public String pickupCartDelete(HttpServletRequest request) {
+		HttpSession session = request.getSession(false);
+		String memberId = session ==null
+				? null : (String) session.getAttribute("member_id");
+		
+		 if (memberId == null || memberId.isBlank()) {
+		        return "로그인 후 이용해 주세요.";
+		    }
+
+		    String storeId = request.getParameter("storeId");
+		    String productId = request.getParameter("productId");
+
+		    if (storeId == null || storeId.isBlank() || storeId.length() > 40
+		            || productId == null || productId.isBlank() || productId.length() > 100) {
+		        return "삭제할 매장과 상품을 확인해 주세요.";
+		    }
+
+		    try {
+		        boolean deleted = new CartDAO().deletePickupCart(memberId, storeId, productId);
+		        return deleted ? "OK" : "삭제할 픽업 상품을 찾을 수 없습니다.";
+		    } catch (SQLException e) {
+		        request.getServletContext().log("픽업 장바구니 삭제 실패", e);
+		        return "픽업 상품 삭제 중 오류가 발생했습니다.";
+		    }
+		}
+	@DaisoPostMapping("/cart/pickup/update")
+	@DaisoResponseBody
+	public String pickupCartUpdate(HttpServletRequest request) {
+		HttpSession session = request.getSession(false);
+		String memberId = session ==null
+				? null :(String) session.getAttribute("member_id");
+		
+		if(memberId == null || memberId.isBlank()) {
+			return"로그인 후 이용해 주세요.";
+		}
+		String storeId=request.getParameter("storeId");
+		String productId=request.getParameter("productId");
+		
+		if(storeId == null||storeId.isBlank()||storeId.length()>40
+				||productId == null || productId.isBlank()|| productId.length()>100) {
+			return "픽업 매장과 상품을 확인해 주세요.";
+							}
+		try {
+			int change=Integer.parseInt(request.getParameter("change"));
+			boolean updated = new CartDAO()
+					.updatePickupQuantity(memberId, storeId, productId, change);
+			return updated ? "OK":"상품수량과 매장 재고를 확인해 주세요.";
+			
+		}catch(NumberFormatException e) {
+			return "변경할 수량을 확인해 주세요.";
+		}catch(IllegalArgumentException e) {
+			return e.getMessage();
+		}catch(SQLException e) {
+			request.getServletContext().log("픽업 장바구니 수량 변경 실패",e);
+			return "픽업상품 수량을 변경하지 못했습니다.";
+		}
+	}
+	
+	@DaisoPostMapping("/cart/update")
+	@DaisoResponseBody
+	public String cartUpdate(HttpServletRequest request) {
 			HttpSession session = request.getSession(false);
 			
 			String memberId = session ==null
@@ -225,5 +326,6 @@ public class CartController {
 				return "선택한 상품 삭제 중 오류가 발생했습니다.";
 			}
 		}
+
 }
 
