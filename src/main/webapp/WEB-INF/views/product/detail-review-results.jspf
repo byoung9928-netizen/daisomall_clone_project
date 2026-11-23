@@ -1,0 +1,58 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview,daiso.product.dto.ReviewExtras.Answer" %>
+<% DateTimeFormatter reviewDate = DateTimeFormatter.ISO_LOCAL_DATE; %>
+<div class="pd-reviews__results" data-review-results
+     data-review-product="<%= ProductView.escape(product.getProductId()) %>"
+     data-review-sort="<%= ProductView.escape(selectedReviewSort) %>"
+     data-review-page="<%= detailReviews.page %>" tabindex="-1">
+    <% if (detailReviews.items.isEmpty()) { %>
+        <p class="pd-reviews__empty">아직 등록된 리뷰가 없습니다.</p>
+    <% } else { %>
+        <ul class="pd-reviews__list">
+            <% for (ProductReview review : detailReviews.items) { %>
+                <li class="pd-reviews__item">
+                    <div class="pd-reviews__meta">
+                        <span class="pd-reviews__stars" aria-label="별점 <%= review.rating %>점">
+                            <span aria-hidden="true"><%= "★".repeat(review.rating) %><span class="pd-reviews__stars-empty"><%= "★".repeat(5 - review.rating) %></span></span>
+                        </span>
+                        <span class="pd-reviews__author"><%= ProductView.escape(review.authorLabel) %></span>
+                        <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
+                    </div>
+                    <% if (!detailReviews.extras.answers(review.id).isEmpty()) { %>
+                        <dl class="pd-reviews__answers">
+                            <% for (Answer answer : detailReviews.extras.answers(review.id)) { %>
+                                <div><dt><%= ProductView.escape(answer.question) %></dt><dd><%= ProductView.escape(answer.label) %></dd></div>
+                            <% } %>
+                        </dl>
+                    <% } %>
+                    <p class="pd-reviews__body">
+                        <span class="pd-reviews__badge<%= review.refunded ? " pd-reviews__badge--refunded" : "" %>"><%= review.refunded ? "환불한 구매자" : "구매 인증" %></span>
+                        <span><%= ProductView.escape(review.content) %></span>
+                    </p>
+                    <% if (!detailReviews.extras.photos(review.id).isEmpty()) { %>
+                        <div class="pd-reviews__photos">
+                            <% int number = 1;
+                               for (long photoId : detailReviews.extras.photos(review.id)) {
+                                   String photoUrl = ProductView.url(context, "/product-review-photo", Map.of("id", Long.toString(photoId)));
+                            %>
+                                <a href="<%= photoUrl %>"><img src="<%= photoUrl %>" loading="lazy"
+                                    alt="리뷰 사진 <%= number++ %> 크게 보기" width="80" height="80"></a>
+                            <% } %>
+                        </div>
+                    <% } %>
+                </li>
+            <% } %>
+        </ul>
+        <% if (detailReviews.totalPages > 1) { %>
+            <nav class="pd-reviews__pagination" aria-label="상품 리뷰 페이지">
+                <% if (detailReviews.page > 1) { %>
+                    <a rel="prev" data-review-page-link="<%= detailReviews.page - 1 %>" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page - 1))) %>#product-reviews">이전</a>
+                <% } %>
+                <span aria-current="page"><%= detailReviews.page %> / <%= detailReviews.totalPages %></span>
+                <% if (detailReviews.page < detailReviews.totalPages && detailReviews.page < Integer.MAX_VALUE) { %>
+                    <a rel="next" data-review-page-link="<%= detailReviews.page + 1 %>" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page + 1))) %>#product-reviews">다음</a>
+                <% } %>
+            </nav>
+        <% } %>
+    <% } %>
+</div>

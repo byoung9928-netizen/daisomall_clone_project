@@ -14,6 +14,8 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 
+import daiso.order.payment.kakaoPayClient;
+
 public class ReturnDAO {
 
     private final DataSource ds;
@@ -288,6 +290,8 @@ public class ReturnDAO {
 
                         int amount = rs.getInt("refund_amount");
                         String tid = rs.getString("tid");
+                        kakaoPayClient.requireGatewayIdentifier(tid);
+                        kakaoPayClient.requireGatewayIdentifier(rs.getString("order_no"));
 
                         if (amount <= 0
                                 || amount != rs.getInt("total_amount")

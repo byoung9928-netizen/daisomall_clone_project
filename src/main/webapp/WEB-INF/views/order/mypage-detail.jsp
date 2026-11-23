@@ -23,6 +23,9 @@ boolean kakaoLinked = linkedSocialProviders.contains("KAKAO");
 boolean naverLinked = linkedSocialProviders.contains("NAVER");
 boolean googleLinked = linkedSocialProviders.contains("GOOGLE");
 Map<String, Object> myOrder = (Map<String, Object>) request.getAttribute("myOrder");
+Map<String, Boolean> orderReviewStates = (Map<String, Boolean>) request.getAttribute("orderReviewStates");
+if (orderReviewStates == null)
+    orderReviewStates = Collections.emptyMap();
 List<Map<String, Object>> myOrders = (List<Map<String, Object>>) request.getAttribute("myOrders");
 if (myOrders == null)
 	myOrders = Collections.emptyList();
@@ -517,6 +520,37 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	padding: 8px 16px;
 	cursor: pointer;
 	font-size: 13px
+}
+
+.my-item-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+}
+
+.my-item .my-review-action {
+	display: inline-flex;
+	align-items: center;
+	min-height: 36px;
+	border: 1px solid #8390a0;
+	border-radius: 24px;
+	padding: 6px 14px;
+	color: #192638;
+	background: #fff;
+	font-size: 13px;
+	font-weight: 650;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.my-item .my-review-action:hover { background: #f4f5f7; }
+.my-item .my-review-action:focus-visible { outline: 2px solid #365f8c; outline-offset: 2px; }
+
+@media (max-width: 580px) {
+	.my-item-actions { flex-direction: column; align-items: flex-end; gap: 5px; }
+	.my-item .my-review-action { padding-inline: 8px; font-size: 11px; }
 }
 
 .my-order-actions {
@@ -2654,7 +2688,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					if (!myImage.startsWith("https://"))
 						myImage = myContext + "/" + myImage;
 				%>
-				<article class="my-item">
+				<article class="my-item" id="order-product-<%= ProductView.escape(item.getProductId()) %>">
 					<img src="<%=ProductView.escape(myImage)%>" alt="">
 					<div class="my-item-info">
 						<strong><%=myMoney.format(item.getItemTotal())%>원<small>
@@ -2662,9 +2696,17 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						</small></strong><a
 							href="<%=myContext%>/product.jsp?id=<%=java.net.URLEncoder.encode(item.getProductId(), "UTF-8")%>"><%=ProductView.escape(item.getProductName())%></a>
 					</div>
-					<button class="my-add-cart" type="button"
-						data-my-add="<%=ProductView.escape(item.getProductId())%>">♧
-						담기</button>
+					<div class="my-item-actions">
+						<% Boolean reviewWritten = orderReviewStates.get(item.getProductId());
+						   if (reviewWritten != null) { %>
+							<a class="my-review-action"
+							   href="<%= ProductView.url(myContext, "/app/products/reviews",
+							        Map.of("id", item.getProductId(), "from", "order", "orderNo", (String) myOrder.get("orderNo"))) %>"><%= reviewWritten ? "리뷰 수정" : "리뷰 작성" %></a>
+						<% } %>
+						<button class="my-add-cart" type="button"
+							data-my-add="<%=ProductView.escape(item.getProductId())%>">♧
+							담기</button>
+					</div>
 				</article>
 				<%
 				}

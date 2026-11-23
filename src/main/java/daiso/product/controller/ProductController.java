@@ -124,7 +124,7 @@ public class ProductController {
         ProductDTO product = (ProductDTO) request.getAttribute("product");
         if (product != null) {
             ProductActivityController.remember(request, product.getProductId());
-            prepareDetailReviews(request, product.getProductId());
+            prepareDetailReviews(request, product.getProductId(), positiveReviewPage(request.getParameter("photoPage")));
         }
         return "product/detail";
     }
@@ -150,25 +150,55 @@ public class ProductController {
         }
     }
 
-    private void prepareDetailReviews(HttpServletRequest request, String productId) {
+    @DaisoGetMapping("/products/detail/reviews")
+    public String detailReviewResults(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, NamingException {
+        response.setHeader("Cache-Control", "no-store");
+        String id = request.getParameter("id");
+        String sort = request.getParameter("reviewSort");
+        if (id == null || id.isBlank() || id.length() > 100
+                || (sort != null && !List.of("newest", "highest", "lowest").contains(sort))) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        } else {
+            ProductDTO product;
+            try (Connection connection = ProductQueries.connect()) {
+                product = dao.findVisibleById(connection, id.strip());
+                connection.commit();
+            }
+            if (product == null) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            } else {
+                request.setAttribute("product", product);
+                if (!prepareDetailReviews(request, product.getProductId(), 0)) {
+                    response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                }
+            }
+        }
+        return "product/detail-review-results";
+    }
+
+    private boolean prepareDetailReviews(HttpServletRequest request, String productId, int photoPage) {
         String requestedSort = request.getParameter("reviewSort");
         Sort sort = "highest".equals(requestedSort) ? Sort.HIGHEST
                 : "lowest".equals(requestedSort) ? Sort.LOWEST : Sort.NEWEST;
-        int page = 1;
-        String rawPage = request.getParameter("reviewPage");
-        if (rawPage != null) {
-            try {
-                page = Math.max(1, Integer.parseInt(rawPage));
-            } catch (NumberFormatException ignored) {
-                // 잘못된 리뷰 페이지 값은 첫 페이지로 표시한다.
-            }
-        }
+        int page = positiveReviewPage(request.getParameter("reviewPage"));
         request.setAttribute("detailReviewSort", sort.key);
         try {
             // 상품 조회 트랜잭션과 분리해 리뷰 오류에도 상세 화면을 표시한다.
-            request.setAttribute("detailReviews", reviews.page(productId, null, sort, page));
+            request.setAttribute("detailReviews", reviews.publicPage(productId, sort, page, photoPage));
+            return true;
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("상품 상세 리뷰 조회 실패", error);
+            return false;
+        }
+    }
+
+    private static int positiveReviewPage(String rawPage) {
+        if (rawPage == null) return 1;
+        try {
+            return Math.max(1, Integer.parseInt(rawPage));
+        } catch (NumberFormatException ignored) {
+            return 1;
         }
     }
 
