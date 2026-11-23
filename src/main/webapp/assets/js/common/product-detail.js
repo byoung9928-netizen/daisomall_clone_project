@@ -51,8 +51,8 @@
             : valid ? "최대 " + limit + "개" : "1~" + limit + "개 사이의 수량을 입력해 주세요.";
         steppers[0].disabled = !valid || count <= 1;
         steppers[1].disabled = !valid || count >= limit;
-        cartButton.disabled = pickupMode || !valid || saving;
-        cartButton.textContent = pickupMode ? "픽업 담기 준비 중" : "장바구니 담기";
+        cartButton.disabled =  !valid || saving || (pickupMode && !selectedStore);
+        cartButton.textContent = pickupMode ? "매장 담기" : "장바구니 담기";
     };
     const restoreQuantity = () => {
         const limit = maximum();
@@ -145,24 +145,43 @@
     }
 
     restoreQuantity();
-    cart.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        if (pickupMode || saving || !validQuantity(deliveryLimit)) return;
-        saving = true;
-        updateQuantity();
-        try {
-            const response = await fetch(cart.action, {
-                method: "POST",
-                body: new URLSearchParams(new FormData(cart))
-            });
-            if (!response.ok) throw new Error("장바구니 저장 중 오류가 발생했습니다.");
-            const result = (await response.text()).trim();
-            window.Daiso.ui.notice(result === "OK" ? "장바구니에 담았습니다." : result);
-        } catch (error) {
-            window.Daiso.ui.notice(error.message);
-        } finally {
-            saving = false;
-            updateQuantity();
-        }
-    });
+	// ===== 택배배송과 매장픽업을 담을 때 각각의 저장 주소로 전송 =====
+	cart.addEventListener("submit", async (event) => {
+	    event.preventDefault();
+	    if (saving || !validQuantity(maximum())) return;
+
+	    const isPickup = pickupMode;
+	    const body = new URLSearchParams(new FormData(cart));
+	    let url = cart.action;
+
+	    if (isPickup) {
+	        const storeId = selectedStore?.dataset.storeId;
+	        if (!storeId) {
+	            window.Daiso.ui.notice("픽업 매장을 선택해 주세요.");
+	            return;
+	        }
+	        body.set("storeId", storeId);
+	        url = cart.dataset.pickupAction;
+	    }
+
+	    saving = true;
+	    updateQuantity();
+	    try {
+	        const response = await fetch(url, { method: "POST", body });
+	        if (!response.ok) {
+	            throw new Error("장바구니 저장 중 오류가 발생했습니다.");
+	        }
+
+	        const result = (await response.text()).trim();
+	        const successMessage = isPickup
+	            ? "매장픽업 장바구니에 담았습니다."
+	            : "장바구니에 담았습니다.";
+	        window.Daiso.ui.notice(result === "OK" ? successMessage : result);
+	    } catch (error) {
+	        window.Daiso.ui.notice(error.message);
+	    } finally {
+	        saving = false;
+	        updateQuantity();
+	    }
+	});
 })();

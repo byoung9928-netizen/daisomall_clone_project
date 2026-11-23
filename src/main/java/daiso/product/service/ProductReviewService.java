@@ -8,6 +8,8 @@ import daiso.product.dto.ProductReview;
 import daiso.product.dto.ProductReviewPage;
 import daiso.product.dto.ReviewExtras;
 import daiso.product.dto.ReviewExtras.Answer;
+import daiso.product.dto.ReviewExtras.Distribution;
+import daiso.product.dto.ReviewExtras.Gallery;
 import daiso.product.dto.ReviewExtras.Submission;
 import daiso.product.dto.ReviewQuestion;
 import java.sql.Connection;
@@ -21,6 +23,7 @@ import javax.naming.NamingException;
 
 public final class ProductReviewService {
     private static final int PAGE_SIZE = 10;
+    private static final int PHOTO_PAGE_SIZE = 8;
     private final ProductReviewDAO dao = new ProductReviewDAO();
     private final ReviewExtrasDAO extras = new ReviewExtrasDAO();
 
@@ -28,10 +31,20 @@ public final class ProductReviewService {
 
     public ProductReviewPage page(String productId, String memberId, Sort sort, int requestedPage)
             throws SQLException, NamingException {
+        return page(productId, memberId, sort, requestedPage, 0);
+    }
+
+    public ProductReviewPage publicPage(String productId, Sort sort, int requestedPage, int photoPage)
+            throws SQLException, NamingException {
+        return page(productId, null, sort, requestedPage, photoPage);
+    }
+
+    private ProductReviewPage page(String productId, String memberId, Sort sort, int requestedPage, int photoPage)
+            throws SQLException, NamingException {
         try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
             ProductReviewDAO.Summary summary = dao.summarize(connection, productId);
             long pages = Math.max(1, (summary.count + PAGE_SIZE - 1) / PAGE_SIZE);
-            int page = (int) Math.min(requestedPage, pages);
+            int page = (int) Math.max(1, Math.min(requestedPage, pages));
             ProductReview ownReview = memberId == null ? null : dao.findOwn(connection, productId, memberId);
             boolean canWrite = memberId != null && ownReview == null
                     && dao.findPaidItem(connection, memberId, productId, false).isPresent();
@@ -40,10 +53,13 @@ public final class ProductReviewService {
             if (ownReview != null && !ids.contains(ownReview.id)) ids.add(ownReview.id);
             boolean editing = canWrite || ownReview != null;
             boolean available = (!ids.isEmpty() || editing) && extras.available(connection);
+            boolean highlights = available && photoPage > 0;
             ReviewExtras details = new ReviewExtras(available,
                     available && editing ? questions(connection, productId) : List.of(),
                     available ? extras.answers(connection, ids) : Map.of(),
-                    available ? extras.photos(connection, ids) : Map.of());
+                    available ? extras.photos(connection, ids) : Map.of(),
+                    highlights ? distributions(connection, productId) : List.of(),
+                    highlights ? gallery(connection, productId, photoPage) : Gallery.EMPTY);
             ProductReviewPage result = new ProductReviewPage(
                     items, ownReview, canWrite, summary.count, summary.average, page, pages, details);
             connection.commit();
@@ -51,12 +67,45 @@ public final class ProductReviewService {
         }
     }
 
+    private List<Distribution> distributions(Connection connection, String productId) throws SQLException {
+        Map<String, long[]> counts = extras.publicAnswerCounts(connection, productId);
+        if (counts.isEmpty()) return List.of();
+        List<Distribution> distributions = new ArrayList<>();
+        for (ReviewQuestion question : questions(connection, productId)) {
+            long[] values = counts.get(question.key);
+            if (values != null) distributions.add(new Distribution(question, List.of(values[0], values[1], values[2])));
+        }
+        return distributions;
+    }
+
+    private Gallery gallery(Connection connection, String productId, int requestedPage) throws SQLException {
+        long total = extras.publicPhotoCount(connection, productId);
+        if (total == 0) return Gallery.EMPTY;
+        long pages = (total - 1) / PHOTO_PAGE_SIZE + 1;
+        int page = (int) Math.min(requestedPage, pages);
+        return new Gallery(extras.publicPhotoIds(connection, productId, PHOTO_PAGE_SIZE, (page - 1L) * PHOTO_PAGE_SIZE),
+                total, page, pages);
+    }
+
+    public Map<String, Boolean> orderReviewStates(String memberId, String orderNo) throws SQLException, NamingException {
+        try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
+            Map<String, Boolean> states = dao.orderReviewStates(connection, memberId, orderNo);
+            connection.commit();
+            return states;
+        }
+    }
+
     public Result create(String productId, String memberId, int rating, String content, Submission submission)
+            throws SQLException, NamingException {
+        return create(productId, memberId, rating, content, submission, null);
+    }
+
+    public Result create(String productId, String memberId, int rating, String content, Submission submission, String orderNo)
             throws SQLException, NamingException {
         String cleaned = validate(rating, content);
         try {
             return write(connection -> {
-                OptionalLong paidItem = dao.findPaidItem(connection, memberId, productId, true);
+                OptionalLong paidItem = dao.findPaidItem(connection, memberId, productId, orderNo, true);
                 if (paidItem.isEmpty()) return Result.PURCHASE_REQUIRED;
                 if (submission != null && !extras.available(connection)) return Result.EXTRAS_UNAVAILABLE;
                 long id = dao.insert(connection, productId, memberId, paidItem.getAsLong(), rating, cleaned);

@@ -6,6 +6,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Locale;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -36,6 +38,11 @@ public class kakaoPayClient {
 			throw new IllegalArgumentException(
 					"지원하지 않는 결제 요청입니다."
 					);
+		}
+		JsonObject payload = JsonParser.parseString(json).getAsJsonObject();
+		for (String field : new String[] {"tid", "partner_order_id", "partner_user_id"}) {
+			JsonElement value = payload.get(field);
+			if (value != null && !value.isJsonNull()) requireGatewayIdentifier(value.getAsString());
 		}
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create(
@@ -71,6 +78,14 @@ public class kakaoPayClient {
 		}
 		return response.body();
 	}
+	public static void requireGatewayIdentifier(String identifier) {
+		if (identifier == null) return;
+		String normalized = identifier.strip().toUpperCase(Locale.ROOT);
+		if (normalized.startsWith("DEMO-TID-") || normalized.startsWith("DEMO_RANK_V1_")) {
+			throw new IllegalArgumentException("시연용 결제는 외부 결제 시스템에서 처리할 수 없습니다.");
+		}
+	}
+
 	public JsonObject ready(
 			String orderNo,
 			String memberId,

@@ -21,6 +21,16 @@
     if (status == null) {
         status = "ALL";
     }
+    
+    Long memberTotal = (Long) request.getAttribute("adminMemberTotal");
+    Long memberPageValue = (Long) request.getAttribute("adminMemberPage");
+    Long memberPageCount = (Long) request.getAttribute("adminMemberTotalPages");
+    long memberPage = memberPageValue == null ? 1 : memberPageValue;
+
+    String memberPageUrl = route
+            + "?query=" + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
+            + "&status=" + java.net.URLEncoder.encode(status, java.nio.charset.StandardCharsets.UTF_8)
+            + "&page=";
 
     String errorMessage = (String) request.getAttribute("adminMembersError");
     String noticeMessage = (String) request.getAttribute("adminMembersNotice");
@@ -92,9 +102,12 @@
                    href="<%= ProductView.escape(route) %>">초기화</a>
             </form>
 
-            <p class="admin-count" role="status">
-                검색 결과 <%= members.size() %>명
-            </p>
+            <% if (memberTotal != null) { %>
+    <p class="admin-count" role="status">
+        검색 결과 <%= memberTotal %>명
+        · <%= memberPage %>/<%= memberPageCount %>페이지
+    </p>
+<% } %>
 
             <div class="admin-table-scroll"
                  tabindex="0"
@@ -187,6 +200,29 @@
                     </tbody>
                 </table>
             </div>
+            <% if (memberPageCount != null && memberPageCount > 1) { %>
+    <nav class="admin-product-pagination" aria-label="회원 목록 페이지">
+        <% if (memberPage > 1) { %>
+            <a class="button secondary"
+               href="<%=ProductView.escape(memberPageUrl + (memberPage - 1))%>">이전</a>
+        <% } %>
+
+        <% for (long p = Math.max(1, memberPage - 2);
+                p <= Math.min(memberPageCount, memberPage + 2); p++) { %>
+            <% if (p == memberPage) { %>
+                <span class="admin-product-page-number" aria-current="page"><%=p%></span>
+            <% } else { %>
+                <a class="admin-product-page-number"
+                   href="<%=ProductView.escape(memberPageUrl + p)%>"><%=p%></a>
+            <% } %>
+        <% } %>
+
+        <% if (memberPage < memberPageCount) { %>
+            <a class="button secondary"
+               href="<%=ProductView.escape(memberPageUrl + (memberPage + 1))%>">다음</a>
+        <% } %>
+    </nav>
+<% } %>
         </main>
     </div>
 </body>

@@ -1,81 +1,88 @@
 <%@ page pageEncoding="UTF-8" %>
-<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview,daiso.product.dto.ReviewExtras.Answer" %>
-<section id="product-reviews" class="pd-reviews" aria-labelledby="product-reviews-title" tabindex="-1">
-    <div class="pd-reviews__heading">
-        <h2 id="product-reviews-title">상품 리뷰<%= detailReviews == null ? "" : " (" + detailReviews.total + ")" %></h2>
-    </div>
+<%@ page import="java.text.NumberFormat,daiso.product.dto.ReviewExtras.Distribution,daiso.product.dto.ReviewExtras.Gallery" %>
+<section id="product-reviews" class="pd-reviews" aria-labelledby="product-reviews-title"
+         data-review-endpoint="<%= ProductView.escape(context + "/app/products/detail/reviews") %>">
+    <header class="pd-reviews__heading">
+        <h2 id="product-reviews-title">리뷰</h2>
+    </header>
     <% if (detailReviews == null) { %>
         <p class="pd-reviews__empty">리뷰를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
-    <% } else { %>
+    <% } else {
+           String selectedReviewSort = (String) request.getAttribute("detailReviewSort");
+           Gallery reviewGallery = detailReviews.extras.gallery;
+           NumberFormat reviewNumbers = NumberFormat.getIntegerInstance(java.util.Locale.KOREA);
+    %>
         <div class="pd-reviews__summary">
-            <span class="pd-reviews__star" aria-hidden="true">★</span>
-            <div>
-                <strong><%= detailReviews.average == null ? "아직 평점이 없어요" : detailAverage + " / 5" %></strong>
-                <p>구매 인증 리뷰 <%= detailReviews.total %>개</p>
-            </div>
-        </div>
-        <% if (detailReviews.items.isEmpty()) { %>
-            <p class="pd-reviews__empty">아직 등록된 리뷰가 없습니다.</p>
-        <% } else { %>
-            <% String selectedReviewSort = (String) request.getAttribute("detailReviewSort"); %>
-            <form class="pd-reviews__toolbar" method="get" action="<%= ProductView.escape(context + "/product.jsp") %>#product-reviews">
-                <input type="hidden" name="id" value="<%= ProductView.escape(product.getProductId()) %>">
-                <label for="product-review-sort">리뷰 정렬</label>
-                <select id="product-review-sort" name="reviewSort">
-                    <option value="newest" <%= "newest".equals(selectedReviewSort) ? "selected" : "" %>>최신순</option>
-                    <option value="highest" <%= "highest".equals(selectedReviewSort) ? "selected" : "" %>>별점 높은순</option>
-                    <option value="lowest" <%= "lowest".equals(selectedReviewSort) ? "selected" : "" %>>별점 낮은순</option>
-                </select>
-                <button type="submit" class="button secondary">적용</button>
-            </form>
-            <% DateTimeFormatter reviewDate = DateTimeFormatter.ofPattern("yyyy.MM.dd"); %>
-            <ul class="pd-reviews__list">
-                <% for (ProductReview review : detailReviews.items) { %>
-                    <li class="pd-reviews__item">
-                        <div class="pd-reviews__meta">
-                            <span class="pd-reviews__stars" aria-label="별점 <%= review.rating %>점">
-                                <span aria-hidden="true"><%= "★".repeat(review.rating) %><span class="pd-reviews__stars-empty"><%= "★".repeat(5 - review.rating) %></span></span>
-                            </span>
-                            <% if (review.refunded) { %>
-                                <span class="pd-reviews__badge pd-reviews__badge--refunded">환불한 구매자</span>
-                            <% } else { %>
-                                <span class="pd-reviews__badge">구매 인증</span>
-                            <% } %>
-                            <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
-                        </div>
-                        <p class="pd-reviews__body"><%= ProductView.escape(review.content) %></p>
-                        <% if (!detailReviews.extras.answers(review.id).isEmpty()) { %>
-                            <dl class="pd-reviews__answers">
-                                <% for (Answer answer : detailReviews.extras.answers(review.id)) { %>
-                                    <div><dt><%= ProductView.escape(answer.question) %></dt><dd><%= ProductView.escape(answer.label) %></dd></div>
-                                <% } %>
-                            </dl>
-                        <% } %>
-                        <% if (!detailReviews.extras.photos(review.id).isEmpty()) { %>
-                            <div class="pd-reviews__photos">
-                                <% int number = 1;
-                                   for (long photoId : detailReviews.extras.photos(review.id)) {
-                                       String photoUrl = ProductView.escape(context + "/product-review-photo?id=" + photoId);
+            <% if (detailReviews.total == 0) { %>
+                <p class="pd-reviews__empty">아직 등록된 리뷰가 없습니다.</p>
+            <% } else { %>
+                <div class="pd-reviews__score">
+                    <span class="pd-reviews__score-stars" aria-hidden="true"><span>★★★★★</span><span style="--score-width: <%= detailReviews.average.multiply(java.math.BigDecimal.valueOf(20)).intValue() %>%">★★★★★</span></span>
+                    <strong aria-label="평균 평점 5점 만점에 <%= detailAverage %>점"><%= detailAverage %></strong>
+                    <span class="pd-reviews__count">리뷰 <%= reviewNumbers.format(detailReviews.total) %>개</span>
+                </div>
+                <% if (!detailReviews.extras.distributions.isEmpty()) { %>
+                    <div class="pd-reviews__distributions" aria-label="리뷰 상세 평가">
+                        <% for (Distribution distribution : detailReviews.extras.distributions) { %>
+                            <section class="pd-reviews__distribution">
+                                <h3><%= ProductView.escape(distribution.question.label) %></h3>
+                                <p class="pd-reviews__responses">응답 <%= reviewNumbers.format(distribution.responses) %>건</p>
+                                <% for (int reviewOption = 0; reviewOption < distribution.percentages.size(); reviewOption++) {
+                                       int percent = distribution.percentages.get(reviewOption);
                                 %>
-                                    <a href="<%= photoUrl %>"><img src="<%= photoUrl %>" loading="lazy"
-                                         alt="리뷰 사진 <%= number++ %> 크게 보기" width="96" height="96"></a>
+                                    <div class="pd-reviews__option">
+                                        <span><%= ProductView.escape(distribution.question.options.get(reviewOption)) %></span>
+                                        <div class="pd-reviews__bar" aria-hidden="true"><span style="--answer-width: <%= percent %>%"></span></div>
+                                        <strong><%= percent %>%</strong>
+                                    </div>
                                 <% } %>
-                            </div>
+                            </section>
                         <% } %>
-                    </li>
+                    </div>
                 <% } %>
-            </ul>
-            <% if (detailReviews.totalPages > 1) { %>
-                <nav class="pd-reviews__pagination" aria-label="상품 리뷰 페이지">
-                    <% if (detailReviews.page > 1) { %>
-                        <a rel="prev" class="button secondary" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page - 1))) %>#product-reviews">이전</a>
-                    <% } %>
-                    <span aria-current="page"><%= detailReviews.page %> / <%= detailReviews.totalPages %></span>
-                    <% if (detailReviews.page < detailReviews.totalPages && detailReviews.page < Integer.MAX_VALUE) { %>
-                        <a rel="next" class="button secondary" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page + 1))) %>#product-reviews">다음</a>
-                    <% } %>
-                </nav>
             <% } %>
+        </div>
+        <% if (!reviewGallery.ids.isEmpty()) { %>
+            <section class="pd-reviews__gallery" id="product-review-photos" aria-labelledby="review-photo-title">
+                <header>
+                    <h3 id="review-photo-title">리뷰 사진 <span><%= reviewNumbers.format(reviewGallery.total) %>장</span></h3>
+                    <% if (reviewGallery.pages > 1) { %>
+                        <nav class="pd-reviews__gallery-nav" aria-label="리뷰 사진 페이지">
+                            <% if (reviewGallery.page > 1) { %>
+                                <a href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page), "photoPage", Integer.toString(reviewGallery.page - 1))) %>#product-review-photos">이전 사진</a>
+                            <% } %>
+                            <% if (reviewGallery.page < reviewGallery.pages && reviewGallery.page < Integer.MAX_VALUE) { %>
+                                <a href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", selectedReviewSort, "reviewPage", Integer.toString(detailReviews.page), "photoPage", Integer.toString(reviewGallery.page + 1))) %>#product-review-photos"><%= reviewGallery.page == 1 ? "사진 더 보기" : "다음 사진" %></a>
+                            <% } %>
+                        </nav>
+                    <% } %>
+                </header>
+                <div class="pd-reviews__gallery-photos">
+                    <% long galleryIndex = (reviewGallery.page - 1L) * 8 + 1;
+                       for (long photoId : reviewGallery.ids) {
+                           String galleryPhoto = ProductView.url(context, "/product-review-photo", Map.of("id", Long.toString(photoId)));
+                    %>
+                        <a href="<%= galleryPhoto %>"><img src="<%= galleryPhoto %>" loading="lazy"
+                            width="90" height="90" alt="리뷰 사진 <%= galleryIndex++ %> 크게 보기"></a>
+                    <% } %>
+                </div>
+            </section>
+        <% } %>
+        <% if (!detailReviews.items.isEmpty()) { %>
+            <nav class="pd-reviews__toolbar" aria-label="리뷰 정렬">
+                <%
+                    String[] reviewSorts = {"newest", "highest", "lowest"};
+                    String[] reviewSortLabels = {"최신순", "별점 높은순", "별점 낮은순"};
+                    for (int ri = 0; ri < reviewSorts.length; ri++) {
+                        String reviewSortKey = reviewSorts[ri];
+                %>
+                    <a data-review-sort-link="<%= reviewSortKey %>"
+                       href="<%= ProductView.url(context, "/product.jsp", Map.of("id", product.getProductId(), "reviewSort", reviewSortKey, "photoPage", Integer.toString(reviewGallery.page))) %>#product-reviews"
+                       <%= reviewSortKey.equals(selectedReviewSort) ? "aria-current=\"true\"" : "" %>><%= reviewSortLabels[ri] %></a>
+                <% } %>
+            </nav>
+            <p class="pd-reviews__status" role="status" data-review-status></p>
+            <%@ include file="detail-review-results.jspf" %>
         <% } %>
     <% } %>
 </section>

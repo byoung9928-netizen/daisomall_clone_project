@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-detail.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-review-results.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
@@ -130,7 +131,8 @@
                         <a class="pd-store-link" href="<%= ProductView.url(context, "/app/stores/products", Map.of("product", product.getProductId())) %>">매장 상품 찾기</a>
                     </section>
 
-                    <form id="cartAddForm" method="post" action="${pageContext.request.contextPath}/app/cart/add">
+                    <form id="cartAddForm" method="post" action="${pageContext.request.contextPath}/app/cart/add"
+                    					data-pickup-action="${pageContext.request.contextPath}/app/cart/pickup/add">
                         <input type="hidden" name="productId" value="<%= ProductView.escape(product.getProductId()) %>">
                         <div class="pd-order-summary">
                             <div class="pd-order-product">
@@ -165,7 +167,7 @@
                         </button>
                             <button type="submit" class="pd-add-cart" data-add-cart <%= deliveryLimit > 0 ? "" : "disabled" %>>장바구니 담기</button>
                         </div>
-                        <p class="pd-pickup-note" data-pickup-note hidden>픽업 장바구니와 주문은 준비 중입니다.</p>
+                        <p class="pd-pickup-note" data-pickup-note hidden>선택한 매장의 재고는 담을때 다시 확인합니다.</p>
                     </form>
                 </section>
                 <% if (hasPickup) { %>
@@ -185,7 +187,8 @@
                         <ul class="pd-store-list" aria-label="픽업 가능한 매장">
                             <% for (PickupStore store : pickupStores) { %>
                                 <li class="pd-store-option" data-store-option data-name="<%= ProductView.escape(store.location.name) %>"
-                                    data-city="<%= ProductView.escape(store.location.city) %>" data-quantity="<%= store.quantity %>">
+                                    data-city="<%= ProductView.escape(store.location.city) %>" data-quantity="<%= store.quantity %>"
+                                    data-store-id="<%=ProductView.escape(store.location.id)%>">
                                     <div>
                                         <div class="pd-store-name">
                                             <strong><%= ProductView.escape(store.location.name) %></strong>

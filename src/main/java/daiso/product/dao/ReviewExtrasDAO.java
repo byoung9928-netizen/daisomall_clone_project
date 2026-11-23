@@ -67,6 +67,50 @@ public final class ReviewExtrasDAO {
         return result;
     }
 
+    public Map<String, long[]> publicAnswerCounts(Connection connection, String productId) throws SQLException {
+        String sql = "SELECT a.question_key, a.answer_value, COUNT(*) FROM product_reviews rv "
+                + "JOIN product_review_answers a ON a.review_id = rv.review_id "
+                + "WHERE rv.product_id = ? AND rv.deleted_at IS NULL" + ReviewVisibility.PUBLISHED
+                + " GROUP BY a.question_key, a.answer_value";
+        Map<String, long[]> counts = new HashMap<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, productId);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) counts.computeIfAbsent(rows.getString(1), key -> new long[3])[rows.getInt(2) - 1] = rows.getLong(3);
+            }
+        }
+        return counts;
+    }
+
+    private static final String PUBLIC_PHOTOS = " FROM product_reviews rv "
+            + "JOIN product_review_photos ph ON ph.review_id = rv.review_id "
+            + "WHERE rv.product_id = ? AND rv.deleted_at IS NULL" + ReviewVisibility.PUBLISHED;
+
+    public long publicPhotoCount(Connection connection, String productId) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*)" + PUBLIC_PHOTOS)) {
+            query.setString(1, productId);
+            try (ResultSet rows = query.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
+    }
+
+    public List<Long> publicPhotoIds(Connection connection, String productId, int limit, long offset) throws SQLException {
+        String sql = "SELECT ph.photo_id" + PUBLIC_PHOTOS
+                + " ORDER BY rv.created_at DESC, rv.review_id DESC, ph.photo_id LIMIT ? OFFSET ?";
+        List<Long> photos = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, productId);
+            query.setInt(2, limit);
+            query.setLong(3, offset);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) photos.add(rows.getLong(1));
+            }
+        }
+        return photos;
+    }
+
     public byte[] visiblePhoto(Connection connection, long photoId) throws SQLException {
         String sql = "WITH RECURSIVE visible AS ("
                 + "SELECT category_id FROM categories WHERE parent_id IS NULL AND is_visible = 1 "

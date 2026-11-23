@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 
@@ -27,10 +28,14 @@ import daiso.order.db.OrderDAO;
 import daiso.order.delivery.DeliveryTrackerClient;
 import daiso.order.delivery.DemoTrackingNumber;
 import daiso.order.payment.kakaoPayClient;
+import daiso.product.service.ProductReviewService;
+import daiso.order.db.DeliveryAddressDAO;
+import daiso.product.dao.StoreInventoryDAO.Location;
 
 @DaisoController
 public class OrderMyPageController {
     private final MemberService memberService = new MemberService();
+    private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/order/mypage")
     public String mypage(HttpServletRequest request) throws SQLException {
@@ -114,6 +119,14 @@ public class OrderMyPageController {
                     statusLabel((String) selected.get("status"))
                 );
                 selected.put("returnStatusLabel", returnStatusLabel((String)selected.get("returnStatus")));
+                if ("PAID".equals(selected.get("status")) && !"profile".equals(request.getParameter("section"))
+                        && (request.getParameter("productActivity") == null || request.getParameter("productActivity").isBlank())) {
+                    try {
+                        request.setAttribute("orderReviewStates", reviews.orderReviewStates(memberId, orderNo));
+                    } catch (SQLException | NamingException error) {
+                        request.getServletContext().log("주문내역 리뷰 상태 조회 실패", error);
+                    }
+                }
             }
         }
 
@@ -182,16 +195,39 @@ public class OrderMyPageController {
 		    }
 
 		    request.setAttribute("profileDeliveryAddress", profileDeliveryAddress);
-		    synchronized (session) {
-		        request.setAttribute(
-		                "profileDeliveryAddresses",
-		                List.copyOf(DeliveryAddressBook.entries(session).values())
-		        );
+		    try {
+		        List<Map<String, String>> addresses =
+		                new DeliveryAddressDAO().findByMemberId(memberId);
+
+		        request.setAttribute("profileDeliveryAddresses", addresses);
+
+		        // 세션에 현재 배송지가 없으면 가장 최근 주소를 회원정보 요약에 표시한다.
+		        if (!(savedAddress instanceof Map) && !addresses.isEmpty()) {
+		            request.setAttribute("profileDeliveryAddress", addresses.get(0));
+		        }
+		    } catch (SQLException | javax.naming.NamingException e) {
+		        request.getServletContext().log("회원 배송지 목록 조회 실패", e);
+		        request.setAttribute("profileDeliveryAddressLoadFailed", true);
 		    }
-		    request.setAttribute(
-		            "profilePickupStore",
-		            session.getAttribute("orderPickupStore")
-		    );
+		    try {
+		        List<Location> stores = PickupStores.findAll();
+		        request.setAttribute("profilePickupStores", stores);
+
+		        Object selectedStoreId = session.getAttribute("orderPickupStoreId");
+		        for (Location store : stores) {
+		            if (store.id.equals(selectedStoreId)) {
+		                request.setAttribute("profilePickupStore", Map.of(
+		                        "storeId", store.id,
+		                        "storeName", store.name,
+		                        "city", store.city
+		                ));
+		                break;
+		            }
+		        }
+		    } catch (SQLException | javax.naming.NamingException e) {
+		        request.getServletContext().log("픽업매장 목록 조회 실패", e);
+		        request.setAttribute("profilePickupLoadFailed", true);
+		    }
 
 		    Object csrfToken = session.getAttribute("orderCsrf");
 		    if (!(csrfToken instanceof String)) {

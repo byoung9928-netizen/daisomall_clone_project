@@ -153,10 +153,10 @@ document.addEventListener("DOMContentLoaded", function () {
 				.addEventListener(
 						"click",
 						function() {
-							Kakao.Auth
-									.authorize({
-										redirectUri : "http://localhost:8080/daisomall/app/member/oauth/kakao/callback",
-										scope : "account_email"
+							Kakao.Auth.authorize({
+								redirectUri : "http://localhost:8080/daisomall/app/member/oauth/kakao/callback",
+								scope : "account_email"	,	
+								throughTalk : false		
 									});
 						});
 	</script>

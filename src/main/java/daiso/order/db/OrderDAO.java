@@ -15,6 +15,7 @@ import java.sql.Timestamp;
 import java.sql.Statement;
 
 import daiso.cart.db.CartBean;
+import daiso.order.payment.kakaoPayClient;
 
 public class OrderDAO {
 		//db연결을 빌려주는 객체
@@ -781,6 +782,8 @@ public class OrderDAO {
 		                    }
 
 		                    String tid = rs.getString("tid");
+		                    kakaoPayClient.requireGatewayIdentifier(tid);
+		                    kakaoPayClient.requireGatewayIdentifier(orderNo);
 		                    int total = rs.getInt("total_amount");
 
 		                    if (tid == null || tid.isBlank()

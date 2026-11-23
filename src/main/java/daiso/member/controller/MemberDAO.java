@@ -23,8 +23,8 @@ public class MemberDAO {
         return dataSource.getConnection();
     }
     
-    public List<AdminMemberInfo> findAdminMembers(String keyword, String status)
-            throws NamingException, SQLException {
+    private static String adminMemberWhere(
+            String keyword, String status, List<String> parameters) {
 
         String search = keyword == null ? "" : keyword.trim();
         String selectedStatus = status == null || status.trim().isEmpty()
@@ -37,40 +37,61 @@ public class MemberDAO {
             throw new IllegalArgumentException("회원 상태 검색값이 올바르지 않습니다.");
         }
 
-        StringBuilder sql = new StringBuilder(
-                "SELECT member_id, login_id, name, email, role, status, created_at " +
-                "FROM members WHERE 1 = 1");
-
-        List<String> parameters = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" FROM members WHERE 1 = 1");
 
         if (!search.isEmpty()) {
-            sql.append(
-                    " AND (member_id LIKE ? OR login_id LIKE ? " +
-                    "OR name LIKE ? OR email LIKE ?)"
-            );
-
-            String searchPattern = "%" + search + "%";
-            parameters.add(searchPattern);
-            parameters.add(searchPattern);
-            parameters.add(searchPattern);
-            parameters.add(searchPattern);
+            where.append(" AND (member_id LIKE ? OR login_id LIKE ? "
+                    + "OR name LIKE ? OR email LIKE ?)");
+            String pattern = "%" + search + "%";
+            for (int i = 0; i < 4; i++) {
+                parameters.add(pattern);
+            }
         }
 
         if (!"ALL".equals(selectedStatus)) {
-            sql.append(" AND status = ?");
+            where.append(" AND status = ?");
             parameters.add(selectedStatus);
         }
 
-        sql.append(" ORDER BY created_at DESC, member_id ASC");
+        return where.toString();
+    }
+
+    private static void bindAdminMemberFilters(
+            PreparedStatement statement, List<String> parameters)
+            throws SQLException {
+
+        for (int i = 0; i < parameters.size(); i++) {
+            statement.setString(i + 1, parameters.get(i));
+        }
+    }
+    
+    public List<AdminMemberInfo> findAdminMembers(String keyword, String status)
+            throws NamingException, SQLException {
+        return findAdminMembers(keyword, status, 0, 0);
+    }
+
+    List<AdminMemberInfo> findAdminMembers(
+            String keyword, String status, int limit, long offset)
+            throws NamingException, SQLException {
+
+        List<String> parameters = new ArrayList<>();
+        String sql = "SELECT member_id, login_id, name, email, role, status, created_at"
+                + adminMemberWhere(keyword, status, parameters)
+                + " ORDER BY created_at DESC, member_id ASC";
+
+        if (limit > 0) {
+            sql += " LIMIT ? OFFSET ?";
+        }
 
         List<AdminMemberInfo> members = new ArrayList<>();
-
         try (Connection connection = getConnection();
-             PreparedStatement statement =
-                     connection.prepareStatement(sql.toString())) {
+             PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            for (int i = 0; i < parameters.size(); i++) {
-                statement.setString(i + 1, parameters.get(i));
+            bindAdminMemberFilters(statement, parameters);
+
+            if (limit > 0) {
+                statement.setInt(parameters.size() + 1, limit);
+                statement.setLong(parameters.size() + 2, offset);
             }
 
             try (ResultSet result = statement.executeQuery()) {
@@ -89,6 +110,23 @@ public class MemberDAO {
         }
 
         return members;
+    }
+
+    long countAdminMembers(String keyword, String status)
+            throws NamingException, SQLException {
+
+        List<String> parameters = new ArrayList<>();
+        String sql = "SELECT COUNT(*)" + adminMemberWhere(keyword, status, parameters);
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            bindAdminMemberFilters(statement, parameters);
+
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getLong(1) : 0;
+            }
+        }
     }
     
     public AdminMemberDetailInfo findAdminMemberDetail(String memberId)

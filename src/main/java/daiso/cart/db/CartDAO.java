@@ -61,11 +61,11 @@
             return addCart(memberId, productId, quantity, false);
          }
 
-         public void addSoldOutProduct(String memberId, String productId) throws SQLException {
+     public void addSoldOutProduct(String memberId, String productId) throws SQLException {
             addCart(memberId, productId, 1, true);
          }
 
-         private boolean addCart(String memberId, String productId, int quantity, boolean preview) throws SQLException {
+     private boolean addCart(String memberId, String productId, int quantity, boolean preview) throws SQLException {
 
  		 	//수량이 1~99개 범위를 벗어나면 저장 중단
  		 	if(quantity <1 || quantity >99) {
@@ -195,7 +195,7 @@
  		 	}
  		 	
  		 }
- 	 	public boolean updateCartQuantity(String memberId, long cartItemId, int change)
+ 	 public boolean updateCartQuantity(String memberId, long cartItemId, int change)
  				throws SQLException{
 
  	 			//버튼 한번에 1개씩만 변경
@@ -243,7 +243,7 @@
  				}
  	 		}
  	 	}
- 	 			public boolean deleteCart(String memberId, long cartItemId)
+ 	 public boolean deleteCart(String memberId, long cartItemId)
  	 			        throws SQLException {
 
  	 			    String sql =
@@ -285,7 +285,7 @@
 	 	
 	 	
  	 			}
- 	 			public int deleteSelectedCart(
+ 	 public int deleteSelectedCart(
  	 					String memberId, long[] cartItemIds)
  	 					throws SQLException{
  	 					
@@ -329,4 +329,184 @@
  	 					
  	 				}
  	 			}
-}//cartdao끝
+ 	 //매장픽업담기:매장 재고 확인 후 장바구니 수량 저장
+ 	 public void addPickupCart(String memberId,String storeId,String productId, int quantity) throws SQLException{
+ 	 			if(quantity<1||quantity>99) {
+ 	 				throw new IllegalArgumentException("수량은 1~99개로 입력해 주세요.");
+ 	 			}
+ 	 			String stockSql = 
+ 	 					"SELECT quantity FROM store_inventory "
+ 	 					+"WHERE store_id = ? AND product_id = ? AND is_carried = 1 "
+ 	 					+"FOR UPDATE";
+ 	 			String cartSql = 
+ 	 					"SELECT quantity FROM pickup_cart_items "
+ 	 					+"WHERE member_id = ? AND store_id = ? AND product_id = ? "
+ 	 					+"FOR UPDATE";
+ 	 			String saveSql = 
+ 	 					"INSERT INTO pickup_cart_items (member_id, store_id, product_id, quantity) "
+ 	 					+"VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE quantity = ?";
+ 	 		try (Connection con = ds.getConnection()){
+ 	 			boolean originalAutoCommit = con.getAutoCommit();
+ 	 			boolean originalReadOnly= con.isReadOnly();
+ 	 			con.setReadOnly(false);
+ 	 			con.setAutoCommit(false);
+ 	 			
+ 	 			try {
+ 	 				//같은 매장과 상품에 대한 재고 확인, 담기 요청을 순서대로 처리
+ 	 				int stock;
+ 	 				try (PreparedStatement ps = con.prepareStatement(stockSql)){
+ 	 					ps.setString(1, storeId);
+ 	 					ps.setString(2, productId);
+ 	 					
+ 	 					try (ResultSet rs = ps.executeQuery()){
+ 	 						if(!rs.next()) {
+ 	 							throw new IllegalArgumentException("이 매장에서 취급하는 상품을 찾을 수 없습니다.");
+ 	 							
+ 	 						}
+ 	 						stock = rs.getInt("quantity");
+ 	 					}
+ 	 				}
+ 	 				int currentQuantity = 0;
+ 	 				try(PreparedStatement ps = con.prepareStatement(cartSql)){
+ 	 					ps.setString(1, memberId);
+ 	 					ps.setString(2, storeId);
+ 	 					ps.setString(3, productId);
+ 	 					
+ 	 					try (ResultSet rs = ps.executeQuery()){
+ 	 						if(rs.next()) {
+ 	 							currentQuantity = rs.getInt("quantity");
+ 	 						}
+ 	 					}
+ 	 				}
+ 	 				
+ 	 				int totalQuantity = currentQuantity + quantity;
+ 	 				if(totalQuantity >99||totalQuantity>stock) {
+ 	 					throw new IllegalArgumentException(
+ 	 							"이미 담은 수량을 포함해 최대 " + Math.min(stock, 99)
+ 	 							+"개까지 담을 수 있습니다.");
+ 	 					
+ 	 				}
+ 	 				
+ 	 				try(PreparedStatement ps = con.prepareStatement(saveSql)){
+ 	 					ps.setString(1, memberId);
+ 	 					ps.setString(2, storeId);
+ 	 					ps.setString(3, productId);
+ 	 					ps.setInt(4, totalQuantity);
+ 	 					ps.setInt(5, totalQuantity);
+ 	 					ps.executeUpdate();
+ 	 				}
+ 	 				con.commit();
+ 	 			} catch (SQLException | RuntimeException e) {
+ 	 				con.rollback();
+ 	 				throw e;
+ 	 			} finally {
+ 	 				con.setAutoCommit(originalAutoCommit);
+ 	 				con.setReadOnly(originalReadOnly);
+ 	 			}
+ 	 		}
+ 	 	}
+ 	 //로그인한 회원의 픽업상품을 매장별로 조회
+ 	 public List<CartBean> getPickupCartList(String memberId) throws SQLException{
+ 		 String sql =
+ 				 "SELECT c.store_id, store_name, c.product_id, "
+ 				 +"p.name AS product_name, p.price, p.image_url, c.quantity, "
+ 				 +"CASE WHEN i.is_carried = 1 THEN i.quantity ELSE 0 END AS pickup_stock "
+ 				 +"FROM pickup_cart_items c "
+ 				 +"JOIN store_inventory i "
+ 				 +"ON i.store_id = c.store_id AND i.product_id = c.product_id "
+ 				 +"JOIN store_locations s ON s.store_id =c.store_id "
+ 				 +"JOIN products p ON p.product_id = c.product_id "
+ 				 +"WHERE c. member_id = ? "
+ 				 +"ORDER BY s.store_name, c.store_id, p.name, c.product_id";
+ 		 List<CartBean> items = new ArrayList<>();
+ 		 
+ 		 try(Connection con = ds.getConnection();
+ 				 PreparedStatement ps = con.prepareStatement(sql)){
+ 			 ps.setString(1, memberId);
+ 			 
+ 			 try (ResultSet rs = ps.executeQuery()){
+ 				 while(rs.next()) {
+ 					 CartBean item = new CartBean();
+ 					 item.setStoreId(rs.getString("store_id"));
+ 					 item.setStoreName(rs.getString("store_name"));
+ 					 item.setProductId(rs.getString("product_id"));
+ 					 item.setProductName(rs.getString("product_name"));
+ 					 item.setPrice(rs.getInt("price"));
+ 					 item.setImageUrl(rs.getString("image_url"));
+ 					 item.setQuantity(rs.getInt("quantity"));
+ 					 item.setStockQuantity(rs.getInt("pickup_stock"));
+ 					 items.add(item);
+ 				 }
+ 			 }
+ 		 }
+ 		 return items;
+ 	 }
+ 	 //픽업장바구니에서 선택한 매장의 상품만 삭제
+ 	 public boolean deletePickupCart(String memberId, String storeId,String productId)
+ 	 		throws SQLException{
+ 		 String sql = "DELETE FROM pickup_cart_items "
+ 				 +"WHERE member_id = ? AND store_id = ? AND product_id =?";
+ 		 try(Connection con = ds.getConnection()){
+ 			 con.setReadOnly(false);
+ 			 
+ 			 try(PreparedStatement ps = con.prepareStatement(sql)){
+ 				 ps.setString(1, memberId);
+ 				 ps.setString(2, storeId);
+ 				 ps.setString(3,productId);
+ 				 
+ 				 boolean deleted = ps.executeUpdate()==1;
+ 				 if(!con.getAutoCommit()) {
+ 					 con.commit();
+ 				 }
+ 				 return deleted;
+ 			 }
+ 			 
+ 		 }
+ 	 }
+ 	 // ===== 픽업 상품 수량 변경: 선택한 매장의 재고 기준 =====
+ 	 public boolean updatePickupQuantity(String memberId, String storeId,
+ 	                                    String productId, int change)
+ 	        throws SQLException {
+ 	    if (change != -1 && change != 1) {
+ 	        throw new IllegalArgumentException("수량은 한 번에 1개씩 변경해 주세요.");
+ 	    }
+
+ 	    String sql =
+ 	            "UPDATE pickup_cart_items c "
+ 	            + "JOIN store_inventory i "
+ 	            + "ON i.store_id = c.store_id AND i.product_id = c.product_id "
+ 	            + "SET c.quantity = c.quantity + ? "
+ 	            + "WHERE c.member_id = ? AND c.store_id = ? AND c.product_id = ? "
+ 	            + "AND c.quantity + ? BETWEEN 1 AND 99 "
+ 	            + "AND (? = -1 OR (i.is_carried = 1 AND c.quantity + ? <= i.quantity))";
+
+ 	    try (Connection con = ds.getConnection()) {
+ 	        boolean originalReadOnly = con.isReadOnly();
+ 	        boolean autoCommit = con.getAutoCommit();
+ 	        con.setReadOnly(false);
+
+ 	        try (PreparedStatement ps = con.prepareStatement(sql)) {
+ 	            ps.setInt(1, change);
+ 	            ps.setString(2, memberId);
+ 	            ps.setString(3, storeId);
+ 	            ps.setString(4, productId);
+ 	            ps.setInt(5, change);
+ 	            ps.setInt(6, change);
+ 	            ps.setInt(7, change);
+
+ 	            boolean updated = ps.executeUpdate() == 1;
+ 	            if (!autoCommit) {
+ 	                con.commit();
+ 	            }
+ 	            return updated;
+ 	        } catch (SQLException e) {
+ 	            if (!autoCommit) {
+ 	                con.rollback();
+ 	            }
+ 	            throw e;
+ 	        } finally {
+ 	            con.setReadOnly(originalReadOnly);
+ 	        }
+ 	    }
+ 	}
+ 	}//cartdao끝

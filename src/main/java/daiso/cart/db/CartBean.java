@@ -11,7 +11,21 @@ public class CartBean {
 	private String productStatus; // 판매 상태
 	private int stockQuantity;    // 현재 재고
 	
+	private String storeId;//매장 id
+	private String storeName;//매장 이름
 	
+	public String getStoreId() {
+		return storeId;
+	}
+	public void setStoreId(String storeId) {
+		this.storeId = storeId;
+	}
+	public String getStoreName() {
+		return storeName;
+	}
+	public void setStoreName(String storeName) {
+		this.storeName = storeName;
+	}
 	public long getItemTotal() {
 		return (long)price*quantity;
 	}

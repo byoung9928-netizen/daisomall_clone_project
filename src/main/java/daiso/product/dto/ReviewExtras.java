@@ -8,9 +8,18 @@ public final class ReviewExtras {
     public final List<ReviewQuestion> questions;
     private final Map<Long, List<Answer>> answers;
     private final Map<Long, List<Long>> photos;
+    public final List<Distribution> distributions;
+    public final Gallery gallery;
 
     public ReviewExtras(boolean available, List<ReviewQuestion> questions,
             Map<Long, List<Answer>> answers, Map<Long, List<Long>> photos) {
+        this(available, questions, answers, photos, List.of(), Gallery.EMPTY);
+    }
+
+    public ReviewExtras(boolean available, List<ReviewQuestion> questions, Map<Long, List<Answer>> answers,
+            Map<Long, List<Long>> photos, List<Distribution> distributions, Gallery gallery) {
+        this.distributions = List.copyOf(distributions);
+        this.gallery = gallery;
         this.available = available;
         this.questions = List.copyOf(questions);
         this.answers = Map.copyOf(answers);
@@ -23,6 +32,36 @@ public final class ReviewExtras {
 
     public List<Long> photos(long reviewId) {
         return photos.getOrDefault(reviewId, List.of());
+    }
+
+    public static final class Distribution {
+        public final ReviewQuestion question;
+        public final long responses;
+        public final List<Integer> percentages;
+
+        public Distribution(ReviewQuestion question, List<Long> counts) {
+            this.question = question;
+            this.responses = counts.stream().mapToLong(Long::longValue).sum();
+            this.percentages = counts.stream()
+                    .map(count -> responses == 0 ? 0 : (int) Math.round(100.0 * count / responses))
+                    .collect(java.util.stream.Collectors.toUnmodifiableList());
+        }
+    }
+
+    public static final class Gallery {
+        public static final Gallery EMPTY = new Gallery(List.of(), 0, 1, 1);
+
+        public final List<Long> ids;
+        public final long total;
+        public final int page;
+        public final long pages;
+
+        public Gallery(List<Long> ids, long total, int page, long pages) {
+            this.ids = List.copyOf(ids);
+            this.total = total;
+            this.page = page;
+            this.pages = pages;
+        }
     }
 
     public static final class Submission {

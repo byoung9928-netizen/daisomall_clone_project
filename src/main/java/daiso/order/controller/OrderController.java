@@ -11,7 +11,11 @@ import daiso.cart.db.CartBean;
 import daiso.cart.db.CartDAO;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
-
+import daiso.order.db.DeliveryAddressDAO;
+import daiso.product.dao.StoreInventoryDAO.Location;
+import java.util.Map;
+import javax.servlet.http.HttpServletResponse;
+import com.google.gson.JsonObject;
 
 @DaisoController
 public class OrderController {
@@ -72,7 +76,25 @@ public class OrderController {
         request.setAttribute("orderItems", items);
         request.setAttribute("orderSubtotal", subtotal);
         request.setAttribute("orderShipping", shipping);
-        request.setAttribute("deliveryAddress", session.getAttribute("orderDeliveryAddress"));
+        synchronized (session) {
+            Object deliveryAddress = session.getAttribute("orderDeliveryAddress");
+
+            if (!(deliveryAddress instanceof Map)) {
+                try {
+                    List<Map<String, String>> savedAddresses =
+                            new DeliveryAddressDAO().findByMemberId(memberId);
+
+                    if (!savedAddresses.isEmpty()) {
+                        deliveryAddress = savedAddresses.get(0);
+                        session.setAttribute("orderDeliveryAddress", deliveryAddress);
+                    }
+                } catch (java.sql.SQLException | javax.naming.NamingException e) {
+                    request.getServletContext().log("주문서 배송지 조회 실패", e);
+                }
+            }
+
+            request.setAttribute("deliveryAddress", deliveryAddress);
+        }
         request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
         request.setAttribute("deliveryMessage", session.getAttribute("orderDeliveryMessage"));
         if (!purchasable) request.setAttribute("orderError", "상품 상태 또는 재고를 확인해 주세요. 장바구니에서 수량을 변경하거나 상품을 삭제할 수 있습니다.");
@@ -80,7 +102,60 @@ public class OrderController {
         request.setAttribute("activeNavigation", "");
         return "shop/page";
     }
+    
+    @DaisoGetMapping("/order/delivery-summary")
+    @daiso.common.annotation.DaisoResponseBody
+    public String deliverySummary(HttpServletRequest request, HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
 
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+
+        JsonObject summary = new JsonObject();
+        if (!(memberId instanceof String) || ((String) memberId).isBlank()) {
+            response.setStatus(401);
+            return summary.toString();
+        }
+
+        summary.addProperty("address", "");
+        summary.addProperty("pickupStore", "");
+
+        try {
+            Object current = session.getAttribute("orderDeliveryAddress");
+
+            if (!(current instanceof Map)) {
+                List<Map<String, String>> addresses =
+                        new DeliveryAddressDAO().findByMemberId((String) memberId);
+                if (!addresses.isEmpty()) {
+                    current = addresses.get(0);
+                }
+            }
+
+            if (current instanceof Map) {
+                Object address = ((Map<?, ?>) current).get("address1");
+                if (address instanceof String) {
+                    summary.addProperty("address", (String) address);
+                }
+            }
+
+            Object pickupStoreId = session.getAttribute("orderPickupStoreId");
+            if (pickupStoreId instanceof String) {
+                for (Location store : PickupStores.findAll()) {
+                    if (store.id.equals(pickupStoreId)) {
+                        summary.addProperty("pickupStore", store.name);
+                        break;
+                    }
+                }
+            }
+
+            return summary.toString();
+        } catch (java.sql.SQLException | javax.naming.NamingException e) {
+            request.getServletContext().log("헤더 배송지·픽업매장 조회 실패", e);
+            response.setStatus(500);
+            return "{}";
+        }
+    }
+    
     @daiso.common.annotation.DaisoPostMapping("/order/address")
     @daiso.common.annotation.DaisoResponseBody
     public String saveDeliveryAddress(HttpServletRequest request)
@@ -117,7 +192,25 @@ public class OrderController {
         if (!address.get("postcode").matches("[0-9]{5}")) return "우편번호는 5자리 숫자로 입력해 주세요.";
         String phone = address.get("phone").replaceAll("[\\s-]", "");
         if (!phone.matches("01[016789][0-9]{7,8}")) return "휴대폰번호를 확인해 주세요.";
+        String memberId = (String) session.getAttribute("member_id");
+        DeliveryAddressDAO addressDAO = new DeliveryAddressDAO();
+
         synchronized (session) {
+            try {
+                if ("edit".equals(addressAction)) {
+                    if (addressId == null || addressId.isBlank()
+                            || addressDAO.update(memberId, addressId, address) == 0) {
+                        return "수정할 배송지를 찾을 수 없습니다.";
+                    }
+                } else {
+                    addressId = java.util.UUID.randomUUID().toString();
+                    addressDAO.insert(memberId, addressId, address);
+                }
+            } catch (java.sql.SQLException | javax.naming.NamingException e) {
+                request.getServletContext().log("배송지 저장 실패", e);
+                return "배송지를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+            }
+
             java.util.Map<String, java.util.Map<String, String>> addresses =
                     DeliveryAddressBook.entries(session);
 
@@ -126,20 +219,11 @@ public class OrderController {
                     ? ((java.util.Map<?, ?>) current).get("id")
                     : null;
 
-            if ("edit".equals(addressAction)) {
-                if (!addresses.containsKey(addressId)) {
-                    return "수정할 배송지를 찾을 수 없습니다.";
-                }
-            } else if (addressAction == null && currentId instanceof String) {
-                addressId = (String) currentId;
-            } else {
-                addressId = java.util.UUID.randomUUID().toString();
-            }
-
             address.put("id", addressId);
             addresses.put(addressId, address);
 
-            if (currentId == null || addressId.equals(currentId)) {
+            // 주문서·장바구니에서 등록한 주소는 이번 주문에 바로 적용한다.
+            if (addressAction == null || currentId == null || addressId.equals(currentId)) {
                 session.setAttribute("orderDeliveryAddress", address);
             }
         }
@@ -169,21 +253,19 @@ public class OrderController {
         }
 
         String storeId = request.getParameter("storeId");
-        if (!"sindaebang".equals(storeId)) {
-            return "픽업매장을 선택해 주세요.";
+
+        try {
+            for (Location store : PickupStores.findAll()) {
+                if (store.id.equals(storeId)) {
+                    session.setAttribute("orderPickupStoreId", store.id);
+                    return "OK";
+                }
+            }
+            return "목록에 있는 픽업매장을 선택해 주세요.";
+        } catch (java.sql.SQLException | javax.naming.NamingException e) {
+            request.getServletContext().log("픽업매장 선택 처리 실패", e);
+            return "픽업매장 목록을 불러오지 못했습니다.";
         }
-
-        java.util.Map<String, String> pickupStore =
-                new java.util.LinkedHashMap<>();
-        pickupStore.put("storeId", "sindaebang");
-        pickupStore.put("storeName", "신대방점");
-        pickupStore.put(
-                "address",
-                "서울특별시 동작구 여의대방로 122 (신대방동)"
-        );
-
-        session.setAttribute("orderPickupStore", pickupStore);
-        return "OK";
     }
 
     @daiso.common.annotation.DaisoPostMapping("/order/delivery-message")
