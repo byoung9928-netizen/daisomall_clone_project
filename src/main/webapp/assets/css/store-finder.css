@@ -45,6 +45,7 @@
 }
 .store-location-card { overflow: hidden; }
 .store-location-card iframe { width: 100%; display: block; height: 15rem; border: 0; background: var(--finder-gray); }
+.store-location-card iframe[hidden] { display: none; }
 .store-location-info, .store-finder-steps section { padding: clamp(1rem, 3vw, 1.4rem); }
 .store-location-info h2, .store-finder-steps h2, .store-stock-result h3 { margin: 0 0 .55rem; }
 .store-location-info p, .store-finder-selection p { margin: .35rem 0; }

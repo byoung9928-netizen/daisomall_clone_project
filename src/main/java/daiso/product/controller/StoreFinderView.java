@@ -65,6 +65,7 @@ public final class StoreFinderView {
         public final String name;
         public final String city;
         public final String mapUrl;
+        public final String mapBounds;
         public final String stockUrl;
         public final String locationUrl;
 
@@ -73,6 +74,7 @@ public final class StoreFinderView {
             name = location.name;
             city = location.city;
             String bounds = AREA_BOUNDS.get(location.id);
+            mapBounds = bounds == null ? "" : bounds;
             mapUrl = bounds == null ? "" : ProductView.url("", "https://www.openstreetmap.org/export/embed.html",
                     Map.of("bbox", bounds, "layer", "mapnik"));
             stockUrl = ProductView.url(context, StoreFinderController.PRODUCTS, Map.of("store", id));

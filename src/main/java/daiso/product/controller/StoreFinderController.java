@@ -29,6 +29,13 @@ public final class StoreFinderController {
     @DaisoGetMapping("/stores/locations")
     public String locations(HttpServletRequest request, HttpServletResponse response) {
         request.setAttribute("locationFinder", true);
+        try {
+            String mapsClientId = javax.naming.InitialContext.doLookup(
+                    "java:comp/env/naverMapsClientId");
+            request.setAttribute("naverMapsClientId", mapsClientId);
+        } catch (NamingException e) {
+            request.setAttribute("naverMapsClientId", "");
+        }
         try (Connection connection = ProductQueries.connect()) {
             String keyword = ProductQueries.text(request, "q", 100);
             List<Location> matches = matches(stores.locations(connection), keyword);
@@ -84,7 +91,122 @@ public final class StoreFinderController {
         }
         return VIEW;
     }
+    @daiso.common.annotation.DaisoPostMapping("/stores/chat")
+    @daiso.common.annotation.DaisoResponseBody
+    public String chat(HttpServletRequest request, HttpServletResponse response)
+            throws java.io.UnsupportedEncodingException {
 
+        request.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-store");
+
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("member_id") == null) {
+            response.setStatus(401);
+            return "로그인한 뒤 이용해 주세요.";
+        }
+
+        if (!"stock-chat".equals(request.getHeader("X-Daiso-Request"))) {
+            response.setStatus(403);
+            return "홈 화면에서 다시 요청해 주세요.";
+        }
+
+        String question;
+        try {
+            question = ProductQueries.text(request, "question", 200);
+        } catch (IllegalArgumentException e) {
+            return "질문은 200자 이내로 입력해 주세요.";
+        }
+        if (question.isEmpty()) {
+            return "매장 이름과 상품 이름을 입력해 주세요.";
+        }
+
+        synchronized (session) {
+            long now = System.currentTimeMillis();
+            Long last = (Long) session.getAttribute("stockChatLastRequest");
+            Integer count = (Integer) session.getAttribute("stockChatRequestCount");
+
+            if (last != null && now - last < 5_000L) {
+                return "5초 뒤에 다시 질문해 주세요.";
+            }
+            if (count != null && count >= 15) {
+                return "이번 로그인에서 사용할 수 있는 질문 횟수를 모두 사용했어요.";
+            }
+
+            session.setAttribute("stockChatLastRequest", now);
+            session.setAttribute("stockChatRequestCount", count == null ? 1 : count + 1);
+        }
+
+        try {
+        	String history = request.getParameter("history");
+        	if (history != null && history.length() > 1600) {
+        	    return "대화가 너무 길어요. 페이지를 새로 열고 다시 질문해 주세요.";
+        	}
+
+        	com.google.gson.JsonObject terms =
+        			new GeminiStockQuestionClient().parseQuestion(question, history);
+
+        	if ("general".equals(terms.get("kind").getAsString())) {
+        	    String answer = terms.get("answer").getAsString().strip();
+        	    return answer.isEmpty() ? "답변을 만들지 못했어요. 다르게 질문해 주세요." : answer;
+        	}
+            String storeQuery = terms.get("store").getAsString().strip();
+            String productQuery = terms.get("product").getAsString().strip();
+
+            if (storeQuery.isEmpty() || productQuery.isEmpty()
+                    || storeQuery.length() > 100 || productQuery.length() > 100) {
+                return "매장명과 상품명을 함께 알려주세요. 예: 홍대점에 네임펜 재고 있어?";
+            }
+
+            try (Connection connection = ProductQueries.connect()) {
+                List<Location> storesFound = matches(stores.locations(connection), storeQuery);
+                if (storesFound.isEmpty()) {
+                    return "일치하는 매장을 찾지 못했어요. 예: 홍대점, 강남점, 서면점, 해운대점";
+                }
+                if (storesFound.size() > 1) {
+                    return "어느 매장인가요? "
+                            + storesFound.stream().limit(5).map(store -> store.name)
+                                    .collect(Collectors.joining(", "))
+                            + " 중 매장명과 상품명을 함께 적어 주세요.";
+                }
+
+                Location store = storesFound.get(0);
+                CatalogFilter filter = new CatalogFilter();
+                filter.keyword = productQuery;
+                filter.limit = 5;
+                CatalogPage found = products.findCatalog(connection, filter);
+
+                if (found.products.isEmpty()) {
+                    return "일치하는 상품을 찾지 못했어요. 짧은 상품명이나 품번으로 다시 질문해 주세요.";
+                }
+                if (found.total > 1) {
+                    return "어느 상품인가요? 아래 후보 중 상품명이나 품번을 매장명과 함께 적어 주세요.\n"
+                            + found.products.stream()
+                                    .map(product -> "• " + product.getName()
+                                            + " (품번 " + product.getProductCode() + ")")
+                                    .collect(Collectors.joining("\n"));
+                }
+
+                ProductDTO product = found.products.get(0);
+                Integer quantity = stores.quantity(connection, store.id, product.getProductId());
+                connection.commit();
+
+                String stock = quantity == null ? "이 매장에서 취급하지 않아요."
+                        : quantity == 0 ? "현재 품절이에요." : "재고가 " + quantity + "개 있어요.";
+
+                return store.name + " · " + product.getName() + "\n" + stock
+                        + "\n학습용 가상 매장 재고입니다.";
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            response.setStatus(503);
+            return "조회가 중단됐어요. 잠시 후 다시 시도해 주세요.";
+        } catch (Exception e) {
+            request.getServletContext().log("매장 재고 챗봇 조회 실패", e);
+            response.setStatus(502);
+            return "지금은 재고를 조회할 수 없어요. 잠시 후 다시 시도해 주세요.";
+        }
+    }
+    
     private static List<Location> matches(List<Location> locations, String keyword) {
         String[] terms = keyword.toLowerCase(Locale.ROOT).split("\\s+");
         return locations.stream().filter(store -> {

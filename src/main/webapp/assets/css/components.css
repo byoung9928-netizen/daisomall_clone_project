@@ -345,3 +345,85 @@
     font-size: 18px;
     text-align: center;
 }
+.header-service-tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.header-service-tools .delivery-button { margin-left: 0; }
+
+.ai-chat-trigger {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #edccd2;
+    border-radius: 999px;
+    background: #fff4f6;
+    color: #a40023;
+    font: inherit;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ai-chat-dialog {
+    position: fixed;
+    inset: auto 24px 24px auto;
+    margin: 0;
+    padding: 0;
+    width: min(400px, calc(100vw - 48px));
+    max-height: calc(100dvh - 48px);
+    border: 1px solid #edccd2;
+    border-radius: 20px;
+    background: #fff;
+    color: #172029;
+    box-shadow: 0 16px 48px #19202c30;
+}
+
+.ai-chat-dialog::backdrop { background: #19202c26; }
+.ai-chat-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0e2e5;
+}
+.ai-chat-heading h2 { margin: 0; font-size: 17px; }
+.ai-chat-close { min-width: 36px; min-height: 36px; font-size: 22px; cursor: pointer; }
+.ai-chat-login { display: block; padding: 16px; }
+
+.ai-chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: min(330px, 45dvh);
+    padding: 16px;
+    overflow: auto;
+}
+
+.ai-chat-bubble {
+    align-self: flex-start;
+    max-width: 90%;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f3f4f6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ai-chat-user { align-self: flex-end; background: #fff0f3; }
+.ai-chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #f0e2e5; }
+.ai-chat-form input {
+    min-width: 0;
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #d9dce1;
+    border-radius: 8px;
+    font: inherit;
+}
+.ai-chat-form button {
+    padding: 0 12px;
+    border: 0;
+    border-radius: 8px;
+    background: #a40023;
+    color: #fff;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.ai-chat-form button:disabled { opacity: 0.55; cursor: wait; }

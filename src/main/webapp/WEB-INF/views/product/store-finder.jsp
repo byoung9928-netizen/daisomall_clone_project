@@ -42,7 +42,12 @@
                 <% for (Store store : finder.stores) { %>
                     <article class="store-location-card">
                         <% if (!store.mapUrl.isEmpty()) { %>
-                            <iframe src="<%= store.mapUrl %>" title="<%= ProductView.escape(store.name) %> 주변 지역 지도"
+				<div data-naver-store-map data-client-id="${naverMapsClientId}"
+					data-bounds="<%= ProductView.escape(store.mapBounds) %>"
+					role="region"
+					aria-label="<%= ProductView.escape(store.name) %> 주변 지역 지도"
+					style="height: 15rem;" hidden></div>
+				<iframe src="<%=store.mapUrl%>" title="<%= ProductView.escape(store.name) %> 주변 지역 지도"
                                     loading="lazy" referrerpolicy="no-referrer"></iframe>
                         <% } %>
                         <div class="store-location-info">
