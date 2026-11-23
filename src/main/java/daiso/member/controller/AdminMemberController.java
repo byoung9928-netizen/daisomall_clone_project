@@ -20,6 +20,7 @@ import daiso.common.annotation.DaisoPostMapping;
 @DaisoController
 public final class AdminMemberController {
     private static final String PATH = "/admin/users";
+    private static final int MEMBERS_PER_PAGE = 30;
     private static final String VIEW = "admin/users";
     private static final String DETAIL_VIEW = "admin/member-detail";
     private static final String CSRF_KEY = "adminMemberCsrf";
@@ -58,9 +59,27 @@ public final class AdminMemberController {
         );
 
         try {
-            List<AdminMemberInfo> members =
-                    memberService.findAdminMembers(query, status);
-            request.setAttribute("adminMembers", members);
+        	long requestedPage;
+        	try {
+        	    requestedPage = Long.parseLong(request.getParameter("page"));
+        	} catch (NumberFormatException e) {
+        	    requestedPage = 1;
+        	}
+
+        	long totalMembers = memberService.countAdminMembers(query, status);
+        	long totalPages = totalMembers == 0
+        	        ? 1
+        	        : (totalMembers - 1) / MEMBERS_PER_PAGE + 1;
+        	long currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+        	long offset = (currentPage - 1) * MEMBERS_PER_PAGE;
+
+        	List<AdminMemberInfo> members =
+        	        memberService.findAdminMembers(query, status, MEMBERS_PER_PAGE, offset);
+
+        	request.setAttribute("adminMembers", members);
+        	request.setAttribute("adminMemberTotal", totalMembers);
+        	request.setAttribute("adminMemberPage", currentPage);
+        	request.setAttribute("adminMemberTotalPages", totalPages);
             return VIEW;
         } catch (IllegalArgumentException error) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
