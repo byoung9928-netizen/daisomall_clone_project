@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.ArrayList;
 import daiso.cart.db.CartBean;
 import daiso.cart.db.CartDAO;
+import java.util.Map;
+import daiso.order.db.DeliveryAddressDAO;
 
 @DaisoController //이 클래스가 Controller임
 public class CartController {
@@ -42,8 +44,22 @@ public class CartController {
 		    }
 		    
 		    request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
-		    request.setAttribute("deliveryAddress", session.getAttribute("orderDeliveryAddress"));
-		    request.setAttribute("pageName", "cart");
+		    Object deliveryAddress = session.getAttribute("orderDeliveryAddress");
+
+		    if (!(deliveryAddress instanceof Map)) {
+		        try {
+		            List<Map<String, String>> savedAddresses =
+		                    new DeliveryAddressDAO().findByMemberId(memberId);
+
+		            if (!savedAddresses.isEmpty()) {
+		                deliveryAddress = savedAddresses.get(0);
+		            }
+		        } catch (SQLException | javax.naming.NamingException e) {
+		            request.getServletContext().log("장바구니 배송지 조회 실패", e);
+		        }
+		    }
+
+		    request.setAttribute("deliveryAddress", deliveryAddress);		    request.setAttribute("pageName", "cart");
 		    request.setAttribute("activeNavigation", "");
 
 		

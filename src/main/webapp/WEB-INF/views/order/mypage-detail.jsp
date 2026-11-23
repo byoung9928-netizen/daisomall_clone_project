@@ -2051,7 +2051,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 									<%
 									if (!profilePickupStore.isEmpty()) {
 									%> <strong> <%=ProductView.escape(profilePickupStore.get("storeName"))%>
-								</strong><br> <%=ProductView.escape(profilePickupStore.get("address"))%>
+								</strong><br> <%=ProductView.escape(profilePickupStore.get("city"))%>
 									<%
 									} else {
 									%> 선택된 픽업매장이 없습니다. <%
@@ -2131,7 +2131,11 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 						<%} 
 						} else {
 						%>
-						<p class="delivery-empty-message">등록된 배송지가 없습니다.</p>
+						<p class="delivery-empty-message">
+							<%=Boolean.TRUE.equals(request.getAttribute("profileDeliveryAddressLoadFailed"))
+		? "배송지 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+		: "등록된 배송지가 없습니다."%>
+						</p>
 						<%
 						}
 						%>
@@ -2173,19 +2177,38 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					</section>
 
 					<section id="pickupManagementPanel" hidden>
-						<p>픽업매장을 선택해 주세요.</p>
-						<form id="pickupStoreForm">
-							<input type="hidden" name="csrfToken"
-								value="<%=ProductView.escape(orderCsrfToken)%>"> <label>
-								<input type="radio" name="storeId" value="sindaebang"
-								<%="sindaebang".equals(profilePickupStore.get("storeId")) ? "checked" : ""%>>
-								신대방점 <small>서울특별시 동작구 여의대방로 122 (신대방동)</small>
-							</label>
+    <%
+    List<daiso.product.dao.StoreInventoryDAO.Location> pickupStores =
+            (List<daiso.product.dao.StoreInventoryDAO.Location>)
+                    request.getAttribute("profilePickupStores");
+    %>
 
-							<p id="pickupStoreMessage" role="alert"></p>
-							<button type="submit">픽업매장 선택</button>
-						</form>
-					</section>
+    <% if (Boolean.TRUE.equals(request.getAttribute("profilePickupLoadFailed"))) { %>
+        <p role="alert">픽업매장 목록을 불러오지 못했습니다.</p>
+    <% } else if (pickupStores == null || pickupStores.isEmpty()) { %>
+        <p>등록된 픽업매장이 없습니다.</p>
+    <% } else { %>
+        <p>픽업매장을 선택해 주세요.</p>
+        <form id="pickupStoreForm">
+            <input type="hidden" name="csrfToken"
+                   value="<%=ProductView.escape(orderCsrfToken)%>">
+
+            <% for (daiso.product.dao.StoreInventoryDAO.Location store : pickupStores) { %>
+                <label>
+                    <input type="radio" name="storeId"
+                           value="<%=ProductView.escape(store.id)%>"
+                           <%=store.id.equals(profilePickupStore.get("storeId"))
+                                   ? "checked" : ""%> required>
+                    <%=ProductView.escape(store.name)%>
+                    <small><%=ProductView.escape(store.city)%></small>
+                </label>
+            <% } %>
+
+            <p id="pickupStoreMessage" role="alert"></p>
+            <button type="submit">픽업매장 선택</button>
+        </form>
+    <% } %>
+</section>
 					</dialog>
 					<%
 					String profileLoginId = profile.getLoginId() == null ? "" : profile.getLoginId();
@@ -3359,6 +3382,13 @@ document.querySelectorAll('[data-delivery-tab]').forEach(function (tab) {
 	    });
 	  });
 	});
+	
+const manageMode = new URLSearchParams(window.location.search).get('manage');
+
+if (manager && (manageMode === 'delivery' || manageMode === 'pickup')) {
+    manager.querySelector('[data-delivery-tab="' + manageMode + '"]').click();
+    manager.showModal();
+}
 
 	if (deliveryForm) {
 		  const fields = ['addressName', 'recipient', 'phone',
