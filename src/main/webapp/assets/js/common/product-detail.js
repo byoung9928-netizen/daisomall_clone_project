@@ -79,14 +79,15 @@
     if (pickup) {
         const dialog = detail.querySelector("[data-pickup-dialog]");
         const search = dialog.querySelector("[data-store-search]");
-        const stores = Array.from(dialog.querySelectorAll("[name=pickupStore]"));
-        const confirm = dialog.querySelector("[data-confirm-store]");
+        const stores = Array.from(dialog.querySelectorAll("[data-store-option]"));
         const empty = dialog.querySelector("[data-no-stores]");
         const pickupInfo = detail.querySelector("[data-pickup-info]");
         const deliveryInfo = detail.querySelector("[data-delivery-info]");
         const pickupNote = detail.querySelector("[data-pickup-note]");
         const summary = detail.querySelector("[data-store-summary]");
+        const summaryDetail = detail.querySelector("[data-store-summary-detail]");
         const changeStore = detail.querySelector("[data-open-stores]");
+        const list = dialog.querySelector(".pd-store-list");
         let opener = null;
 
         const setMode = (nextPickupMode) => {
@@ -101,20 +102,18 @@
 
         const searchStores = () => {
             const keyword = search.value.trim().toLocaleLowerCase("ko");
-            let matches = 0;
-            stores.forEach((radio) => {
-                const searchable = (radio.dataset.name + " " + radio.dataset.city).toLocaleLowerCase("ko");
-                radio.closest("label").hidden = !searchable.includes(keyword);
-                radio.disabled = radio.closest("label").hidden;
-                if (!radio.disabled) matches++;
+            stores.forEach((row) => {
+                const searchable = (row.dataset.name + " " + row.dataset.city).toLocaleLowerCase("ko");
+                row.hidden = !searchable.includes(keyword);
             });
-            empty.hidden = matches > 0;
-            confirm.disabled = !stores.some((radio) => radio.checked && !radio.disabled);
+            const hasMatches = stores.some((row) => !row.hidden);
+            list.hidden = !hasMatches;
+            empty.hidden = hasMatches;
+            list.scrollTop = 0;
         };
         const openStores = (button) => {
             opener = button;
             search.value = "";
-            stores.forEach((radio) => { radio.checked = radio === selectedStore; });
             searchStores();
             dialog.showModal();
         };
@@ -126,15 +125,20 @@
         });
         changeStore.addEventListener("click", () => openStores(changeStore));
         search.addEventListener("input", searchStores);
-        dialog.addEventListener("change", searchStores);
         dialog.querySelector("[data-close-stores]").addEventListener("click", () => dialog.close());
         dialog.addEventListener("close", () => opener?.focus());
-        confirm.addEventListener("click", () => {
-            const store = stores.find((radio) => radio.checked && !radio.disabled);
-            if (!store) return;
+        list.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-select-store]");
+            if (!button) return;
+
+            selectedStore?.querySelector("[data-select-store]").removeAttribute("aria-current");
+            const store = button.closest("[data-store-option]");
             selectedStore = store;
-            summary.textContent = store.dataset.name + " · " + store.dataset.city + " · 재고 " + store.dataset.quantity + "개";
-            changeStore.textContent = "매장 변경";
+            button.setAttribute("aria-current", "true");
+            summary.textContent = store.dataset.name;
+            summaryDetail.textContent = store.dataset.city + " · 재고 " + store.dataset.quantity + "개";
+            summaryDetail.hidden = false;
+            changeStore.textContent = "변경";
             restoreQuantity();
             dialog.close();
         });
