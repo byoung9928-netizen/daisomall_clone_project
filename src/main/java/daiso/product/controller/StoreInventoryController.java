@@ -1,6 +1,7 @@
 package daiso.product.controller;
 
 import java.io.UnsupportedEncodingException;
+import daiso.admin.report.AdminReport;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -344,6 +345,57 @@ public final class StoreInventoryController {
         }
         request.getServletContext().log("매장 재고 처리 실패", error);
         return blocked(request, response, 500, "매장 재고를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+ // ===== 매장별 재고 엑셀: 선택한 매장의 전체 검색 결과 =====
+    public static AdminReport exportInventory(HttpServletRequest request)
+            throws SQLException, NamingException {
+        Filters filters = new Filters(request);
+        StoreInventoryDAO inventoryDao = new StoreInventoryDAO();
+
+        AdminReport report = new AdminReport(
+                "매장별 재고",
+                List.of("매장명", "상품 ID", "품번", "상품명", "재고 수량", "재고 상태"),
+                "재고 상태별 상품 수",
+                "재고 상태",
+                "상품 수",
+                new LinkedHashMap<>()
+        );
+
+        try (Connection connection = ProductQueries.connect()) {
+            Location selected = inventoryDao.locations(connection).stream()
+                    .filter(location -> filters.city.isEmpty()
+                            || filters.city.equals(location.city))
+                    .filter(location -> filters.store.isEmpty()
+                            || filters.store.equals(location.id))
+                    .findFirst()
+                    .orElse(null);
+
+            if (selected == null) {
+                if (!filters.store.isEmpty()) {
+                    throw new IllegalArgumentException("선택한 지역의 매장을 다시 골라 주세요.");
+                }
+                return report;
+            }
+
+            // 화면과 같은 재고 조회를 사용하고 첫 행부터 전체 결과를 가져온다.
+            List<Stock> rows = inventoryDao.inventory(
+                    connection, selected.id, filters.keyword, filters.state,
+                    Integer.MAX_VALUE, 0
+            );
+
+            for (Stock stock : rows) {
+                String state = stock.stateLabel();
+                report.rows.add(new Object[] {
+                        selected.name, stock.id, stock.code,
+                        stock.name, stock.quantity, state
+                });
+                report.chart.merge(state, 1L, Long::sum);
+            }
+
+            connection.commit();
+        }
+
+        return report;
     }
 
     private static final class Filters {
