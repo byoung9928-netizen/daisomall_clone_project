@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +19,7 @@ import daiso.product.controller.ProductDAO.CatalogFilter;
 import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.controller.ProductDAO.Category;
 import daiso.product.dao.ProductReviewDAO.Sort;
+import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.service.ProductReviewService;
 
 @DaisoController
@@ -33,6 +35,7 @@ public class ProductController {
     private final ProductCatalogFacets catalogFacets = new ProductCatalogFacets();
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
     private final ProductDetailImages detailImages = new ProductDetailImages();
+    private final StoreInventoryDAO storeInventory = new StoreInventoryDAO();
     private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/products/home")
@@ -93,7 +96,12 @@ public class ProductController {
                 List<Category> categories = dao.findVisibleCategories(conn);
                 List<Category> path = categoryPath(categories, product.getCategoryId());
                 request.setAttribute("product", product);
-                request.setAttribute("productDetailImages", List.copyOf(detailImages.list(conn, product.getProductId()).values()));
+                List<String> uploadedImages = List.copyOf(detailImages.list(conn, product.getProductId()).values());
+                OfficialProductDetails.Entry officialDetail = officialDetails.find(request.getServletContext(), product);
+                request.setAttribute("productDetailImages", uploadedImages);
+                request.setAttribute("officialProductDetails", officialDetail);
+                request.setAttribute("productGalleryImages", galleryImages(product, uploadedImages, officialDetail));
+                preparePickupStores(request, conn, product);
                 request.setAttribute("productCategories", categories);
                 request.setAttribute("categoryPath", path);
                 Category group = path.get(Math.max(0, path.size() - 2));
@@ -116,10 +124,30 @@ public class ProductController {
         ProductDTO product = (ProductDTO) request.getAttribute("product");
         if (product != null) {
             ProductActivityController.remember(request, product.getProductId());
-            request.setAttribute("officialProductDetails", officialDetails.find(request.getServletContext(), product));
             prepareDetailReviews(request, product.getProductId());
         }
         return "product/detail";
+    }
+
+    private static List<String> galleryImages(ProductDTO product, List<String> uploadedImages,
+            OfficialProductDetails.Entry officialDetail) {
+        LinkedHashSet<String> images = new LinkedHashSet<>();
+        if (product.getImage() != null && !product.getImage().isBlank()) images.add(product.getImage());
+        images.addAll(uploadedImages);
+        if (officialDetail != null) images.addAll(officialDetail.getRepresentativePhotos());
+        if (images.isEmpty()) images.add("assets/images/mock-product-0.svg");
+        return List.copyOf(images);
+    }
+
+    private void preparePickupStores(HttpServletRequest request, Connection connection, ProductDTO product) {
+        String status = product.getStatus();
+        if (!"AVAILABLE".equals(status) && !"SOLD_OUT".equals(status)) return;
+        try {
+            request.setAttribute("pickupStores", storeInventory.pickupStores(connection, product.getProductId()));
+        } catch (SQLException error) {
+            request.getServletContext().log("상품 상세 픽업 재고 조회 실패", error);
+            request.setAttribute("pickupLookupError", true);
+        }
     }
 
     private void prepareDetailReviews(HttpServletRequest request, String productId) {

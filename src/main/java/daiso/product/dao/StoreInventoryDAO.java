@@ -76,6 +76,24 @@ public final class StoreInventoryDAO {
         return result;
     }
 
+    public List<PickupStore> pickupStores(Connection connection, String productId) throws SQLException {
+        String sql = "SELECT s.store_id, s.store_name, s.city, i.quantity "
+                + "FROM store_inventory i JOIN store_locations s ON s.store_id = i.store_id "
+                + "WHERE i.product_id = ? AND i.is_carried = 1 AND i.quantity > 0 "
+                + "ORDER BY s.city, s.store_name, s.store_id";
+        List<PickupStore> stores = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, productId);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    stores.add(new PickupStore(rows.getString("store_id"), rows.getString("store_name"),
+                            rows.getString("city"), rows.getInt("quantity")));
+                }
+            }
+        }
+        return stores;
+    }
+
     public List<Stock> inventory(Connection connection, String store, String keyword, State state, int limit, int offset)
             throws SQLException {
         String sql = STOCK_FIELDS + "FROM store_inventory i JOIN products p ON p.product_id = i.product_id "
@@ -282,6 +300,16 @@ public final class StoreInventoryDAO {
             this.id = id;
             this.name = name;
             this.city = city;
+        }
+    }
+
+    public static final class PickupStore {
+        public final Location location;
+        public final int quantity;
+
+        private PickupStore(String id, String name, String city, int quantity) {
+            this.location = new Location(id, name, city);
+            this.quantity = quantity;
         }
     }
 
