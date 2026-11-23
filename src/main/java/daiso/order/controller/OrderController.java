@@ -95,6 +95,14 @@ public class OrderController {
         if (!(csrf instanceof String) || !csrf.equals(request.getParameter("csrfToken"))) {
             return "페이지를 새로고침한 뒤 다시 시도해 주세요.";
         }
+        String addressAction = request.getParameter("addressAction");
+        String addressId = request.getParameter("addressId");
+
+        if (addressAction != null
+                && !"add".equals(addressAction)
+                && !"edit".equals(addressAction)) {
+            return "배송지 요청을 확인해 주세요.";
+        }
         java.util.Map<String, String> address = new java.util.LinkedHashMap<>();
         String[] fields = {"addressName", "recipient", "phone", "postcode", "address1", "address2"};
         int[] limits = {50, 100, 30, 5, 255, 255};
@@ -109,7 +117,32 @@ public class OrderController {
         if (!address.get("postcode").matches("[0-9]{5}")) return "우편번호는 5자리 숫자로 입력해 주세요.";
         String phone = address.get("phone").replaceAll("[\\s-]", "");
         if (!phone.matches("01[016789][0-9]{7,8}")) return "휴대폰번호를 확인해 주세요.";
-        session.setAttribute("orderDeliveryAddress", address);
+        synchronized (session) {
+            java.util.Map<String, java.util.Map<String, String>> addresses =
+                    DeliveryAddressBook.entries(session);
+
+            Object current = session.getAttribute("orderDeliveryAddress");
+            Object currentId = current instanceof java.util.Map
+                    ? ((java.util.Map<?, ?>) current).get("id")
+                    : null;
+
+            if ("edit".equals(addressAction)) {
+                if (!addresses.containsKey(addressId)) {
+                    return "수정할 배송지를 찾을 수 없습니다.";
+                }
+            } else if (addressAction == null && currentId instanceof String) {
+                addressId = (String) currentId;
+            } else {
+                addressId = java.util.UUID.randomUUID().toString();
+            }
+
+            address.put("id", addressId);
+            addresses.put(addressId, address);
+
+            if (currentId == null || addressId.equals(currentId)) {
+                session.setAttribute("orderDeliveryAddress", address);
+            }
+        }
         return "OK";
     }
     

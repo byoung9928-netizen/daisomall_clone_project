@@ -182,6 +182,12 @@ public class OrderMyPageController {
 		    }
 
 		    request.setAttribute("profileDeliveryAddress", profileDeliveryAddress);
+		    synchronized (session) {
+		        request.setAttribute(
+		                "profileDeliveryAddresses",
+		                List.copyOf(DeliveryAddressBook.entries(session).values())
+		        );
+		    }
 		    request.setAttribute(
 		            "profilePickupStore",
 		            session.getAttribute("orderPickupStore")
