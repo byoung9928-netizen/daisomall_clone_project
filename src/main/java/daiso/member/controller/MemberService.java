@@ -202,17 +202,30 @@ public class MemberService {
         return member;
     }
     
-    public List<AdminMemberInfo> findAdminMembers(
-            String keyword,
-            String status) throws Exception {
+    public List<AdminMemberInfo> findAdminMembers(String keyword, String status)
+            throws Exception {
+        return findAdminMembers(keyword, status, 0, 0);
+    }
 
+    public List<AdminMemberInfo> findAdminMembers(
+            String keyword, String status, int limit, long offset)
+            throws Exception {
+        return memberDAO.findAdminMembers(
+                validateAdminMemberSearch(keyword), status, limit, offset);
+    }
+
+    public long countAdminMembers(String keyword, String status) throws Exception {
+        return memberDAO.countAdminMembers(validateAdminMemberSearch(keyword), status);
+    }
+
+    private static String validateAdminMemberSearch(String keyword) {
         String search = keyword == null ? "" : keyword.trim();
 
         if (search.length() > 120) {
             throw new IllegalArgumentException("검색어는 120자 이내로 입력해 주세요.");
         }
 
-        return memberDAO.findAdminMembers(search, status);
+        return search;
     }
     
     public AdminMemberDetailInfo findAdminMemberDetail(String memberId)

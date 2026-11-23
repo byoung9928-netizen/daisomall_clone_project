@@ -36,12 +36,60 @@
 				aria-haspopup="dialog" aria-controls="ai-chat-dialog">
 				<span aria-hidden="true">✦</span> AI 챗봇
 			</button>
-			<button class="delivery-button" type="button" data-unavailable>
-				<img class="delivery-icon"
-					src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg"
-					alt="" width="16" height="16"> 배송이나 픽업 어때요? <span
-					aria-hidden="true">⌄</span>
-			</button>
+			<div class="header-delivery-menu" id="header-delivery-menu"
+     data-summary-url="${pageContext.request.contextPath}/app/order/delivery-summary">
+    <button class="delivery-button" type="button" id="header-delivery-toggle"
+            aria-expanded="false" aria-controls="header-delivery-panel">
+        배송이나 픽업 어때요? <span aria-hidden="true">⌄</span>
+    </button>
+
+    <section class="header-delivery-panel" id="header-delivery-panel" hidden>
+        <h2>배송지와 픽업매장</h2>
+
+        <div class="header-delivery-options" aria-label="이용 방식">
+    <button type="button" data-mode="parcel" aria-pressed="true">
+        <img src="${pageContext.request.contextPath}/assets/images/home/service-parcel.svg"
+             width="24" height="24" alt="">
+        <span>택배배송</span>
+    </button>
+    <button type="button" data-mode="pickup" aria-pressed="false">
+        <img src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg"
+             width="24" height="24" alt="">
+        <span>매장픽업</span>
+    </button>
+    <button type="button" data-mode="today" aria-pressed="false">
+        <img src="${pageContext.request.contextPath}/assets/images/home/service-today.svg"
+             width="24" height="24" alt="">
+        <span>오늘배송</span>
+    </button>
+    <button type="button" data-mode="bulk" aria-pressed="false">
+        <img src="${pageContext.request.contextPath}/assets/images/home/service-bulk.svg"
+             width="24" height="24" alt="">
+        <span>대량주문</span>
+    </button>
+</div>
+
+        <p data-delivery-status role="status" hidden></p>
+        <a data-delivery-login hidden
+           href="${pageContext.request.contextPath}/app/member/login">로그인</a>
+
+        <div class="header-delivery-row" data-address-row hidden>
+            <strong>배송지</strong>
+            <p data-address-text></p>
+            <a href="${pageContext.request.contextPath}/app/order/mypage?section=profile&amp;manage=delivery">
+                배송지 변경
+            </a>
+        </div>
+
+        <div class="header-delivery-row" data-pickup-row hidden>
+            <strong>픽업매장</strong>
+            <p data-pickup-text></p>
+            <a href="${pageContext.request.contextPath}/app/order/mypage?section=profile&amp;manage=pickup">
+                픽업매장 변경
+            </a>
+        </div>
+    </section>
+</div>
 		</div>
 		<div class="account-tools" aria-label="회원 메뉴">
 			<%
@@ -108,4 +156,5 @@
     <% } %>
 </dialog>
 <script src="${pageContext.request.contextPath}/assets/js/common/ai-chat.js" defer></script>
+<script src="${pageContext.request.contextPath}/assets/js/common/header-delivery.js" defer></script>
 <p id="common-feature-status" class="feature-status" role="status" aria-live="polite"></p>
