@@ -1,6 +1,6 @@
 # 시연용 구매·리뷰 데이터 실행 절차
 
-생성기는 Java 11과 프로젝트의 MySQL Connector/J를 사용한다. 원본 `daisomall`에서는 미리보기만 실행한다. 실제 쓰기와 정리는 루프백의 별도 `daisomall_demo`에 한하며 명시적 승인 인수가 필요하다. 순수 시연 데이터는 기존 매출 집계와 분리된 DB에 둔다.
+생성기는 Java 11과 프로젝트의 MySQL Connector/J를 사용한다. 별도 `daisomall_demo`와 지정한 루프백 학습용 DB에서 시연 데이터를 적용할 수 있다. 명시적 승인 인수가 필요하다. 학습용 DB에 적용한 데이터의 주문과 TID에는 시연용 식별자가 유지되며, 쇼핑몰 랭킹에는 반영된다. 매출 집계가 필요한 환경에서는 가상 기록을 실거래와 구분하는 집계 조건을 사용한다.
 
 ## 적용 전 체크리스트
 
@@ -40,6 +40,20 @@ java -Dfile.encoding=UTF-8 --class-path $lib tools/DemoRankingSeed.java apply 15
 - 숨김 1개와 소프트 삭제 1개를 포함한다. 전체 15,000개를 적용하면 시연용 공개 리뷰는 14,998개다. 숨김 행의 변경 주체는 테스트용 시스템 식별자로 기록한다. 계정·상품별 리뷰와 주문 연결은 생성 전후에 검증한다.
 - 2단계는 1단계 100명이 존재해야 시작한다. 동일 카탈로그에서는 상품 선택, 별점, 시간대 배분을 고정된 규칙으로 재현한다. 첫 적용의 DB 시각을 첫 회원의 가입일에서 복원하므로 재실행이나 확장 시 기존 기록을 덮어쓰지 않는다. 최근 24시간·7일 구간은 DB 현재 시각으로 움직인다. 첫 적용 직후가 랭킹 비교에 적합하다. 시연을 갱신하려면 원래 DB와 구분된 환경에서 정리 후 두 단계로 다시 적용한다.
 - 오류가 발생하면 일괄 롤백한다. 생성기가 기존 시연 행의 수량·소유 관계 이상을 발견하면 추가 생성을 멈춘다. 기존 앱과 동시에 해당 시연 데이터를 수정하지 않은 상태에서 실행한다.
+
+## 학습용 본서버 적용
+
+본서버 스키마의 실제 이름을 승인 인수와 같게 지정한다. 대상이 로컬 학습용 DB인지 확인하고 백업한 뒤, 시연 식별자를 외부 카카오페이 요청 전에 차단하는 최신 주문·결제 코드를 해당 앱에 먼저 배포한다. 일반 주문이 있는 DB에서는 시연 접두어와 충돌하는 행을 검사하고, 정상 행은 보존한다. 시연 DB가 같은 카탈로그를 사용하더라도 본서버 상품 ID를 읽어 대상에서 구매를 생성한다. 카카오페이 API는 생성기에서 호출하지 않는다.
+
+```powershell
+$learning = 'jdbc:mysql://127.0.0.1:3306/daisomall'
+$learningUser = 'YOUR_LOCAL_LEARNING_DB_USER'
+java -Dfile.encoding=UTF-8 --class-path $lib tools/DemoRankingSeed.java preview 1500 $learning $learningUser
+java -Dfile.encoding=UTF-8 --class-path $lib tools/DemoRankingSeed.java apply 100 $learning $learningUser --approve-learning-write=daisomall
+java -Dfile.encoding=UTF-8 --class-path $lib tools/DemoRankingSeed.java apply 1500 $learning $learningUser --approve-learning-write=daisomall
+```
+
+본서버에서 `cleanup`을 실행할 수 없다. 되돌리기 전에 적용 직후 추가된 학습 기록과 백업을 비교한다. 본서버의 기존 작업까지 영향을 줄 수 있으므로 백업 전체 덮어쓰기는 별도 승인과 작업 중지가 필요하다.
 
 ## DB와 화면 비교
 

@@ -16,19 +16,22 @@ public final class DemoRankingSeed {
         if (args.length < 4 || args.length > 5 || !Set.of("preview", "apply", "cleanup").contains(args[0])
                 || !Set.of("100", "1500").contains(args[1])) {
             throw new IllegalArgumentException(
-                    "Usage: DemoRankingSeed.java preview|apply|cleanup 100|1500 jdbc-url db-user [--approve-isolated-write]");
+                    "Usage: DemoRankingSeed.java preview|apply|cleanup 100|1500 jdbc-url db-user [--approve-isolated-write|--approve-learning-write=<schema>]");
         }
         String action = args[0];
         int members = Integer.parseInt(args[1]);
         if (action.equals("cleanup") && members != 1500) throw new IllegalArgumentException("Use cleanup 1500.");
         String url = args[2];
-        if (!url.matches("jdbc:mysql://127\\.0\\.0\\.1:[0-9]{1,5}/(?:daisomall|daisomall_demo)")) {
+        if (!url.matches("jdbc:mysql://127\\.0\\.0\\.1:[0-9]{1,5}/[A-Za-z0-9_]{1,64}")) {
             throw new IllegalArgumentException("Use a loopback MySQL URL with an explicit port and supported database.");
         }
         boolean preview = action.equals("preview");
-        if (!preview && (!url.endsWith("/" + DEMO_SCHEMA) || args.length != 5
-                || !"--approve-isolated-write".equals(args[4]))) {
-            throw new IllegalArgumentException("Writes require the isolated daisomall_demo schema and explicit approval.");
+        String schema = url.substring(url.lastIndexOf('/') + 1);
+        boolean isolated = args.length == 5 && DEMO_SCHEMA.equals(schema) && "--approve-isolated-write".equals(args[4]);
+        boolean learningWrite = args.length == 5 && action.equals("apply")
+                && !DEMO_SCHEMA.equals(schema) && ("--approve-learning-write=" + schema).equals(args[4]);
+        if (!preview && !isolated && !learningWrite) {
+            throw new IllegalArgumentException("Writes require explicit approval for the exact learning schema; cleanup is isolated-only.");
         }
         Properties credentials = new Properties();
         credentials.setProperty("user", args[3]);
@@ -38,7 +41,7 @@ public final class DemoRankingSeed {
             conn.setReadOnly(preview);
             conn.setAutoCommit(false);
             try {
-                if (!preview) requireIsolation(conn);
+                if (!preview) requireWritableTarget(conn, schema, isolated);
                 if (action.equals("cleanup")) cleanup(conn);
                 else {
                     LocalDateTime anchor = anchor(conn);
@@ -50,7 +53,7 @@ public final class DemoRankingSeed {
                 if (preview) conn.rollback();
                 else {
                     conn.commit();
-                    System.out.println("Committed on isolated daisomall_demo.");
+                    System.out.println("Committed on " + schema + ".");
                 }
             } catch (Exception failure) {
                 conn.rollback();
@@ -69,9 +72,9 @@ public final class DemoRankingSeed {
         return input;
     }
 
-    private static void requireIsolation(Connection conn) throws SQLException {
-        if (count(conn, "SELECT DATABASE() = 'daisomall_demo' AND @@foreign_key_checks = 1 "
-                + "AND GET_LOCK('daisomall_demo:demo-ranking-v1',10) = 1") != 1) {
+    private static void requireWritableTarget(Connection conn, String schema, boolean isolated) throws SQLException {
+        if (count(conn, "SELECT DATABASE() = ? AND @@foreign_key_checks = 1 "
+                + "AND GET_LOCK(CONCAT('demo-rank-v1:',LEFT(SHA2(DATABASE(),256),40)),10) = 1", schema) != 1) {
             throw new SQLException("Unexpected schema, foreign keys disabled, or another fixture run is active.");
         }
         String tables = "('members','orders','order_items','payment_attempts','product_reviews',"
@@ -82,12 +85,23 @@ public final class DemoRankingSeed {
                 + "AND EVENT_OBJECT_TABLE IN " + tables) != 0) {
             throw new SQLException("Expected eight InnoDB tables without triggers.");
         }
-        if (count(conn, "SELECT COUNT(*) FROM members WHERE role <> 'ADMIN' AND NOT (" + OWN_MEMBER + ")") != 0
+        if (count(conn, "SELECT COUNT(*) FROM members WHERE (member_id REGEXP '^DEMO_RANK_V1_' "
+                + "OR login_id REGEXP '^demorank[0-9]{4}$' OR email REGEXP '^demorank[0-9]{4}@example[.]invalid$') "
+                + "AND NOT (" + OWN_MEMBER + ")") != 0
+                || count(conn, "SELECT COUNT(*) FROM orders o JOIN members m USING(member_id) "
+                        + "WHERE (o.order_no REGEXP '^DEMO_RANK_V1_' OR o.checkout_token REGEXP '^DEMO-CHECKOUT-') "
+                        + "AND NOT (" + OWN_ORDER + ")") != 0
+                || count(conn, "SELECT COUNT(*) FROM payment_attempts pa JOIN orders o USING(order_id) "
+                        + "JOIN members m USING(member_id) WHERE pa.tid REGEXP '^DEMO-TID-' "
+                        + "AND (NOT (" + OWN_ORDER + ") OR pa.tid <> CONCAT('DEMO-TID-',o.order_no))") != 0) {
+            throw new SQLException("Existing rows collide with the fixture identifier namespace. Inspect before applying.");
+        }
+        if (isolated && (count(conn, "SELECT COUNT(*) FROM members WHERE role <> 'ADMIN' AND NOT (" + OWN_MEMBER + ")") != 0
                 || count(conn, "SELECT COUNT(*) FROM orders o JOIN members m USING(member_id) WHERE NOT (" + OWN_ORDER + ")") != 0
                 || count(conn, "SELECT COUNT(*) FROM payment_attempts pa JOIN orders o USING(order_id) "
                         + "WHERE pa.tid IS NULL OR pa.tid <> CONCAT('DEMO-TID-',o.order_no)") != 0
                 || count(conn, "SELECT COUNT(*) FROM product_reviews rv JOIN members m USING(member_id) "
-                        + "WHERE NOT (" + OWN_MEMBER + ")") != 0) {
+                        + "WHERE NOT (" + OWN_MEMBER + ")") != 0)) {
             throw new SQLException("The demo schema contains non-fixture accounts or transactions. Use a fresh catalog-only copy.");
         }
     }
@@ -221,8 +235,43 @@ public final class DemoRankingSeed {
         String product = text.nextBoolean() ? item.product.name : item.product.category;
         String body = "[시연용] " + product + " 제품은 " + openings[text.nextInt(openings.length)] + " "
                 + reasons[text.nextInt(reasons.length)] + " " + impressions[item.rating - 1][text.nextInt(3)];
-        if (text.nextBoolean()) body += closing[text.nextInt(closing.length)];
+        int ending = text.nextInt(4);
+        if (ending == 1) body += closing[text.nextInt(closing.length)];
+        if (ending >= 2) body += " " + categoryNote(item.product.category, text);
         return body;
+    }
+
+    private static String categoryNote(String category, Random text) {
+        List<String> notes;
+        switch (category) {
+            case "주방용품":
+                notes = List.of("부엌에 둘 자리를 먼저 생각했어요.", "평소 식사 준비 순서에 맞춰 골랐어요.", "보관하는 방법도 생각하고 비교했어요.");
+                break;
+            case "문구/팬시":
+                notes = List.of("책상에서 바로 쓸 물건을 찾고 있었어요.", "집과 사무실 중 어디에 둘지 먼저 생각했어요.", "매일 쓰는 문구와 함께 두고 살펴봤어요.");
+                break;
+            case "식품":
+                notes = List.of("간식으로 먹을 생각이라 다른 선택지와 비교했어요.", "한 번에 먹을 양을 생각하면서 골랐어요.", "살 때 제품의 원재료 안내도 살펴봤어요.");
+                break;
+            case "수납/정리":
+                notes = List.of("정리하려는 물건을 먼저 정하고 골랐어요.", "놓을 자리를 정해 두고 비교해 봤어요.", "집에 있는 수납용품과 함께 둘 생각이었어요.");
+                break;
+            case "뷰티/위생":
+                notes = List.of("기존에 쓰던 물건과 같이 쓰는 상황을 생각했어요.", "매일 하던 관리 순서에 맞춰 골랐어요.", "욕실에서 쓸 때와 외출할 때를 나눠 비교했어요.");
+                break;
+            case "청소/욕실":
+                notes = List.of("청소할 곳을 먼저 정하고 골랐어요.", "욕실 공간에 둘 물건이라 보관 위치부터 생각했어요.", "자주 손이 가는 위치에 둘 생각으로 비교했어요.");
+                break;
+            case "공구/디지털":
+                notes = List.of("집에 있는 도구와 같이 쓸 상황을 생각했어요.", "필요한 작업을 정해 놓고 고른 제품이에요.", "사기 전에 제품 안내에서 사용 조건을 먼저 봤어요.");
+                break;
+            case "반려동물":
+                notes = List.of("평소 반려동물이 쓰는 공간을 생각했어요.", "쓰던 반려용품과 함께 둘 계획이었어요.", "구매 전에 관리 방법과 사용 안내를 봤어요.");
+                break;
+            default:
+                notes = List.of("집에서 실제로 둘 곳을 먼저 정해 봤어요.", "필요할 때 바로 찾을 수 있는지 생각했어요.", "집에 이미 있는 물건과 같이 쓸 상황을 생각했어요.");
+        }
+        return notes.get(text.nextInt(notes.size()));
     }
 
     private static void printPlan(Connection conn, List<Fixture> plan, int eligible, LocalDateTime anchor) throws SQLException {
@@ -281,11 +330,14 @@ public final class DemoRankingSeed {
                 pending.add(fixture);
                 continue;
             }
-            if (count(conn, "SELECT COUNT(*) FROM orders WHERE member_id=?", id) != 3
-                    || count(conn, "SELECT COUNT(*) FROM order_items i JOIN orders o USING(order_id) WHERE o.member_id=?", id) != 10
-                    || count(conn, "SELECT COUNT(*) FROM payment_attempts p JOIN orders o USING(order_id) WHERE o.member_id=?", id) != 3
+            String ownOrders = " WHERE o.member_id=? AND o.order_no REGEXP CONCAT('^',o.member_id,'_O[1-3]$') "
+                    + "AND o.checkout_token=CONCAT('DEMO-CHECKOUT-',o.order_no)";
+            if (count(conn, "SELECT COUNT(*) FROM orders o" + ownOrders, id) != 3
+                    || count(conn, "SELECT COUNT(*) FROM order_items i JOIN orders o USING(order_id)" + ownOrders, id) != 10
+                    || count(conn, "SELECT COUNT(*) FROM payment_attempts p JOIN orders o USING(order_id)" + ownOrders
+                            + " AND p.tid=CONCAT('DEMO-TID-',o.order_no)", id) != 3
                     || count(conn, "SELECT COUNT(DISTINCT i.order_item_id) FROM product_reviews rv JOIN order_items i USING(order_item_id) "
-                            + "JOIN orders o USING(order_id) WHERE o.member_id=? AND rv.member_id=o.member_id "
+                            + "JOIN orders o USING(order_id)" + ownOrders + " AND rv.member_id=o.member_id "
                             + "AND rv.product_id=i.product_id", id) != 10) {
                 throw new SQLException("Existing fixture is incomplete or was edited. Inspect or clean up before rerun: " + id);
             }
@@ -371,7 +423,9 @@ public final class DemoRankingSeed {
                 + "JOIN orders o USING(order_id) JOIN payment_attempts p USING(order_id) WHERE "
                 + "rv.member_id=o.member_id AND rv.product_id=i.product_id AND o.status='PAID' AND o.canceled_at IS NULL "
                 + "AND p.status='APPROVED' AND p.method='KAKAOPAY' AND p.tid=CONCAT('DEMO-TID-',o.order_no) "
-                + "AND p.amount=o.total_amount AND o.created_at<=p.approved_at AND p.approved_at<rv.created_at");
+                + "AND p.amount=o.total_amount AND o.created_at<=p.approved_at AND p.approved_at<rv.created_at "
+                + "AND o.member_id REGEXP '^DEMO_RANK_V1_M[0-9]{4}$' AND o.member_id BETWEEN ? AND ? "
+                + "AND o.checkout_token=CONCAT('DEMO-CHECKOUT-',o.order_no)", memberId(1), memberId(plan.size()));
         if (validReviews != plan.size() * 10) throw new SQLException("Unexpected validated review count: " + validReviews);
         System.out.printf("New rows: members=%d orders=payments=%d items=reviews=%d (anchor %s)%n",
                 pending.size(),pending.size()*3,expected,anchor);
