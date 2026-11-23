@@ -32,7 +32,11 @@
         <img src="${pageContext.request.contextPath}/assets/images/home/head.jpg" alt="" width="620" height="620">
     </a>
     <a class="home-tile home-tile-market" href="${pageContext.request.contextPath}/search.jsp?q=크리스마스">
-        <img src="${pageContext.request.contextPath}/assets/images/home/market.jpg" alt="" width="305" height="631">
+        <picture>
+            <source type="image/webp" media="(prefers-reduced-motion: no-preference)"
+                    srcset="${pageContext.request.contextPath}/assets/images/home/market-animated.webp">
+            <img src="${pageContext.request.contextPath}/assets/images/home/market.jpg" alt="" width="305" height="631">
+        </picture>
         <div class="home-tile-copy"><h2>크리스마스 마켓</h2><p>비밀의 상점</p></div>
     </a>
     <a class="home-tile home-tile-pet" href="${pageContext.request.contextPath}/search.jsp?q=반려동물">
