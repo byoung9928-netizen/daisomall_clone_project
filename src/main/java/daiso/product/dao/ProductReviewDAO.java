@@ -11,13 +11,16 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
 
 public final class ProductReviewDAO {
-    private static final String ACTIVE = " FROM product_reviews rv WHERE rv.product_id = ? AND rv.deleted_at IS NULL";
+    private static final String ACTIVE = " WHERE rv.product_id = ? AND rv.deleted_at IS NULL";
+    private static final String REVIEWS = " FROM product_reviews rv";
     // 리뷰 작성 당시 연결한 주문상품의 전액 환불 완료 여부를 조회한다.
-    private static final String FIELDS = "SELECT review_id, rating, content, created_at, version, "
+    private static final String FIELDS = "SELECT rv.review_id, rv.rating, rv.content, rv.created_at, rv.version, "
             + "EXISTS (SELECT 1 FROM order_items i JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
             + "WHERE i.order_item_id = rv.order_item_id "
@@ -32,7 +35,7 @@ public final class ProductReviewDAO {
             + "JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
             + "WHERE o.member_id = ? AND i.product_id = ? "
-            + "AND " + APPROVED_PURCHASE + " ORDER BY p.approved_at DESC, i.order_item_id DESC LIMIT 1";
+            + "AND " + APPROVED_PURCHASE;
 
     private static final String VISIBLE = "WITH RECURSIVE visible AS ("
             + "SELECT category_id FROM categories WHERE parent_id IS NULL AND is_visible = 1 "
@@ -41,9 +44,9 @@ public final class ProductReviewDAO {
     private static final String MY_PRODUCT = "pr.product_id, pr.name, pr.image_url, pr.product_code, ";
 
     public enum Sort {
-        NEWEST("newest", "created_at DESC, review_id DESC"),
-        HIGHEST("highest", "rating DESC, created_at DESC, review_id DESC"),
-        LOWEST("lowest", "rating ASC, created_at DESC, review_id DESC");
+        NEWEST("newest", "rv.created_at DESC, rv.review_id DESC"),
+        HIGHEST("highest", "rv.rating DESC, rv.created_at DESC, rv.review_id DESC"),
+        LOWEST("lowest", "rv.rating ASC, rv.created_at DESC, rv.review_id DESC");
 
         public final String key;
         private final String sql;
@@ -65,7 +68,7 @@ public final class ProductReviewDAO {
     }
 
     public Summary summarize(Connection connection, String productId) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*), AVG(rating)" + ACTIVE + ReviewVisibility.PUBLISHED)) {
+        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*), AVG(rating)" + REVIEWS + ACTIVE + ReviewVisibility.PUBLISHED)) {
             query.setString(1, productId);
             try (ResultSet rows = query.executeQuery()) {
                 rows.next();
@@ -76,7 +79,8 @@ public final class ProductReviewDAO {
 
     public List<ProductReview> list(Connection connection, String productId, String memberId,
             Sort sort, int limit, long offset) throws SQLException {
-        String sql = FIELDS + ", (member_id = ?) AS owned" + ACTIVE + ReviewVisibility.PUBLISHED
+        String sql = FIELDS + ", (rv.member_id = ?) AS owned, m.login_id" + REVIEWS
+                + " JOIN members m ON m.member_id = rv.member_id" + ACTIVE + ReviewVisibility.PUBLISHED
                 + " ORDER BY " + sort.sql + " LIMIT ? OFFSET ?";
         List<ProductReview> items = new ArrayList<>();
         try (PreparedStatement query = connection.prepareStatement(sql)) {
@@ -85,18 +89,18 @@ public final class ProductReviewDAO {
             query.setInt(3, limit);
             query.setLong(4, offset);
             try (ResultSet rows = query.executeQuery()) {
-                while (rows.next()) items.add(review(rows, rows.getBoolean("owned")));
+                while (rows.next()) items.add(review(rows, rows.getBoolean("owned"), maskedAuthor(rows.getString("login_id"))));
             }
         }
         return items;
     }
 
     public ProductReview findOwn(Connection connection, String productId, String memberId) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement(FIELDS + ACTIVE + " AND member_id = ?")) {
+        try (PreparedStatement query = connection.prepareStatement(FIELDS + REVIEWS + ACTIVE + " AND rv.member_id = ?")) {
             query.setString(1, productId);
             query.setString(2, memberId);
             try (ResultSet rows = query.executeQuery()) {
-                return rows.next() ? review(rows, true) : null;
+                return rows.next() ? review(rows, true, "구매자") : null;
             }
         }
     }
@@ -143,12 +147,41 @@ public final class ProductReviewDAO {
         return items;
     }
 
+    public Map<String, Boolean> orderReviewStates(Connection connection, String memberId, String orderNo)
+            throws SQLException {
+        String sql = VISIBLE + "SELECT i.product_id, rv.review_id IS NOT NULL AS written "
+                + "FROM orders o JOIN order_items i ON i.order_id = o.order_id "
+                + "JOIN products pr ON pr.product_id = i.product_id "
+                + "JOIN visible v ON v.category_id = pr.category_id "
+                + "LEFT JOIN product_reviews rv ON rv.member_id = o.member_id AND rv.product_id = i.product_id "
+                + "AND rv.active_slot = 1 WHERE o.member_id = ? AND o.order_no = ? "
+                + "AND EXISTS (SELECT 1 FROM payment_attempts p WHERE p.order_id = o.order_id AND "
+                + APPROVED_PURCHASE + ")";
+        Map<String, Boolean> states = new HashMap<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, memberId);
+            query.setString(2, orderNo);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) states.put(rows.getString("product_id"), rows.getBoolean("written"));
+            }
+        }
+        return states;
+    }
+
     // 저장 시 승인 근거 행을 커밋까지 잠가 확인과 등록 사이의 상태 변경을 막는다.
     public OptionalLong findPaidItem(Connection connection, String memberId, String productId, boolean lock)
             throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement(PURCHASE + (lock ? " FOR SHARE" : ""))) {
+        return findPaidItem(connection, memberId, productId, null, lock);
+    }
+
+    public OptionalLong findPaidItem(Connection connection, String memberId, String productId, String orderNo, boolean lock)
+            throws SQLException {
+        String sql = PURCHASE + (orderNo == null ? "" : " AND o.order_no = ?")
+                + " ORDER BY p.approved_at DESC, i.order_item_id DESC LIMIT 1" + (lock ? " FOR SHARE" : "");
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
             query.setString(1, memberId);
             query.setString(2, productId);
+            if (orderNo != null) query.setString(3, orderNo);
             try (ResultSet rows = query.executeQuery()) {
                 return rows.next() ? OptionalLong.of(rows.getLong(1)) : OptionalLong.empty();
             }
@@ -194,9 +227,14 @@ public final class ProductReviewDAO {
         }
     }
 
-    private static ProductReview review(ResultSet rows, boolean owner) throws SQLException {
+    private static String maskedAuthor(String loginId) {
+        if (loginId == null || !loginId.matches("[A-Za-z][A-Za-z0-9_-]{5,49}")) return "구매자";
+        return loginId.substring(0, Math.min(4, loginId.length() - 3)) + "****";
+    }
+
+    private static ProductReview review(ResultSet rows, boolean owner, String authorLabel) throws SQLException {
         return new ProductReview(rows.getLong("review_id"), rows.getInt("rating"), rows.getString("content"),
                 rows.getObject("created_at", LocalDateTime.class), owner, rows.getLong("version"),
-                rows.getBoolean("refunded"));
+                rows.getBoolean("refunded"), authorLabel);
     }
 }

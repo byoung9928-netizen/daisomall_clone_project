@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 
@@ -27,10 +28,12 @@ import daiso.order.db.OrderDAO;
 import daiso.order.delivery.DeliveryTrackerClient;
 import daiso.order.delivery.DemoTrackingNumber;
 import daiso.order.payment.kakaoPayClient;
+import daiso.product.service.ProductReviewService;
 
 @DaisoController
 public class OrderMyPageController {
     private final MemberService memberService = new MemberService();
+    private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/order/mypage")
     public String mypage(HttpServletRequest request) throws SQLException {
@@ -114,6 +117,14 @@ public class OrderMyPageController {
                     statusLabel((String) selected.get("status"))
                 );
                 selected.put("returnStatusLabel", returnStatusLabel((String)selected.get("returnStatus")));
+                if ("PAID".equals(selected.get("status")) && !"profile".equals(request.getParameter("section"))
+                        && (request.getParameter("productActivity") == null || request.getParameter("productActivity").isBlank())) {
+                    try {
+                        request.setAttribute("orderReviewStates", reviews.orderReviewStates(memberId, orderNo));
+                    } catch (SQLException | NamingException error) {
+                        request.getServletContext().log("주문내역 리뷰 상태 조회 실패", error);
+                    }
+                }
             }
         }
 

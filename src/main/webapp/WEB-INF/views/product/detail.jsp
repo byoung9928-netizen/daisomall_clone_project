@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-detail.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-review-results.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>

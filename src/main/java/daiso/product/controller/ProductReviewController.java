@@ -41,10 +41,12 @@ public final class ProductReviewController {
         response.setHeader("Cache-Control", "private, no-store");
         request.setAttribute("reviewFromMyPage", MyReviewsController.RETURN_SOURCE.equals(request.getParameter("from")));
         String productId;
+        String orderNo;
         Sort sort;
         int page;
         try {
             productId = productId(request);
+            orderNo = orderSource(request);
             String key = request.getParameter("sort");
             sort = key == null ? Sort.NEWEST : sort(key);
             String rawPage = request.getParameter("page");
@@ -63,6 +65,9 @@ public final class ProductReviewController {
             request.setAttribute("reviewProduct", product);
             HttpSession session = request.getSession(false);
             String member = memberId(session);
+            if (orderNo != null && (member == null || !service.orderReviewStates(member, orderNo).containsKey(productId))) {
+                return error(request, response, 403, "리뷰를 작성할 수 있는 결제 완료 주문을 확인해 주세요.");
+            }
             request.setAttribute("reviewSignedIn", member != null);
             request.setAttribute("reviewSort", sort);
             request.setAttribute("reviewPage", service.page(product.getProductId(), member, sort, page));
@@ -109,6 +114,7 @@ public final class ProductReviewController {
             if (!validToken(request, session, member)) {
                 return error(request, response, 403, "보안 확인에 실패했습니다. 리뷰 화면을 다시 열어 주세요.");
             }
+            String orderNo = orderSource(request);
             boolean fromMyPage = MyReviewsController.RETURN_SOURCE.equals(request.getParameter("from"));
             request.setAttribute("reviewFromMyPage", fromMyPage);
             String productId = productId(request);
@@ -122,7 +128,7 @@ public final class ProductReviewController {
             Result result;
             switch (action) {
                 case CREATE:
-                    result = service.create(productId, member, rating, content, submission);
+                    result = service.create(productId, member, rating, content, submission, orderNo);
                     break;
                 case UPDATE:
                     result = service.update(productId, member, id, version, rating, content, submission);
@@ -132,6 +138,10 @@ public final class ProductReviewController {
             }
             switch (result) {
                 case SAVED:
+                    if (orderNo != null) {
+                        return "redirect:/order/mypage?orderNo="
+                                + URLEncoder.encode(orderNo, StandardCharsets.UTF_8) + "#order-product-" + idAnchor(productId);
+                    }
                     if (fromMyPage) return "redirect:" + MyReviewsController.returnPath(action != Action.DELETE);
                     return "redirect:/products/detail?id="
                             + URLEncoder.encode(productId, StandardCharsets.UTF_8) + "#product-reviews";
@@ -187,6 +197,20 @@ public final class ProductReviewController {
             if (value.key.equals(key)) return value;
         }
         throw new IllegalArgumentException();
+    }
+
+    private static String orderSource(HttpServletRequest request) {
+        if (!"order".equals(request.getParameter("from"))) return null;
+        String orderNo = request.getParameter("orderNo");
+        if (orderNo == null || !orderNo.matches("[A-Za-z0-9_-]{1,100}")) {
+            throw new IllegalArgumentException("주문번호를 확인해 주세요.");
+        }
+        request.setAttribute("reviewOrderNo", orderNo);
+        return orderNo;
+    }
+
+    private static String idAnchor(String productId) {
+        return URLEncoder.encode(productId, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static String productId(HttpServletRequest request) {
