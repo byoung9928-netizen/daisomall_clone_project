@@ -225,10 +225,14 @@ public class ProductDAO {
     }
 
     void loadActivityRatings(Connection conn, List<ProductActivityItem> items) throws SQLException {
+        loadRatings(conn, items.stream().map(item -> item.product).collect(java.util.stream.Collectors.toList()));
+    }
+
+    private void loadRatings(Connection conn, List<ProductDTO> items) throws SQLException {
         if (items.isEmpty()) return;
-        String placeholders = String.join(",", Collections.nCopies(items.size(), "?"));
         Map<String, ProductDTO> products = new LinkedHashMap<>();
-        for (ProductActivityItem item : items) products.put(item.product.getProductId(), item.product);
+        for (ProductDTO item : items) products.put(item.getProductId(), item);
+        String placeholders = String.join(",", Collections.nCopies(products.size(), "?"));
         String sql = "SELECT rv.product_id, AVG(rv.rating) AS average_rating, COUNT(*) AS review_count "
                 + "FROM product_reviews rv WHERE rv.deleted_at IS NULL AND rv.product_id IN (" + placeholders + ")"
                 + ReviewVisibility.PUBLISHED + " GROUP BY rv.product_id";
@@ -237,7 +241,7 @@ public class ProductDAO {
             product.setReviewCount(0);
         }
         try (PreparedStatement query = conn.prepareStatement(sql)) {
-            bind(query, items.stream().map(item -> item.product.getProductId()).collect(java.util.stream.Collectors.toList()));
+            bind(query, new ArrayList<>(products.keySet()));
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
                     ProductDTO product = products.get(rows.getString("product_id"));
@@ -350,40 +354,31 @@ public class ProductDAO {
     }
 
     CatalogPage findCatalog(Connection conn, CatalogFilter filter) throws SQLException {
-        List<Object> parameters = new ArrayList<>();
+        List<Object> categoryParameters = new ArrayList<>();
         String categories = "visible_categories";
-        String sql = VISIBLE_CATEGORIES;
+        String categorySql = VISIBLE_CATEGORIES;
         if (!filter.category.isEmpty()) {
-            sql += SCOPED_CATEGORIES;
+            categorySql += SCOPED_CATEGORIES;
             categories = "selected_categories";
-            parameters.add(filter.category);
+            categoryParameters.add(filter.category);
         }
-        StringBuilder scope = new StringBuilder(" FROM products p JOIN " + categories
-                + " c ON p.category_id = c.category_id" + ACTIVE_REVIEW_STATS);
+        String fromProducts = " FROM products p JOIN " + categories + " c ON p.category_id = c.category_id";
+        boolean rankedSales = filter.salesDays > 0;
         boolean sortBySales = "sales".equals(filter.sort);
         boolean sortByWishlists = "wishlists".equals(filter.sort);
-        if (filter.salesDays > 0 || sortBySales) {
-            sql += ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
-                    + "FROM orders o JOIN payment_attempts pa ON pa.order_id = o.order_id "
-                    + "WHERE o.status = 'PAID' AND o.canceled_at IS NULL AND pa.status = 'APPROVED' "
-                    + "AND pa.tid <> '' AND pa.amount = o.total_amount "
-                    + "AND pa.approved_at >= TIMESTAMPADD(DAY, ?, CURRENT_TIMESTAMP) GROUP BY o.order_id)";
-            String units = filter.salesGrowth
-                    ? "SUM(CASE WHEN a.approved_at >= CURRENT_TIMESTAMP - INTERVAL 1 DAY "
-                        + "THEN i.quantity ELSE -i.quantity END)"
-                    : "SUM(i.quantity)";
-            scope.append(filter.salesDays > 0 ? " JOIN " : " LEFT JOIN ")
-                    .append("(SELECT i.product_id, ").append(units)
-                    .append(" AS units FROM approved_orders a JOIN order_items i ON i.order_id = a.order_id "
-                    + "GROUP BY i.product_id HAVING units > 0) sales_rank ON sales_rank.product_id = p.product_id");
-            parameters.add(filter.salesDays > 0 ? -filter.salesDays : -30);
-        }
-        if (filter.wishlistRank || sortByWishlists) {
-            scope.append(filter.wishlistRank ? " JOIN " : " LEFT JOIN ")
-                    .append("(SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
-                    + "wishlist_rank ON wishlist_rank.product_id = p.product_id");
-        }
-        scope.append(" WHERE p.status <> 'DISCONTINUED'");
+        boolean includeSales = rankedSales || sortBySales;
+        boolean includeWishlists = filter.wishlistRank || sortByWishlists;
+        boolean reviewFilter = filter.withReviews || filter.topRated || filter.ratingBand != null || filter.minimumRating != null;
+        boolean reviewStatsNeeded = reviewFilter || "rating".equals(filter.sort) || "reviews".equals(filter.sort);
+        // Match ranked IDs to their products before joining the recursive category set.
+        String joinOrder = rankedSales ? "/*+ JOIN_PREFIX(sales_rank, p) */ " : "";
+        String salesJoin = includeSales ? salesRankJoin(rankedSales, filter.salesGrowth) : "";
+        String wishlistJoin = includeWishlists ? (filter.wishlistRank ? " JOIN " : " LEFT JOIN ")
+                + "(SELECT product_id, COUNT(*) AS saves FROM product_wishlists GROUP BY product_id) "
+                + "wishlist_rank ON wishlist_rank.product_id = p.product_id" : "";
+
+        List<Object> parameters = new ArrayList<>();
+        StringBuilder scope = new StringBuilder(" WHERE p.status <> 'DISCONTINUED'");
         if (!filter.keyword.isEmpty()) {
             scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0"
                     + " OR LOCATE(?, p.brand) > 0)");
@@ -435,30 +430,63 @@ public class ProductDAO {
         }
         if (filter.publicSale) scope.append(" AND p.status <> 'SCHEDULED'");
 
+        List<Object> countParameters = new ArrayList<>(categoryParameters);
+        if (rankedSales) countParameters.add(-filter.salesDays);
+        countParameters.addAll(parameters);
+        String countSql = categorySql + (rankedSales ? APPROVED_ORDERS : "") + " SELECT " + joinOrder + "COUNT(*)"
+                + fromProducts + (reviewFilter ? ACTIVE_REVIEW_STATS : "") + (rankedSales ? salesJoin : "") + scope;
+        if (filter.wishlistRank) {
+            countSql += " AND EXISTS (SELECT 1 FROM product_wishlists w WHERE w.product_id = p.product_id)";
+        }
         int total;
-        try (PreparedStatement query = conn.prepareStatement(sql + " SELECT COUNT(*)" + scope)) {
-            bind(query, parameters);
+        try (PreparedStatement query = conn.prepareStatement(countSql)) {
+            bind(query, countParameters);
             try (ResultSet result = query.executeQuery()) {
                 result.next();
                 total = result.getInt(1);
             }
         }
 
+        List<Object> listParameters = new ArrayList<>(categoryParameters);
+        if (includeSales) listParameters.add(rankedSales ? -filter.salesDays : -30);
+        listParameters.addAll(parameters);
         String order = sortSql(filter.sort);
-        if (filter.salesDays > 0 || sortBySales) order = "COALESCE(sales_rank.units, 0) DESC, " + order;
-        if (filter.wishlistRank || sortByWishlists) order = "COALESCE(wishlist_rank.saves, 0) DESC, " + order;
-        if (filter.salesDays == 0 && !filter.wishlistRank && "recommended".equals(filter.sort)
-                && !filter.keyword.isEmpty()) {
+        if (includeSales) order = "COALESCE(sales_rank.units, 0) DESC, " + order;
+        if (includeWishlists) order = "COALESCE(wishlist_rank.saves, 0) DESC, " + order;
+        if (!rankedSales && !filter.wishlistRank && "recommended".equals(filter.sort) && !filter.keyword.isEmpty()) {
             order = "CASE WHEN p.product_code = ? THEN 0 ELSE 1 END, " + order;
-            parameters.add(filter.keyword);
+            listParameters.add(filter.keyword);
         }
-        parameters.add(filter.limit);
-        parameters.add(filter.offset);
-        try (PreparedStatement query = conn.prepareStatement(
-                sql + " SELECT " + PUBLIC_COLUMNS + scope + " ORDER BY " + order + ", p.product_id LIMIT ? OFFSET ?")) {
-            bind(query, parameters);
-            return new CatalogPage(readProducts(query), total);
+        listParameters.add(filter.limit);
+        listParameters.add(filter.offset);
+
+        String columns = reviewStatsNeeded ? PUBLIC_COLUMNS : PRODUCT_FIELDS + ", 0 AS rating, 0 AS review_count";
+        String listSql = categorySql + (includeSales ? APPROVED_ORDERS : "") + " SELECT " + joinOrder + columns
+                + fromProducts + (reviewStatsNeeded ? ACTIVE_REVIEW_STATS : "") + salesJoin + wishlistJoin + scope
+                + " ORDER BY " + order + ", p.product_id LIMIT ? OFFSET ?";
+        List<ProductDTO> products;
+        try (PreparedStatement query = conn.prepareStatement(listSql)) {
+            bind(query, listParameters);
+            products = readProducts(query);
         }
+        if (!reviewStatsNeeded) loadRatings(conn, products);
+        return new CatalogPage(products, total);
+    }
+
+    private static final String APPROVED_ORDERS = ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
+            + "FROM orders o JOIN payment_attempts pa ON pa.order_id = o.order_id "
+            + "WHERE o.status = 'PAID' AND o.canceled_at IS NULL AND pa.status = 'APPROVED' "
+            + "AND pa.tid <> '' AND pa.amount = o.total_amount "
+            + "AND pa.approved_at >= TIMESTAMPADD(DAY, ?, CURRENT_TIMESTAMP) GROUP BY o.order_id)";
+
+    private static String salesRankJoin(boolean required, boolean growth) {
+        String units = growth
+                ? "SUM(CASE WHEN a.approved_at >= CURRENT_TIMESTAMP - INTERVAL 1 DAY THEN i.quantity ELSE -i.quantity END)"
+                : "SUM(i.quantity)";
+        return (required ? " JOIN " : " LEFT JOIN ")
+                + "(SELECT i.product_id, " + units
+                + " AS units FROM approved_orders a JOIN order_items i ON i.order_id = a.order_id "
+                + "GROUP BY i.product_id HAVING units > 0) sales_rank ON sales_rank.product_id = p.product_id";
     }
 
     private static String sortSql(String sort) {
