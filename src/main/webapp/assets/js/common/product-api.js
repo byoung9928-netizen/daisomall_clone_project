@@ -3,7 +3,7 @@
 
     const app = window.Daiso;
     const filter = document.querySelector("#catalog-filter");
-    if (filter) {
+    if (filter && !filter.hasAttribute("data-browse-filters")) {
         ["sort", "maxPrice", "status", "available"].forEach(function (name) {
             const field = filter.elements.namedItem(name);
             if (field) {

@@ -70,6 +70,10 @@ public final class ProductView {
         return "AVAILABLE".equals(product.getStatus()) && product.getStockQuantity() > 0;
     }
 
+    public static boolean temporarilySoldOut(ProductDTO product) {
+        return daiso.cart.db.CartBean.isTemporarilySoldOut(product.getStatus(), product.getStockQuantity());
+    }
+
     public static String status(ProductDTO product) {
         if ("DISCONTINUED".equals(product.getStatus())) return "판매 종료";
         if ("SCHEDULED".equals(product.getStatus())) return "판매 예정";

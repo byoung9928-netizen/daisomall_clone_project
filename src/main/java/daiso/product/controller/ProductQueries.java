@@ -9,7 +9,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.sql.DataSource;
 
 final class ProductQueries {
-    private static final Set<String> SORTS = Set.of("recommended", "newest", "priceAsc", "priceDesc", "rating", "reviews", "stockDesc");
+    private static final Set<String> SORTS = Set.of("recommended", "newest", "priceAsc", "priceDesc", "rating", "reviews", "stockDesc", "sales", "wishlists");
     private static final Set<String> STATUSES = Set.of("", "AVAILABLE", "SOLD_OUT", "SCHEDULED");
 
     private ProductQueries() {
@@ -45,6 +45,7 @@ final class ProductQueries {
         if (!SORTS.contains(filter.sort) || !STATUSES.contains(filter.status)) {
             throw new IllegalArgumentException("Unknown sort or status");
         }
+        filter.minimumRating = integer(request, "minRating", null, 1, 5);
         filter.maxPrice = integer(request, "maxPrice", null, 0, Integer.MAX_VALUE);
         filter.limit = integer(request, "limit", 30, 1, 60);
         filter.offset = integer(request, "offset", 0, 0, Integer.MAX_VALUE);

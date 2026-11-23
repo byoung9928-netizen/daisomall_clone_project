@@ -1,0 +1,61 @@
+<%@ page pageEncoding="UTF-8" %>
+<input type="hidden" name="sort" value="<%= ProductView.escape(catalog.sort) %>">
+<label class="check-field browse-availability">
+    <input type="checkbox" name="available" value="true" <%= catalog.availableOnly ? "checked" : "" %>>
+    <span>구매 가능한 상품만</span>
+</label>
+<% if (!catalog.facets.deliveries.isEmpty()) { %>
+<details class="browse-filter-group" open>
+    <summary>배송 유형</summary>
+    <div class="browse-filter-options" role="group" aria-label="배송 유형">
+        <% for (daiso.product.controller.ProductCatalogFacets.Choice choice : catalog.facets.deliveries) { %>
+        <label>
+            <input type="radio" name="delivery" value="<%= ProductView.escape(choice.value) %>" <%= choice.value.equals(catalog.facets.delivery) ? "checked" : "" %>>
+            <span><%= ProductView.escape(choice.label) %></span>
+        </label>
+        <% } %>
+    </div>
+    <p class="browse-filter-note">공식 상품 정보 기준</p>
+</details>
+<% } %>
+<details class="browse-filter-group" open>
+    <summary>브랜드</summary>
+    <label class="field">
+        <span class="visually-hidden">브랜드 이름</span>
+        <input type="search" name="brand" maxlength="100" placeholder="브랜드명 검색" value="<%= ProductView.escape(catalog.brand) %>">
+    </label>
+</details>
+<% if (!catalog.facets.groups.isEmpty()) { %>
+<details class="browse-filter-group browse-filter-attributes" open>
+    <summary>상품 속성</summary>
+    <% for (daiso.product.controller.ProductCatalogFacets.Group group : catalog.facets.groups) { %>
+    <fieldset class="browse-filter-options">
+        <legend><%= ProductView.escape(group.label) %></legend>
+        <% for (daiso.product.controller.ProductCatalogFacets.Choice choice : group.choices) { %>
+        <label>
+            <input type="checkbox" name="attr" value="<%= ProductView.escape(choice.value) %>" <%= catalog.facets.selected.contains(choice.value) ? "checked" : "" %> <%= choice.available ? "" : "disabled" %>>
+            <span><%= ProductView.escape(choice.label) %><%= choice.available ? "" : " (0)" %></span>
+        </label>
+        <% } %>
+    </fieldset>
+    <% } %>
+</details>
+<% } %>
+<%
+    List<String> browseFilterNames = List.of("minRating", "maxPrice", "status");
+    List<String> browseFilterLabels = List.of("별점", "가격 상한", "판매 상태");
+    List<List<ProductCatalogView.Option>> browseFilterOptions = List.of(catalog.ratings, catalog.prices, catalog.statuses);
+    for (int i = 0; i < browseFilterNames.size(); i++) {
+%>
+<details class="browse-filter-group" open>
+    <summary><%= browseFilterLabels.get(i) %></summary>
+    <div class="browse-filter-options" role="group" aria-label="<%= browseFilterLabels.get(i) %>">
+        <% for (ProductCatalogView.Option option : browseFilterOptions.get(i)) { %>
+        <label>
+            <input type="radio" name="<%= browseFilterNames.get(i) %>" value="<%= option.value %>" <%= option.selected ? "checked" : "" %>>
+            <span><%= option.label %></span>
+        </label>
+        <% } %>
+    </div>
+</details>
+<% } %>
