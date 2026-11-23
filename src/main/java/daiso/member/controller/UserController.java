@@ -853,8 +853,7 @@ public class UserController {
                 Thread.currentThread().interrupt();
                 return "문자 발송이 중단되었습니다. 잠시 후 다시 시도해 주세요.";
             } catch (Exception e) {
-                request.getServletContext().log(
-                        "회원정보 인증 문자 발송 실패 (" + e.getClass().getSimpleName() + ")");
+                request.getServletContext().log("회원정보 인증 문자 발송 실패", e);
                 return "문자를 보낼 수 없습니다. 잠시 후 다시 시도해 주세요.";
             }
         }
