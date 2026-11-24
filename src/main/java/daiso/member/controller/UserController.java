@@ -765,6 +765,8 @@ public class UserController {
                     number.format(summary.awaitingShipmentCount));
             request.setAttribute("dashboardOnlineSoldOutCount",
                     number.format(summary.onlineSoldOutCount));
+            request.setAttribute("dashboardPendingReturnCount",
+                    number.format(summary.pendingReturnCount));
         } catch (javax.naming.NamingException | java.sql.SQLException e) {
             request.getServletContext().log("관리자 대시보드 집계 조회 실패", e);
             request.setAttribute("dashboardLoadFailed", true);

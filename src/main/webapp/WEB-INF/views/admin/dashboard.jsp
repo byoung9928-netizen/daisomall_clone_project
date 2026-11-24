@@ -54,7 +54,12 @@
                 품절 상품 보기
             </a></p>
         </div>
-    </div>
+					<a class="admin-stat"
+						href="${pageContext.request.contextPath}/app/admin/returns?filter=pending">
+						<h3>반품 승인 대기</h3> <strong>${dashboardPendingReturnCount}건</strong>
+						<p>승인 대기 요청 보기</p>
+					</a>
+				</div>
 </section>
             <% } %>
         </main>

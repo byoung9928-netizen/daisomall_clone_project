@@ -34,6 +34,8 @@ public class AdminReturnController {
     		return forbidden(response);
     	}
         request.setAttribute("adminSection", "returns");
+        boolean pendingOnly = "pending".equals(request.getParameter("filter"));
+        request.setAttribute("adminReturnsPendingOnly", pendingOnly);
         request.setAttribute(
             "adminReturns", Collections.emptyList()
         );
@@ -42,7 +44,7 @@ public class AdminReturnController {
             ReturnDAO dao = new ReturnDAO();
 
             List<Map<String, Object>> returns =
-                dao.getReturnList();
+                dao.getReturnList(pendingOnly);
 
             // DB 상태값을 화면 표시용 한글로 변환
             for (Map<String, Object> item : returns) {
