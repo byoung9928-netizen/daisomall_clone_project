@@ -251,8 +251,9 @@ public class MemberDAO {
                 "WHERE member_id = ? " +
                 "AND member_id <> ? " +
                 "AND role <> 'ADMIN' " +
+                "AND status IN ('ACTIVE', 'SUSPENDED') " +
                 "AND status <> ?";
-
+        
         try (Connection connection = getConnection();
              PreparedStatement statement =
                      connection.prepareStatement(sql)) {
@@ -541,7 +542,6 @@ public class MemberDAO {
                 "ON m.member_id = s.member_id " +
                 "WHERE s.provider = ? " +
                 "AND s.provider_user_id = ? " +
-                "AND m.status = 'ACTIVE' " +
                 "LIMIT 1";
 
         try (Connection connection = getConnection();
@@ -991,6 +991,79 @@ public class MemberDAO {
 
             statement.setString(1, tokenHash);
             statement.executeUpdate();
+        }
+    }
+    
+    public boolean isWithdrawn(String memberId) throws NamingException, SQLException {
+        String sql = "SELECT 1 FROM members WHERE member_id = ? AND status = 'WITHDRAWN'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, memberId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
+    }
+    
+    public boolean withdrawMember(String memberId, String verifiedPasswordHash)
+            throws NamingException, SQLException {
+        String updateMemberSql =
+                "UPDATE members SET status = 'WITHDRAWN', withdrawn_at = CURRENT_TIMESTAMP "
+                + "WHERE member_id = ? AND role = 'MEMBER' AND status = 'ACTIVE' "
+                + "AND password_hash = ? "
+                + "AND NOT EXISTS ("
+                + "    SELECT 1 FROM orders o WHERE o.member_id = ? "
+                + "    AND o.status IN ('PENDING', 'PAID', 'PREPARING', "
+                + "                     'SHIPPED', 'CANCELLING', 'REFUNDING')"
+                + ") "
+                + "AND NOT EXISTS ("
+                + "    SELECT 1 FROM order_returns r "
+                + "    JOIN orders o ON o.order_id = r.order_id "
+                + "    WHERE o.member_id = ? "
+                + "    AND r.status IN ('REQUESTED', 'APPROVED', 'RECEIVED', 'REFUNDING')"
+                + ")";
+
+        String[] cleanupStatements = {
+            "DELETE FROM cart_items WHERE member_id = ?",
+            "DELETE FROM product_wishlists WHERE member_id = ?",
+            "DELETE FROM member_delivery_addresses WHERE member_id = ?",
+            "DELETE FROM member_remember_tokens WHERE member_id = ?"
+        };
+
+        try (Connection connection = getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement statement = connection.prepareStatement(updateMemberSql)) {
+                    statement.setString(1, memberId);
+                    statement.setString(2, verifiedPasswordHash);
+                    statement.setString(3, memberId);
+                    statement.setString(4, memberId);
+
+                    if (statement.executeUpdate() != 1) {
+                        connection.rollback();
+                        return false;
+                    }
+                }
+
+                for (String sql : cleanupStatements) {
+                    try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                        statement.setString(1, memberId);
+                        statement.executeUpdate();
+                    }
+                }
+
+                connection.commit();
+                return true;
+            } catch (SQLException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            }
         }
     }
 

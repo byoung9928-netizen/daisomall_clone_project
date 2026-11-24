@@ -88,7 +88,9 @@
         statusLabel = "ACTIVE".equalsIgnoreCase(member.getStatus())
                 ? "활성"
                 : "SUSPENDED".equalsIgnoreCase(member.getStatus())
-                        ? "이용 중지" : member.getStatus();
+                        ? "이용 중지" : "WITHDRAWN".equalsIgnoreCase(member.getStatus())
+                                ? "탈퇴"
+                                        : member.getStatus();
     }
 %>
 <!DOCTYPE html>

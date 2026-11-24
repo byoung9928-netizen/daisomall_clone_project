@@ -1008,6 +1008,40 @@ public class UserController {
             return "member/find-password";
         }
     }
+    
+    @DaisoPostMapping("/member/withdraw")
+    @DaisoResponseBody
+    public String withdrawMember(HttpServletRequest request, HttpServletResponse response) {
+        HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+
+        if (!(memberId instanceof String)) {
+            return "로그인 후 다시 시도해 주세요.";
+        }
+
+        if (!validProfileCsrf(request, session)) {
+            return "화면을 새로고침한 뒤 다시 시도해 주세요.";
+        }
+
+        try {
+            memberService.withdrawMember(
+                    (String) memberId,
+                    request.getParameter("currentPassword"),
+                    request.getParameter("acknowledged"),
+                    request.getParameter("reason"),
+                    request.getParameter("reasonDetail")
+            );
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        } catch (Exception e) {
+            request.getServletContext().log("회원탈퇴 처리 실패", e);
+            return "탈퇴를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+        }
+
+        session.invalidate();
+        expireRememberCookie(request, response);
+        return "OK";
+    }
    
     @DaisoPostMapping("/member/logout")
     public String logout(
