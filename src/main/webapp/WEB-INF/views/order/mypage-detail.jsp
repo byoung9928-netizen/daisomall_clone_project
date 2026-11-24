@@ -1876,6 +1876,51 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
     font-weight: 700;
     cursor: pointer;
 }
+.withdrawal-card {
+    margin: 16px 0;
+    padding: 18px;
+    border: 1px solid #dbe2ea;
+    border-radius: 12px;
+}
+
+.withdrawal-card h2 {
+    margin: 0 0 8px;
+    font-size: 17px;
+}
+
+.withdrawal-card p {
+    margin: 0;
+}
+
+.withdrawal-reasons > label:not([hidden]),
+.withdrawal-password {
+    display: block;
+    margin: 10px 0;
+}
+
+.withdrawal-password input,
+.withdrawal-reasons textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 8px;
+    padding: 10px;
+    border: 1px solid #bcc6d2;
+    border-radius: 6px;
+}
+
+.withdrawal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+#continueWithdrawal:disabled {
+    opacity: 0.5;
+}
 </style>
 </head>
 <body>
@@ -2014,8 +2059,83 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
                     %>
 				<%@ include file="../product/my-activity.jspf"%>
 				<%
-                } else if ("profile".equals(request.getAttribute("myPageSection"))) {
-					MemberProfileInfo profile = (MemberProfileInfo) request.getAttribute("profile");
+                } else if ("profile".equals(request.getAttribute("myPageSection"))
+                        && "withdrawal".equals(request.getParameter("manage"))) {
+                    MemberProfileInfo withdrawalProfile =
+                            (MemberProfileInfo) request.getAttribute("profile");
+                    String withdrawalName = withdrawalProfile == null
+                            ? null : withdrawalProfile.getName();
+                    String withdrawalDisplayName = "회원";
+                    if (withdrawalName != null && !withdrawalName.isBlank()) {
+                        int firstCharacterEnd = withdrawalName.offsetByCodePoints(0, 1);
+                        withdrawalDisplayName = withdrawalName.substring(0, firstCharacterEnd) + "**";
+                    }
+                %>
+                <section id="withdrawalGuide">
+                    <h1>회원탈퇴 전 확인해 주세요</h1>
+
+                    <article class="withdrawal-card">
+                        <h2><%=ProductView.escape(withdrawalDisplayName)%>님의 쇼핑 기록이 사라져요</h2>
+                        <p>찜한 상품, 장바구니 상품, 저장한 배송지가 삭제 대상이에요.</p>
+                    </article>
+
+                    <article class="withdrawal-card">
+                        <h2>작성하신 상품 리뷰는 남아요</h2>
+                        <p>삭제할 리뷰가 있다면 탈퇴 전에 내 리뷰에서 삭제해 주세요.</p>
+                    </article>
+
+                    <article class="withdrawal-card">
+                        <h2>진행 중인 주문을 확인해 주세요</h2>
+                        <p>배송이나 반품·환불이 진행 중이면 처리가 끝난 뒤 탈퇴할 수 있어요.</p>
+                    </article>
+
+                    <label>
+                        <input type="checkbox" id="withdrawalAcknowledgement">
+                        탈퇴 안내를 확인했어요.
+                    </label>
+                    <div class="withdrawal-actions">
+                        <button type="button" id="continueWithdrawal" class="my-profile-action" disabled>
+                            계속하기
+                        </button>
+                    </div>
+                </section>
+
+                <section id="withdrawalDetails" hidden>
+                    <h1 id="withdrawalDetailsTitle" tabindex="-1">회원탈퇴 사유를 알려주세요</h1>
+                    <form id="withdrawalForm" method="post"
+                          action="<%=myContext%>/app/member/withdraw">
+                        <input type="hidden" name="csrfToken"
+                               value="<%=ProductView.escape(orderCsrfToken)%>">
+                        <input type="hidden" name="acknowledged" value="yes">
+
+                        <fieldset class="withdrawal-card withdrawal-reasons">
+                            <legend>탈퇴 사유</legend>
+                            <label><input type="radio" name="reason" value="LOW_USAGE" required> 이용 빈도가 줄었어요</label>
+                            <label><input type="radio" name="reason" value="USABILITY" required> 사이트 이용이 불편해요</label>
+                            <label><input type="radio" name="reason" value="DELIVERY" required> 배송이 아쉬웠어요</label>
+                            <label><input type="radio" name="reason" value="PRODUCTS" required> 원하는 상품이 없어요</label>
+                            <label><input type="radio" name="reason" value="OTHER" required> 기타</label>
+                            <label id="withdrawalOther" hidden>
+                                기타 사유
+                                <textarea name="reasonDetail" maxlength="200" disabled></textarea>
+                            </label>
+                        </fieldset>
+
+                        <label class="withdrawal-password">
+                            비밀번호 확인
+                            <input type="password" name="currentPassword"
+                                   autocomplete="current-password" required>
+                        </label>
+
+                        <p id="withdrawalMessage" role="status"></p>
+                        <div class="withdrawal-actions">
+                            <a href="<%=myContext%>/app/member/profile">취소하기</a>
+                            <button type="submit" class="my-profile-action">탈퇴하기</button>
+                        </div>
+                    </form>
+                </section>
+                <%
+                } else if ("profile".equals(request.getAttribute("myPageSection"))) {					MemberProfileInfo profile = (MemberProfileInfo) request.getAttribute("profile");
 
 					String genderText = "선택 안 함";
 					if (profile != null && "MALE".equals(profile.getGender())) {
@@ -2713,7 +2833,9 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 							</div>
 
 							<div class="member-consent-footer">
-								<button type="button" data-my-unavailable>회원탈퇴</button>
+								<a
+									href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=withdrawal">
+									회원탈퇴 </a>
 								<button type="button" data-my-unavailable>개인정보 이용현황</button>
 							</div>
 							</form>
@@ -3922,6 +4044,74 @@ if (memberConsentForm && memberConsentMessage && memberConsentSaveButton) {
 
         } finally {
             button.disabled = false;
+        }
+    });
+})();
+</script>
+<script>
+(function () {
+    const guide = document.getElementById('withdrawalGuide');
+    if (!guide) return;
+
+    const acknowledgement = document.getElementById('withdrawalAcknowledgement');
+    const continueButton = document.getElementById('continueWithdrawal');
+    const details = document.getElementById('withdrawalDetails');
+    const form = document.getElementById('withdrawalForm');
+    const other = document.getElementById('withdrawalOther');
+    const reasonDetail = form.elements.reasonDetail;
+
+    acknowledgement.addEventListener('change', function () {
+        continueButton.disabled = !acknowledgement.checked;
+    });
+
+    continueButton.addEventListener('click', function () {
+        if (!acknowledgement.checked) return;
+        guide.hidden = true;
+        details.hidden = false;
+        document.getElementById('withdrawalDetailsTitle').focus();
+    });
+
+    form.addEventListener('change', function (event) {
+        if (event.target.name !== 'reason') return;
+        const isOther = event.target.value === 'OTHER';
+        other.hidden = !isOther;
+        reasonDetail.disabled = !isOther;
+        reasonDetail.required = isOther;
+    });
+
+    form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const message = document.getElementById('withdrawalMessage');
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (submitButton.disabled) return;
+
+        submitButton.disabled = true;
+        message.textContent = '';
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new URLSearchParams(new FormData(form))
+            });
+
+            if (!response.ok) {
+                throw new Error('탈퇴 요청 실패');
+            }
+
+            const result = (await response.text()).trim();
+            if (result === 'OK') {
+                window.alert('회원탈퇴가 완료되었습니다.');
+                window.location.replace('<%=myContext%>/app/products/home');
+                return;
+            }
+
+            message.textContent = result;
+        } catch (error) {
+            message.textContent = '처리 결과를 확인하지 못했습니다. 로그인 상태를 확인해 주세요.';
+        } finally {
+            form.elements.currentPassword.value = '';
+            submitButton.disabled = false;
         }
     });
 })();

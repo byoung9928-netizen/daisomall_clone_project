@@ -1,6 +1,6 @@
 <%@ page pageEncoding="UTF-8" %>
 <%@ page import="java.util.Map,daiso.product.controller.InventoryPagination" %>
-<nav class="admin-product-pagination" aria-label="재고 목록 페이지">
+<nav class="admin-product-pagination" aria-label="<%= request.getAttribute("adminPaginationLabel") == null ? "재고 목록 페이지" : daiso.product.controller.ProductView.escape(request.getAttribute("adminPaginationLabel")) %>">
     <% if (inventoryPagination.previous != null) { %>
         <a class="button secondary" rel="prev" href="<%= inventoryPagination.previous %>">이전 페이지</a>
     <% } %>

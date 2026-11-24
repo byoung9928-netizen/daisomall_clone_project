@@ -192,6 +192,10 @@ public class MemberService {
                     "아이디(또는 이메일) 또는 비밀번호가 올바르지 않습니다."
             );
         }
+        
+        if ("WITHDRAWN".equalsIgnoreCase(member.getStatus())) {
+            throw new IllegalArgumentException("이미 탈퇴한 계정입니다.");
+        }
 
         if (!"ACTIVE".equalsIgnoreCase(member.getStatus())) {
             throw new IllegalArgumentException(
@@ -517,6 +521,9 @@ public class MemberService {
         MemberLoginInfo emailOwner = memberDAO.findByEmail(email);
 
         if (kakaoMember != null) {
+        	if (!"ACTIVE".equalsIgnoreCase(kakaoMember.getStatus())) {
+        	    throw new IllegalArgumentException("사용할 수 없는 회원 계정입니다.");
+        	}
             if (emailOwner != null
                     && !emailOwner.getMemberId().equals(kakaoMember.getMemberId())) {
 
@@ -625,6 +632,9 @@ public class MemberService {
                 memberDAO.findBySocialAccount("NAVER", naverId);
 
         if (naverMember != null) {
+        	if (!"ACTIVE".equalsIgnoreCase(naverMember.getStatus())) {
+        	    throw new IllegalArgumentException("사용할 수 없는 회원 계정입니다.");
+        	}
             return naverMember;
         }
 
@@ -783,6 +793,9 @@ public class MemberService {
                 memberDAO.findBySocialAccount("GOOGLE", googleId);
 
         if (googleMember != null) {
+        	if (!"ACTIVE".equalsIgnoreCase(googleMember.getStatus())) {
+        	    throw new IllegalArgumentException("사용할 수 없는 회원 계정입니다.");
+        	}
             return googleMember;
         }
 
@@ -886,6 +899,61 @@ public class MemberService {
         }
 
         return hex.toString();
+    }
+    
+    private String verifyWithdrawalPassword(String memberId, String currentPassword)
+            throws Exception {
+        if (memberId == null || memberId.isBlank()) {
+            throw new IllegalArgumentException("로그인 후 다시 시도해 주세요.");
+        }
+
+        if (currentPassword == null || currentPassword.isEmpty()) {
+            throw new IllegalArgumentException("현재 비밀번호를 입력해 주세요.");
+        }
+
+        MemberLoginInfo member = memberDAO.findLoginInfoByMemberId(memberId);
+        if (member == null || !"MEMBER".equalsIgnoreCase(member.getRole())) {
+            throw new IllegalArgumentException("탈퇴할 수 있는 회원 계정을 확인해 주세요.");
+        }
+
+        if (!verifyPassword(currentPassword, member.getPasswordHash())) {
+            throw new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다.");
+        }
+        return member.getPasswordHash();
+    }
+    
+    public boolean isWithdrawn(String memberId)
+            throws javax.naming.NamingException, java.sql.SQLException {
+        return memberDAO.isWithdrawn(memberId);
+    }
+    
+    public void withdrawMember(
+            String memberId,
+            String currentPassword,
+            String acknowledged,
+            String reason,
+            String reasonDetail) throws Exception {
+        if (!"yes".equals(acknowledged)) {
+            throw new IllegalArgumentException("탈퇴 안내를 확인해 주세요.");
+        }
+
+        if (reason == null
+                || !List.of("LOW_USAGE", "USABILITY", "DELIVERY", "PRODUCTS", "OTHER")
+                        .contains(reason)) {
+            throw new IllegalArgumentException("탈퇴 사유를 선택해 주세요.");
+        }
+
+        if ("OTHER".equals(reason)
+                && (reasonDetail == null || reasonDetail.isBlank()
+                        || reasonDetail.strip().length() > 200)) {
+            throw new IllegalArgumentException("기타 사유를 200자 이내로 입력해 주세요.");
+        }
+
+        String verifiedPasswordHash = verifyWithdrawalPassword(memberId, currentPassword);
+        if (!memberDAO.withdrawMember(memberId, verifiedPasswordHash)) {
+            throw new IllegalArgumentException(
+                    "탈퇴를 완료할 수 없습니다. 진행 중인 주문이나 반품·환불이 있는지 확인해 주세요.");
+        }
     }
     
     public void changePassword(
