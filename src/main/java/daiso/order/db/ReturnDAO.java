@@ -141,17 +141,23 @@ public class ReturnDAO {
     }
     
     // 전체 회원의 최근 반품 신청 50건 조회
-    public List<Map<String, Object>> getReturnList()
-            throws SQLException {
-        return queryReturns(true);
+    public List<Map<String, Object>> getReturnList() throws SQLException {
+        return getReturnList(false);
     }
+
 
     // ===== 엑셀용: 화면과 같은 반품 조회에서 50건 제한만 제외 =====
-    public List<Map<String, Object>> getReturnsForExport() throws SQLException {
-        return queryReturns(false);
+    public List<Map<String, Object>> getReturnList(boolean pendingOnly)
+            throws SQLException {
+        return queryReturns(true, pendingOnly);
     }
 
-    private List<Map<String, Object>> queryReturns(boolean limited) throws SQLException {
+    public List<Map<String, Object>> getReturnsForExport() throws SQLException {
+        return queryReturns(false, false);
+    }
+    
+    private List<Map<String, Object>> queryReturns(boolean limited, boolean pendingOnly)
+            throws SQLException {
         String sql =
             "SELECT r.*, o.order_no, o.member_id, "
             + "(SELECT oi.product_name FROM order_items oi "
@@ -161,7 +167,9 @@ public class ReturnDAO {
             + "WHERE oi2.order_id = o.order_id) AS product_count "
             + "FROM order_returns r "
             + "JOIN orders o ON o.order_id = r.order_id "
-            + "ORDER BY r.requested_at DESC, r.return_id DESC "
+            + (pendingOnly
+                    ? "WHERE r.status = 'REQUESTED' ORDER BY r.requested_at ASC, r.return_id ASC "
+                    : "ORDER BY r.requested_at DESC, r.return_id DESC ")
             + (limited ? "LIMIT 50" : "");
 
         List<Map<String, Object>> returns = new ArrayList<>();

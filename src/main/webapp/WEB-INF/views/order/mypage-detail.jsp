@@ -1838,6 +1838,44 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
         grid-template-columns: 1fr;
     }
 }
+#notificationNotice {
+    width: min(420px, calc(100% - 32px));
+    box-sizing: border-box;
+    margin: auto;
+    padding: 24px;
+    border: 1px solid #e1e5eb;
+    border-radius: 14px;
+}
+
+#notificationNotice::backdrop {
+    background: rgba(15, 23, 42, 0.62);
+}
+
+#notificationNotice h2 {
+    margin: 0 0 12px;
+    font-size: 20px;
+}
+
+#notificationNotice p {
+    margin: 0 0 20px;
+    color: #475569;
+}
+
+#notificationNotice form {
+    display: flex;
+    justify-content: flex-end;
+}
+
+#notificationNotice button {
+    min-height: 44px;
+    padding: 0 24px;
+    border: 0;
+    border-radius: 8px;
+    background: #17212a;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
 </style>
 </head>
 <body>
@@ -1943,7 +1981,7 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<button type="button" data-my-unavailable>프로필</button>
 					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=delivery">배송지/픽업매장</a>						
 					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=refund">환불계좌</a>				    
-					<button type="button" data-my-unavailable>알림 목록</button>
+					<button type="button" id="openNotificationNotice" aria-haspopup="dialog">알림목록</button>
 				</section>
 				<section class="my-menu-group">
 					<h2>고객센터</h2>
@@ -1957,6 +1995,15 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					</form>
 				</section>
 			</aside>
+			<dialog id="notificationNotice"
+				aria-labelledby="notificationNoticeTitle"
+				aria-describedby="notificationNoticeText">
+			<h2 id="notificationNoticeTitle">알림 목록 안내</h2>
+			<p id="notificationNoticeText">현재 웹에서는 알림 목록을 확인할 수 없습니다.</p>
+			<form method="dialog">
+				<button type="submit" autofocus>확인</button>
+			</form>
+			</dialog>
 			<div class="my-content">
 				<%
 				if ("reviews".equals(productActivity)) {
@@ -3074,6 +3121,10 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 document.addEventListener('DOMContentLoaded',function(){
  const notice=function(text){window.Daiso.ui.notice(text);};
  document.querySelectorAll('[data-my-unavailable]').forEach(function(button){button.addEventListener('click',function(){notice('해당 기능은 준비 중입니다.');});});
+ const notificationNotice = document.getElementById('notificationNotice');
+ document.getElementById('openNotificationNotice').addEventListener('click', function () {
+     notificationNotice.showModal();
+ });
  const chooser=document.getElementById('my-order-switch');
  if(chooser)chooser.addEventListener('change',function(){const url=new URL(location.href);url.searchParams.set('orderNo',chooser.value);location.assign(url.href);});
  const open=document.getElementById('open-my-receipt');

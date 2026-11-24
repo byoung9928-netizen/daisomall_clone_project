@@ -48,10 +48,22 @@ NumberFormat refundMoney = NumberFormat.getIntegerInstance();
 
         <% } else { %>
 
-            <p class="admin-count">
-                최근 반품 신청 <%= returnList.size() %>건
-                · 최대 50건 표시
-            </p>
+            <% boolean pendingOnly =
+        Boolean.TRUE.equals(request.getAttribute("adminReturnsPendingOnly")); %>
+
+<p class="admin-count">
+    <%= pendingOnly ? "반품 승인 대기" : "최근 반품 신청" %>
+    <%= returnList.size() %>건 표시 · 최대 50건
+</p>
+
+<% if (pendingOnly) { %>
+    <p>
+        <a class="button secondary"
+   href="${pageContext.request.contextPath}/app/admin/returns">
+    전체 반품 내역 보기 <span aria-hidden="true">→</span>
+</a>
+    </p>
+<% } %>
 
             <div class="admin-table-scroll"
                  tabindex="0"
@@ -80,7 +92,7 @@ NumberFormat refundMoney = NumberFormat.getIntegerInstance();
                         <% if (returnList.isEmpty()) { %>
                             <tr>
                                 <td colspan="8">
-                                    반품 신청 내역이 없습니다.
+                                    승인 대기중인 반품 요청이 없습니다.
                                 </td>
                             </tr>
 
