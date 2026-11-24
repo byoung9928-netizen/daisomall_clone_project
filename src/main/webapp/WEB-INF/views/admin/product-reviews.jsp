@@ -1,5 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.time.format.DateTimeFormatter,java.util.List,java.util.Map,daiso.product.controller.ProductView,daiso.product.dao.AdminReviewDAO.Moderation,daiso.product.dao.AdminReviewDAO.Page,daiso.product.dao.AdminReviewDAO.Row,daiso.product.dto.ReviewExtras.Answer" %>
+<%@ page import="java.time.format.DateTimeFormatter,java.util.List,java.util.Map,daiso.product.controller.ProductView,daiso.product.dao.AdminReviewDAO.Moderation,daiso.product.dao.AdminReviewDAO.Page,daiso.product.dao.AdminReviewDAO.Row,daiso.product.dto.ReviewExtras.Answer,daiso.product.dao.ReviewFeedbackDAO.ReportCounts,daiso.product.dao.ReviewFeedbackDAO.ReportEntry,daiso.product.dto.ReviewFeedback.Reason" %>
 <%
     request.setAttribute("adminSection", "product-reviews");
     String context = request.getContextPath();
@@ -8,6 +8,8 @@
     String state = (String) request.getAttribute("adminReviewState");
     int rating = (Integer) (request.getAttribute("adminReviewRating") == null ? 0 : request.getAttribute("adminReviewRating"));
     String errorMessage = (String) request.getAttribute("adminReviewError");
+    String reportFilter = (String) request.getAttribute("adminReportFilter");
+    Map<String, String> reportViewBase = (Map<String, String>) request.getAttribute("adminReportViewBase");
     DateTimeFormatter dates = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm");
 %>
 <!DOCTYPE html>
@@ -35,6 +37,9 @@
                 <p class="form-status" role="status"><%= ProductView.escape(request.getAttribute("adminReviewNotice")) %></p>
             <% } %>
             <% if (results != null) { %>
+                <% if (!results.reportsAvailable) { %>
+                    <p class="form-status">신고 기능을 사용하려면 리뷰 신고 테이블 마이그레이션을 적용해 주세요.</p>
+                <% } %>
                 <div class="admin-product-toolbar">
                 <form class="admin-product-filters" action="<%= ProductView.escape(route) %>" method="get">
                     <label class="field admin-product-filter-row">
@@ -61,6 +66,16 @@
                             <option value="DELETED" <%= "DELETED".equals(state) ? "selected" : "" %>>작성자 삭제</option>
                         </select>
                     </label>
+                    <% if (results.reportsAvailable) { %>
+                        <label class="field admin-product-filter-row">
+                            <span>신고</span>
+                            <select name="reports">
+                                <option value="">전체 리뷰</option>
+                                <option value="REPORTED" <%= "REPORTED".equals(reportFilter) ? "selected" : "" %>>신고된 리뷰</option>
+                                <option value="PENDING" <%= "PENDING".equals(reportFilter) ? "selected" : "" %>>미처리 신고가 있는 리뷰</option>
+                            </select>
+                        </label>
+                    <% } %>
                     <div class="admin-product-actions admin-product-filter-actions">
                         <button class="button secondary" type="submit">검색</button>
                         <a class="text-button" href="<%= ProductView.escape(route) %>">초기화</a>
@@ -74,11 +89,17 @@
                     <% for (Row item : results.items) {
                         String statusLabel = item.deleted ? "작성자 삭제" : item.moderation == Moderation.HIDDEN ? "숨김"
                                 : item.moderation == Moderation.DELETED ? "관리자 삭제" : "게시 중";
+                        ReportCounts reportCounts = results.reports.getOrDefault(item.id, ReportCounts.EMPTY);
+                        boolean reportOpen = Long.valueOf(item.id).equals(request.getAttribute("adminSelectedReport"));
+                        String reportAnchor = "review-reports-" + item.id;
                     %>
-                        <details class="admin-panel admin-review-card">
+                        <details class="admin-panel admin-review-card" id="<%= reportAnchor %>" <%= reportOpen ? "open" : "" %>>
                             <summary>
                                 <strong><%= ProductView.escape(item.productName) %></strong>
                                 <span> · <%= item.rating %>점 · <%= statusLabel %></span>
+                                <% if (results.reportsAvailable) { %>
+                                    <span> · 신고 <%= reportCounts.total %>건 · 미처리 <%= reportCounts.pending %>건</span>
+                                <% } %>
                             </summary>
                             <p><%= ProductView.escape(item.productCode) %> · <%= ProductView.escape(item.loginId) %> ·
                                 <time datetime="<%= item.createdAt %>"><%= item.createdAt.format(dates) %></time></p>
@@ -108,12 +129,44 @@
                                 </div>
                             <% } %>
                             <p><a class="text-button" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.productId)) %>#product-reviews">고객 상품 리뷰 보기</a></p>
-                            <% if (!item.deleted) { %>
+                            <% if (reportCounts.total > 0 && !reportOpen) { %>
+                                <p><a class="button secondary" href="<%= ProductView.url(context, "/app/admin/products/reviews",
+                                    ProductView.with(reportViewBase, "reportReview", Long.toString(item.id))) %>#<%= reportAnchor %>">신고 확인</a></p>
+                            <% } %>
+                            <% if (reportOpen) {
+                                   Map<Reason, Long> reasons = (Map<Reason, Long>) request.getAttribute("adminReportReasons");
+                                   List<ReportEntry> reports = (List<ReportEntry>) request.getAttribute("adminReportEntries");
+                            %>
+                                <section aria-labelledby="<%= reportAnchor %>-title">
+                                    <h2 id="<%= reportAnchor %>-title">신고 내역 · <%= reportCounts.total %>건</h2>
+                                    <ul>
+                                        <% for (Reason reason : Reason.values()) {
+                                               if (!reasons.containsKey(reason)) continue; %>
+                                            <li><%= reason.label %> <%= reasons.get(reason) %>건</li>
+                                        <% } %>
+                                    </ul>
+                                    <ul>
+                                        <% for (ReportEntry entry : reports) { %>
+                                            <li><%= entry.reason.label %> · <%= entry.status.label %> · 접수
+                                                <time datetime="<%= entry.received %>"><%= entry.received.format(dates) %></time>
+                                                <% if (entry.processed != null) { %>
+                                                    · 처리 <time datetime="<%= entry.processed %>"><%= entry.processed.format(dates) %></time>
+                                                <% } %>
+                                            </li>
+                                        <% } %>
+                                    </ul>
+                                </section>
+                            <% } %>
+                            <% if (!item.deleted || (reportOpen && reportCounts.pending > 0)) { %>
                                 <form class="admin-product-actions" method="post" data-admin-review-action
                                       action="<%= request.getAttribute("adminReviewModerate") %>">
                                     <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("adminReviewCsrf")) %>">
                                     <input type="hidden" name="reviewId" value="<%= item.id %>">
                                     <input type="hidden" name="version" value="<%= item.version %>">
+                                    <% if (reportOpen && reportCounts.pending > 0) { %>
+                                        <button class="button secondary" name="moderation" value="DISMISS"
+                                                data-confirm="리뷰 상태를 유지하고 미처리 신고를 기각할까요?">리뷰 유지 · 신고 기각</button>
+                                    <% } %>
                                     <% if (item.canChangeTo(Moderation.HIDDEN)) { %>
                                         <button class="button secondary" name="moderation" value="HIDDEN" data-confirm="이 리뷰를 고객 화면에서 숨길까요?">숨김</button>
                                     <% } %>

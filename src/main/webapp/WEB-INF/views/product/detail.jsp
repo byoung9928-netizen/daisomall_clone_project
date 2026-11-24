@@ -14,18 +14,22 @@
     <%@ include file="../common/head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-wishlist.js" defer></script>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css?v=review-feedback-1">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/product-api.js" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/product-detail.js" defer></script>
-    <script src="${pageContext.request.contextPath}/assets/js/common/product-review-results.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/stock-watch.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/product-review-results.js?v=review-feedback-1" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
     <%@ include file="../common/header.jspf" %>
     <%@ include file="../common/navigation.jspf" %>
     <div class="wishlist-tools" data-wishlist-config
+         data-cart-preview-url="${pageContext.request.contextPath}/app/products/cart/preview"
+         data-cart-view-url="${pageContext.request.contextPath}/app/cart"
+         data-cart-url="${pageContext.request.contextPath}/app/cart/add"
          data-base-url="${pageContext.request.contextPath}/app/products/wishlist"
          data-login-url="${pageContext.request.contextPath}/app/member/login"
          data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"

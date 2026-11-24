@@ -1,4 +1,30 @@
 <%@ page pageEncoding="UTF-8" %>
+<% if (!request.getRequestURI().matches(".*/(?:order/)?(?:pickup-checkout|checkout|payment[^/]*)(?:[./].*)?")) { %>
+<div class="recent-quick" data-recent-quick
+     data-has-recent="<%= daiso.product.controller.ProductActivityController.hasRecent(request.getSession(false)) %>"
+     data-recent-url="${pageContext.request.contextPath}/api/products/recent"
+     data-product-url="${pageContext.request.contextPath}/product.jsp" hidden>
+    <button type="button" class="recent-quick-trigger" data-recent-trigger
+            aria-label="최근 본 상품" aria-controls="recent-quick-panel" aria-expanded="false">
+        <img alt="">
+    </button>
+    <section class="recent-quick-panel" id="recent-quick-panel" data-recent-panel
+             aria-labelledby="recent-quick-title" inert>
+        <header class="recent-quick-header">
+            <h2 id="recent-quick-title">최근 본 상품</h2>
+            <button type="button" data-recent-close aria-label="최근 본 상품 닫기">×</button>
+        </header>
+        <div class="recent-quick-scroll" data-recent-scroll>
+            <ul class="recent-quick-list" data-recent-list></ul>
+            <button type="button" data-recent-more hidden>상품 더 보기</button>
+        </div>
+        <footer class="recent-quick-footer">
+            <p data-recent-status role="status"></p>
+            <button type="button" data-recent-clear disabled>전체삭제</button>
+        </footer>
+    </section>
+</div>
+<% } %>
 <footer class="site-footer">
     <div class="container">
         <div class="footer-columns">

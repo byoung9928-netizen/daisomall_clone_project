@@ -145,6 +145,7 @@
     }
 
     restoreQuantity();
+    if (pickup && location.hash === "#pickup") pickup.click();
 	// ===== 택배배송과 매장픽업을 담을 때 각각의 저장 주소로 전송 =====
 	cart.addEventListener("submit", async (event) => {
 	    event.preventDefault();

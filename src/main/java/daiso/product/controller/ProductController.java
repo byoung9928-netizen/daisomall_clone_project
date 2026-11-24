@@ -103,6 +103,7 @@ public class ProductController {
         request.setAttribute("recommendationReasons", featured);
         List<String> wishlistIds = new ArrayList<>(featured.keySet());
         newest.forEach(product -> wishlistIds.add(product.getProductId()));
+        prepareCardFacts(request, conn, wishlistIds);
         WishlistController.prepare(request, response, conn, wishlistIds);
     }
 
@@ -110,7 +111,7 @@ public class ProductController {
         LocalDate today = LocalDate.now(STORE_ZONE);
         LocalDate since = today.minusDays(RecommendationService.HISTORY_DAYS);
         List<Signal> signals = new ArrayList<>();
-        ProductActivityController.snapshot(session, member).forEach((id, date) -> signals.add(new Signal(id, Kind.VIEW, date)));
+        ProductActivityController.recommendationSnapshot(session, member).forEach((id, date) -> signals.add(new Signal(id, Kind.VIEW, date)));
         try {
             signals.addAll(recommendationActivity.findActions(conn, member, since, ACTION_LIMIT));
         } catch (SQLException error) {
@@ -152,6 +153,7 @@ public class ProductController {
                 request.setAttribute("homeRankProducts", products);
                 List<String> ids = products.stream().map(ProductDTO::getProductId).collect(Collectors.toList());
                 prepareCardPickup(request, conn, ids);
+                prepareCardFacts(request, conn, ids);
                 WishlistController.prepare(request, response, conn, ids);
             }
             conn.commit();
@@ -203,6 +205,7 @@ public class ProductController {
 
     @DaisoGetMapping("/products/detail")
     public String detail(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
+        response.setHeader("Cache-Control", "private, no-store");
         String id = request.getParameter("id");
         if (id == null || id.isBlank() || id.length() > 100) {
             return "product/detail";
@@ -234,6 +237,7 @@ public class ProductController {
                 List<String> wishlistIds = new ArrayList<>();
                 for (ProductDTO item : recommendations) wishlistIds.add(item.getProductId());
                 prepareCardPickup(request, conn, wishlistIds);
+                prepareCardFacts(request, conn, wishlistIds);
                 wishlistIds.add(product.getProductId());
                 WishlistController.prepare(request, response, conn, wishlistIds);
             }
@@ -241,7 +245,7 @@ public class ProductController {
         }
         ProductDTO product = (ProductDTO) request.getAttribute("product");
         if (product != null) {
-            HttpSession session = request.getSession(false);
+            HttpSession session = request.getSession();
             String member = ProductActivityController.member(session);
             LocalDate viewedOn = ProductActivityController.remember(session, member, product.getProductId());
             if (member != null && viewedOn != null) recordView(request, member, product.getProductId(), viewedOn);
@@ -267,6 +271,14 @@ public class ProductController {
         } catch (SQLException error) {
             request.getServletContext().log("상품 상세 픽업 재고 조회 실패", error);
             request.setAttribute("pickupLookupError", true);
+        }
+    }
+
+    private void prepareCardFacts(HttpServletRequest request, Connection connection, List<String> productIds) {
+        try {
+            request.setAttribute("cardFacts", dao.cardFacts(connection, productIds, true));
+        } catch (SQLException error) {
+            request.getServletContext().log("상품 카드 구매 정보 조회 실패", error);
         }
     }
 
@@ -301,7 +313,7 @@ public class ProductController {
     @DaisoGetMapping("/products/detail/reviews")
     public String detailReviewResults(HttpServletRequest request, HttpServletResponse response)
             throws SQLException, NamingException {
-        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Cache-Control", "private, no-store");
         String id = request.getParameter("id");
         String sort = request.getParameter("reviewSort");
         if (id == null || id.isBlank() || id.length() > 100
@@ -333,7 +345,10 @@ public class ProductController {
         request.setAttribute("detailReviewSort", sort.key);
         try {
             // 상품 조회 트랜잭션과 분리해 리뷰 오류에도 상세 화면을 표시한다.
-            request.setAttribute("detailReviews", reviews.publicPage(productId, sort, page, photoPage));
+            HttpSession session = request.getSession(false);
+            String member = ProductReviewController.memberId(session);
+            request.setAttribute("detailReviews", reviews.publicPage(productId, member, sort, page, photoPage));
+            if (member != null) request.setAttribute("detailReviewCsrf", ProductReviewController.token(session, member));
             return true;
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("상품 상세 리뷰 조회 실패", error);
@@ -427,6 +442,7 @@ public class ProductController {
                             categories, ranked));
                 }
                 prepareCardPickup(request, conn, wishlistIds);
+                prepareCardFacts(request, conn, wishlistIds);
                 WishlistController.prepare(request, response, conn, wishlistIds);
                 request.setAttribute("activeNavigation", collectionPage == null ? collection : collectionPage.key);
                 request.setAttribute("categoryPath", path);

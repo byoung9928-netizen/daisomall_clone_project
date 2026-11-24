@@ -7,6 +7,10 @@ import daiso.product.dao.AdminReviewDAO;
 import daiso.product.dao.AdminReviewDAO.Page;
 import daiso.product.dao.AdminReviewDAO.Moderation;
 import daiso.product.dao.AdminReviewDAO.State;
+import daiso.product.dao.AdminReviewDAO.ReportFilter;
+import daiso.product.dao.ReviewFeedbackDAO;
+import daiso.product.dao.ReviewFeedbackDAO.ReportCounts;
+import java.util.stream.Collectors;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -23,6 +27,7 @@ public final class AdminReviewController {
     private static final String VIEW = "admin/product-reviews";
     private static final String NOTICE = "adminReviewNotice";
     private final AdminReviewDAO reviews = new AdminReviewDAO();
+    private final ReviewFeedbackDAO feedback = new ReviewFeedbackDAO();
 
     @DaisoGetMapping(PATH)
     public String list(HttpServletRequest request, HttpServletResponse response) {
@@ -35,28 +40,43 @@ public final class AdminReviewController {
         int rating;
         int requestedPage;
         State state;
+        ReportFilter reportFilter;
+        long selectedReport;
         try {
             keyword = ProductQueries.text(request, "query", 120);
             rating = ProductQueries.integer(request, "rating", 0, 0, 5);
             requestedPage = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE);
             String rawState = ProductQueries.text(request, "state", 12);
             state = rawState.isEmpty() ? State.ALL : State.valueOf(rawState);
+            reportFilter = reportFilter(request);
+            String selected = ProductQueries.text(request, "reportReview", 19);
+            selectedReport = selected.isEmpty() ? 0 : Long.parseLong(selected);
+            if (!selected.isEmpty() && selectedReport <= 0) throw new IllegalArgumentException();
         } catch (IllegalArgumentException error) {
             return problem(request, response, 400, "리뷰 검색 조건을 확인해 주세요.");
         }
         try (Connection connection = ProductQueries.connect()) {
-            Page results = reviews.list(connection, keyword, rating, state, requestedPage);
+            Page results = reviews.list(connection, keyword, rating, state, reportFilter, requestedPage);
+            if (results.reports.getOrDefault(selectedReport, ReportCounts.EMPTY).total > 0) {
+                var entries = feedback.reportEntries(connection, selectedReport);
+                request.setAttribute("adminSelectedReport", selectedReport);
+                request.setAttribute("adminReportEntries", entries);
+                request.setAttribute("adminReportReasons", entries.stream().collect(
+                        Collectors.groupingBy(entry -> entry.reason, Collectors.counting())));
+            }
             connection.commit();
             request.setAttribute("adminReviews", results);
             request.setAttribute("adminReviewQuery", keyword);
             request.setAttribute("adminReviewRating", rating);
             request.setAttribute("adminReviewState", state.name());
+            request.setAttribute("adminReportFilter", reportFilter.name());
 
             request.setAttribute("adminReviewCsrf", AdminProductController.token(session));
             request.setAttribute(NOTICE, session.getAttribute(NOTICE));
             session.removeAttribute(NOTICE);
-            Map<String, String> filters = filters(keyword, rating, state);
+            Map<String, String> filters = filters(keyword, rating, state, reportFilter);
             String context = request.getContextPath();
+            request.setAttribute("adminReportViewBase", ProductView.with(filters, "page", Integer.toString(results.number)));
             request.setAttribute("adminReviewModerate", ProductView.url(context, "/app" + PATH + "/moderate",
                     ProductView.with(filters, "page", Integer.toString(results.number))));
             if (results.number > 1) {
@@ -86,28 +106,33 @@ public final class AdminReviewController {
         long id;
         long version;
         Moderation next;
+        boolean dismiss;
         Map<String, String> returnFilters;
         try {
             id = Long.parseLong(ProductQueries.text(request, "reviewId", 19));
             version = Long.parseLong(ProductQueries.text(request, "version", 19));
             if (id < 1 || version < 0) throw new IllegalArgumentException();
-            next = Moderation.valueOf(ProductQueries.text(request, "moderation", 12));
+            String action = ProductQueries.text(request, "moderation", 12);
+            dismiss = "DISMISS".equals(action);
+            next = dismiss ? null : Moderation.valueOf(action);
             String keyword = ProductQueries.text(request, "query", 120);
             int rating = ProductQueries.integer(request, "rating", 0, 0, 5);
             int page = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE);
             String rawState = ProductQueries.text(request, "state", 12);
             State state = rawState.isEmpty() ? State.ALL : State.valueOf(rawState);
-            returnFilters = ProductView.with(filters(keyword, rating, state), "page", Integer.toString(page));
+            returnFilters = ProductView.with(filters(keyword, rating, state, reportFilter(request)), "page", Integer.toString(page));
         } catch (IllegalArgumentException error) {
             return problem(request, response, 400, "리뷰와 변경할 상태를 확인해 주세요.");
         }
 
         try (Connection connection = ProductQueries.connect()) {
             try {
-                boolean changed = reviews.moderate(connection, id, version,
-                        session.getAttribute("member_id").toString(), next);
+                String admin = session.getAttribute("member_id").toString();
+                boolean changed = dismiss ? reviews.dismissReports(connection, id, version, admin)
+                        : reviews.moderate(connection, id, version, admin, next);
                 connection.commit();
-                if (!changed) return problem(request, response, 409, "이미 변경됐거나 작성자가 삭제한 리뷰입니다. 목록을 다시 열어 주세요.");
+                if (!changed) return problem(request, response, 409,
+                        "이미 처리됐거나 리뷰 상태가 바뀌었습니다. 목록을 다시 열어 주세요.");
             } catch (SQLException | RuntimeException error) {
                 try {
                     connection.rollback();
@@ -116,7 +141,8 @@ public final class AdminReviewController {
                 }
                 throw error;
             }
-            String notice = next == Moderation.PUBLISHED ? "리뷰를 복구했습니다."
+            String notice = dismiss ? "미처리 신고를 기각했습니다."
+                    : next == Moderation.PUBLISHED ? "리뷰를 복구했습니다."
                     : next == Moderation.HIDDEN ? "리뷰를 숨겼습니다." : "리뷰를 관리자 삭제 처리했습니다.";
             session.setAttribute(NOTICE, notice);
             return "redirect:" + ProductView.rawUrl("", PATH, returnFilters);
@@ -126,9 +152,15 @@ public final class AdminReviewController {
         }
     }
 
-    private static Map<String, String> filters(String keyword, int rating, State state) {
+    private static ReportFilter reportFilter(HttpServletRequest request) {
+        String value = ProductQueries.text(request, "reports", 12);
+        return value.isEmpty() ? ReportFilter.ALL : ReportFilter.valueOf(value);
+    }
+
+    private static Map<String, String> filters(String keyword, int rating, State state, ReportFilter reportFilter) {
         return Map.of("query", keyword, "rating", rating == 0 ? "" : Integer.toString(rating),
-                "state", state == State.ALL ? "" : state.name());
+                "state", state == State.ALL ? "" : state.name(),
+                "reports", reportFilter == ReportFilter.ALL ? "" : reportFilter.name());
     }
 
     private static String pageLink(String context, Map<String, String> filters, int number) {
