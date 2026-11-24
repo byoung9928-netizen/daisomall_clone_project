@@ -1,12 +1,16 @@
 <%@ page pageEncoding="UTF-8" %>
 <% boolean wishlistCardSelected = request.getAttribute("wishlistSelected") instanceof java.util.Set<?>
         && ((java.util.Set<?>) request.getAttribute("wishlistSelected")).contains(item.getProductId());
+   daiso.product.controller.ProductDAO.CardFacts cardFacts = request.getAttribute("cardFacts") instanceof Map<?, ?>
+       ? (daiso.product.controller.ProductDAO.CardFacts) ((Map<?, ?>) request.getAttribute("cardFacts")).get(item.getProductId()) : null;
+   String cardUrl = ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId()));
    boolean temporarilySoldOut = ProductView.temporarilySoldOut(item);
    boolean deliveryAvailable = ProductView.available(item);
    boolean pickupAvailable = ProductView.pickupEligible(item) && request.getAttribute("cardPickupIds") instanceof java.util.Set<?>
        && ((java.util.Set<?>) request.getAttribute("cardPickupIds")).contains(item.getProductId()); %>
 <article class="product-card" data-product-id="<%= ProductView.escape(item.getProductId()) %>">
-    <a class="product-cover<%= temporarilySoldOut ? " product-cover--sold-out" : "" %>" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>">
+    <div class="product-card-media">
+    <a class="product-cover<%= temporarilySoldOut ? " product-cover--sold-out" : "" %>" href="<%= cardUrl %>">
         <img src="<%= ProductView.image(context, item) %>" alt="<%= ProductView.escape(item.getName()) %>" loading="lazy">
         <% if (!ProductView.available(item)) { %>
             <span class="product-status"><%= pickupAvailable ? "택배 품절" : temporarilySoldOut ? "일시품절" : ProductView.status(item) %></span>
@@ -21,35 +25,42 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21 3.5 12.5C-2 6.5 6 0 12 6c6-6 14 0.5 8.5 6.5Z"/></svg>
         <span data-wishlist-label><%= wishlistCardSelected ? "찜 해제" : "찜" %></span>
     </button>
-    <% if (Boolean.TRUE.equals(request.getAttribute("browseCatalog"))) { %>
-        <% if (temporarilySoldOut) { %>
+    </div>
+    <% if (pickupAvailable && !deliveryAvailable) { %>
+        <a class="browse-card-add" href="<%= cardUrl %>#pickup"><span class="product-bag" aria-hidden="true"></span>픽업 매장 선택</a>
+    <% } else { %>
         <button type="button" class="browse-card-add"
-                data-catalog-preview="<%= ProductView.escape(item.getProductId()) %>"
-                aria-label="<%= ProductView.escape(item.getName()) %> 장바구니에 미리 담기">미리담기</button>
-        <% } else { %>
-        <button type="button" class="browse-card-add"
-                data-catalog-add="<%= ProductView.escape(item.getProductId()) %>"
-                aria-label="<%= ProductView.escape(item.getName()) %> 장바구니 담기"
-                <%= ProductView.available(item) ? "" : "disabled" %>><%= ProductView.available(item) ? "담기" : ProductView.status(item) %></button>
-        <% } %>
-    <% } else if (Boolean.TRUE.equals(request.getAttribute("stockWatch"))) { %>
-        <button type="button" class="button secondary stock-watch-add"
-                data-stock-watch-add="<%= ProductView.escape(item.getProductId()) %>"
-                aria-label="<%= ProductView.escape(item.getName()) %> 장바구니 담기"
-                <%= ProductView.available(item) ? "" : "disabled" %>><%= ProductView.available(item) ? "담기" : "품절" %></button>
-        <% if (ProductView.available(item)) { %>
-            <p class="stock-watch-quantity">재고 <%= item.getStockQuantity() %>개 남음</p>
-        <% } %>
+                <%= temporarilySoldOut ? "data-catalog-preview" : "data-catalog-add" %>="<%= ProductView.escape(item.getProductId()) %>"
+                aria-label="<%= ProductView.escape(item.getName()) %> <%= temporarilySoldOut ? "장바구니에 미리 담기" : deliveryAvailable ? "장바구니 담기" : ProductView.status(item) %>"
+                <%= deliveryAvailable || temporarilySoldOut ? "" : "disabled" %>>
+            <% if (deliveryAvailable || temporarilySoldOut) { %><span class="product-bag" aria-hidden="true"></span><% } %>
+            <span data-cart-label><%= deliveryAvailable ? "담기" : temporarilySoldOut ? "미리담기" : ProductView.status(item) %></span>
+        </button>
     <% } %>
-    <p class="product-price"><%= ProductView.money(item.getPrice()) %></p>
-    <a class="product-name" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>"><%= ProductView.escape(item.getName()) %></a>
+    <% if (Boolean.TRUE.equals(request.getAttribute("stockWatch")) && deliveryAvailable) { %>
+        <p class="stock-watch-quantity">재고 <%= item.getStockQuantity() %>개 남음</p>
+    <% } %>
+    <p class="product-price"><%= ProductView.money(item.getPrice()) %>
+        <% if (cardFacts != null && cardFacts.newProduct) { %><span class="product-new">NEW</span><% } %>
+    </p>
+    <a class="product-name" href="<%= cardUrl %>"><%= ProductView.escape(item.getName()) %></a>
     <% if (deliveryAvailable || pickupAvailable) { %>
         <div class="product-badges" role="group" aria-label="구매 가능한 수령 방식">
             <% if (deliveryAvailable) { %><span class="badge">택배</span><% } %>
             <% if (pickupAvailable) { %><span class="badge">픽업</span><% } %>
         </div>
     <% } %>
-    <p class="product-rating">★ <%= String.format(java.util.Locale.ROOT, "%.1f", item.getRating()) %> (<%= item.getReviewCount() %>)</p>
+    <% if (item.getReviewCount() > 0) {
+           String average = String.format(java.util.Locale.ROOT, "%.1f", item.getRating());
+           int filled = (int) Math.round(20 * Math.max(0, Math.min(5, item.getRating()))); %>
+        <p class="product-rating" aria-label="5점 만점에 <%= average %>점, 리뷰 <%= item.getReviewCount() %>개">
+            <span class="product-stars" aria-hidden="true" style="--star-fill:<%= filled %>%">★★★★★</span>
+            <span aria-hidden="true"><%= average %> · <%= java.text.NumberFormat.getIntegerInstance(java.util.Locale.KOREA).format(item.getReviewCount()) %></span>
+        </p>
+    <% } %>
+    <% if (cardFacts != null && cardFacts.units > 0) { %>
+        <p class="product-purchases">최근 30일 <%= java.text.NumberFormat.getIntegerInstance(java.util.Locale.KOREA).format(cardFacts.units) %>개 구매</p>
+    <% } %>
     <% if (request.getAttribute("recommendationReasons") instanceof java.util.Map<?, ?>) {
            Object reason = ((java.util.Map<?, ?>) request.getAttribute("recommendationReasons")).get(item.getProductId());
            if (reason != null && !reason.toString().isBlank()) { %>

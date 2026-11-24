@@ -38,7 +38,8 @@
                     actionUrl: config.dataset.cartViewUrl,
                     origin: button
                 });
-                button.textContent = preview ? '미리 담았어요' : '담았어요';
+                const label = button.querySelector('[data-cart-label]') || button;
+                label.textContent = preview ? '미리 담았어요' : '담았어요';
             }
         } catch {
             feedback.textContent = '장바구니에 담지 못했습니다. 잠시 후 다시 시도해 주세요.';

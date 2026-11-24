@@ -48,22 +48,32 @@ public final class ProductView {
     }
 
     public static String image(String context, String value) {
-        if (daiso.product.service.ProductImageStorage.isImagePath(value)) return escape(context + "/" + value);
+        return escape(imageUrl(context, value));
+    }
+
+    static String imageUrl(String context, String value) {
+        if (daiso.product.service.ProductImageStorage.isImagePath(value)) return context + "/" + value;
         if (value != null) {
             try {
                 URI uri = URI.create(value);
                 if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null) {
-                    return escape(uri);
+                    return uri.toString();
                 }
                 if (uri.getScheme() == null && uri.getRawAuthority() == null && value.startsWith("assets/")
                         && uri.normalize().getPath().startsWith("assets/")) {
-                    return escape(context + "/" + uri);
+                    return context + "/" + uri;
                 }
             } catch (IllegalArgumentException ignored) {
                 // Fall through to the local placeholder.
             }
         }
-        return escape(context + "/assets/images/mock-product-0.svg");
+        return context + "/assets/images/mock-product-0.svg";
+    }
+
+    public static String searchHistoryKey(javax.servlet.http.HttpSession session) {
+        String member = ProductActivityController.member(session);
+        return member == null ? "guest" : java.util.UUID.nameUUIDFromBytes(
+                ("daiso.search:" + member).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
     }
 
     public static boolean available(ProductDTO product) {

@@ -1,7 +1,6 @@
 (function () {
     "use strict";
 
-    const app = window.Daiso;
     const filter = document.querySelector("#catalog-filter");
     if (filter && !filter.hasAttribute("data-browse-filters")) {
         ["sort", "maxPrice", "status", "available"].forEach(function (name) {
@@ -53,52 +52,4 @@
             });
         });
     }
-
-    const input = document.querySelector("#search-query");
-    if (!input) {
-        return;
-    }
-    const suggestions = document.createElement("datalist");
-    suggestions.id = "product-suggestions";
-    input.setAttribute("list", suggestions.id);
-    input.after(suggestions);
-    let request;
-    let timer;
-
-    input.addEventListener("input", function () {
-        clearTimeout(timer);
-        if (request) {
-            request.abort();
-        }
-        suggestions.replaceChildren();
-
-        const query = input.value.trim();
-        if (query.length < 2) {
-            return;
-        }
-        timer = setTimeout(function () {
-            request = new AbortController();
-            const signal = request.signal;
-
-            fetch(app.url("api/products", { q: query, limit: 6 }), { signal: signal })
-                .then(function (response) {
-                    return response.ok ? response.json() : null;
-                }).then(function (data) {
-                    if (!data || signal.aborted) {
-                        return;
-                    }
-                    const names = Object.create(null);
-                    data.items.forEach(function (item) {
-                        if (!names[item.name]) {
-                            names[item.name] = true;
-                            const option = document.createElement("option");
-                            option.value = item.name;
-                            suggestions.appendChild(option);
-                        }
-                    });
-                }).catch(function () {
-                    // A suggestion request never prevents submitting the search form.
-                });
-        }, 200);
-    });
 })();

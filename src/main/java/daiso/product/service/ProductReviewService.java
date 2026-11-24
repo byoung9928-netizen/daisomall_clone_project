@@ -4,6 +4,11 @@ import daiso.product.dao.ProductConnectionFactory;
 import daiso.product.dao.ProductReviewDAO;
 import daiso.product.dao.ProductReviewDAO.Sort;
 import daiso.product.dao.ReviewExtrasDAO;
+import daiso.product.dao.ReviewFeedbackDAO;
+import daiso.product.dto.ReviewFeedback;
+import daiso.product.dto.ReviewFeedback.Reaction;
+import daiso.product.dto.ReviewFeedback.Reason;
+import daiso.product.dto.ReviewFeedback.Tally;
 import daiso.product.dto.ProductReview;
 import daiso.product.dto.ProductReviewPage;
 import daiso.product.dto.ReviewExtras;
@@ -27,26 +32,31 @@ public final class ProductReviewService {
     private final ProductReviewDAO dao = new ProductReviewDAO();
     private final ReviewExtrasDAO extras = new ReviewExtrasDAO();
 
+    private final ReviewFeedbackDAO feedback = new ReviewFeedbackDAO();
+
+    public enum ReportResult { SAVED, DUPLICATE, UNAVAILABLE }
+
     public enum Result { SAVED, PURCHASE_REQUIRED, DUPLICATE, STALE_OR_UNOWNED, EXTRAS_UNAVAILABLE }
 
     public ProductReviewPage page(String productId, String memberId, Sort sort, int requestedPage)
             throws SQLException, NamingException {
-        return page(productId, memberId, sort, requestedPage, 0);
+        return page(productId, memberId, sort, requestedPage, 0, false);
     }
 
-    public ProductReviewPage publicPage(String productId, Sort sort, int requestedPage, int photoPage)
+    public ProductReviewPage publicPage(String productId, String memberId, Sort sort, int requestedPage, int photoPage)
             throws SQLException, NamingException {
-        return page(productId, null, sort, requestedPage, photoPage);
+        return page(productId, memberId, sort, requestedPage, photoPage, true);
     }
 
-    private ProductReviewPage page(String productId, String memberId, Sort sort, int requestedPage, int photoPage)
+    private ProductReviewPage page(String productId, String memberId, Sort sort, int requestedPage, int photoPage,
+            boolean publicDetails)
             throws SQLException, NamingException {
         try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
             ProductReviewDAO.Summary summary = dao.summarize(connection, productId);
             long pages = Math.max(1, (summary.count + PAGE_SIZE - 1) / PAGE_SIZE);
             int page = (int) Math.max(1, Math.min(requestedPage, pages));
-            ProductReview ownReview = memberId == null ? null : dao.findOwn(connection, productId, memberId);
-            boolean canWrite = memberId != null && ownReview == null
+            ProductReview ownReview = publicDetails || memberId == null ? null : dao.findOwn(connection, productId, memberId);
+            boolean canWrite = !publicDetails && memberId != null && ownReview == null
                     && dao.findPaidItem(connection, memberId, productId, false).isPresent();
             List<ProductReview> items = dao.list(connection, productId, memberId, sort, PAGE_SIZE, (page - 1L) * PAGE_SIZE);
             List<Long> ids = items.stream().map(review -> review.id).collect(Collectors.toList());
@@ -61,10 +71,46 @@ public final class ProductReviewService {
                     highlights ? distributions(connection, productId) : List.of(),
                     highlights ? gallery(connection, productId, photoPage) : Gallery.EMPTY);
             ProductReviewPage result = new ProductReviewPage(
-                    items, ownReview, canWrite, summary.count, summary.average, page, pages, details);
+                    items, ownReview, canWrite, summary.count, summary.average, page, pages, details,
+                    publicDetails ? feedback.load(connection, ids, memberId) : ReviewFeedback.UNAVAILABLE);
             connection.commit();
             return result;
         }
+    }
+
+    public Tally react(long review, String member, Reaction reaction, boolean selected)
+            throws SQLException, NamingException {
+        return writeFeedback(review, member, null,
+                connection -> feedback.setReaction(connection, review, member, reaction, selected));
+    }
+
+    public ReportResult report(long review, String member, Reason reason) throws SQLException, NamingException {
+        return writeFeedback(review, member, ReportResult.UNAVAILABLE,
+                connection -> feedback.report(connection, review, member, reason)
+                        ? ReportResult.SAVED : ReportResult.DUPLICATE);
+    }
+
+    private <T> T writeFeedback(long review, String member, T unavailable, FeedbackWrite<T> write)
+            throws SQLException, NamingException {
+        try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
+            try {
+                T result = feedback.canRespond(connection, review, member) ? write.save(connection) : unavailable;
+                connection.commit();
+                return result;
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface FeedbackWrite<T> {
+        T save(Connection connection) throws SQLException;
     }
 
     private List<Distribution> distributions(Connection connection, String productId) throws SQLException {

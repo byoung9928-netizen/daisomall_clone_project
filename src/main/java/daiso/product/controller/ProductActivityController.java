@@ -27,6 +27,7 @@ import javax.servlet.http.HttpSession;
 public final class ProductActivityController {
     private static final String VIEW = "product/activity-items";
     private static final String SESSION_KEY = "product.recentViews";
+    private static final String DISPLAY_KEY = "product.recentDisplay";
     private static final int MAX_RECENT = 50;
     private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Seoul");
     private static final int PAGE_SIZE = 20;
@@ -96,16 +97,12 @@ public final class ProductActivityController {
     }
 
     static LocalDate remember(HttpSession session, String member, String productId) {
-        if (member == null) return null;
         LocalDate today = LocalDate.now(STORE_ZONE);
         synchronized (session) {
-            Map<String, LocalDate> previous = snapshot(session, member);
-            Map<String, LocalDate> items = new LinkedHashMap<>();
-            items.put(productId, today);
-            previous.forEach((id, date) -> {
-                if (items.size() < MAX_RECENT) items.putIfAbsent(id, date);
-            });
-            session.setAttribute(SESSION_KEY, new RecentViews(member, items));
+            Map<String, LocalDate> previous = recommendationSnapshot(session, member);
+            session.setAttribute(DISPLAY_KEY, new RecentViews(member, prepend(snapshot(session, member), productId, today)));
+            if (member == null) return null;
+            session.setAttribute(SESSION_KEY, new RecentViews(member, prepend(previous, productId, today)));
             return today.equals(previous.get(productId)) ? null : today;
         }
     }
@@ -131,11 +128,7 @@ public final class ProductActivityController {
                 ids.add(id);
             }
             if ("recent".equals(kind)) {
-                synchronized (session) {
-                    Map<String, LocalDate> items = new LinkedHashMap<>(snapshot(session, member));
-                    ids.forEach(items::remove);
-                    session.setAttribute(SESSION_KEY, new RecentViews(member, items));
-                }
+                removeDisplayed(session, member, ids);
             } else {
                 try (Connection connection = ProductQueries.connect()) {
                     try {
@@ -159,7 +152,39 @@ public final class ProductActivityController {
         return "ERROR";
     }
 
+    private static Map<String, LocalDate> prepend(Map<String, LocalDate> previous, String id, LocalDate date) {
+        Map<String, LocalDate> items = new LinkedHashMap<>();
+        items.put(id, date);
+        previous.forEach((key, day) -> {
+            if (items.size() < MAX_RECENT) items.putIfAbsent(key, day);
+        });
+        return items;
+    }
+
+    static void removeDisplayed(HttpSession session, String member, java.util.Set<String> ids) {
+        synchronized (session) {
+            Map<String, LocalDate> items = new LinkedHashMap<>(snapshot(session, member));
+            if (ids.isEmpty()) items.clear();
+            else ids.forEach(items::remove);
+            session.setAttribute(DISPLAY_KEY, new RecentViews(member, items));
+        }
+    }
+
+    public static boolean hasRecent(HttpSession session) {
+        return !snapshot(session, member(session)).isEmpty();
+    }
+
     static Map<String, LocalDate> snapshot(HttpSession session, String member) {
+        if (session == null) return Map.of();
+        Object value = session.getAttribute(DISPLAY_KEY);
+        if (value instanceof RecentViews && java.util.Objects.equals(member, ((RecentViews) value).member)) {
+            return ((RecentViews) value).items;
+        }
+        return recommendationSnapshot(session, member);
+    }
+
+    static Map<String, LocalDate> recommendationSnapshot(HttpSession session, String member) {
+        if (session == null || member == null) return Map.of();
         Object value = session.getAttribute(SESSION_KEY);
         return value instanceof RecentViews && member.equals(((RecentViews) value).member)
                 ? ((RecentViews) value).items : Map.of();
