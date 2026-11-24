@@ -479,7 +479,9 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
         <span>결제 예상 금액</span>
         <strong data-pickup-total><%= cartMoney.format(pickupSubtotal) %>원</strong>
     </div>
-    <button class="cart-order-button" type="button" disabled>주문하기</button>
+    <button id="cart-pickup-order" class="cart-order-button" type="button"
+            data-order-url="${pageContext.request.contextPath}/app/order/pickup/form" disabled>주문하기</button>
+    <p id="cart-pickup-order-hint" class="cart-address-message" role="status"></p>
 </aside>
 <script>
 (() => {
@@ -498,8 +500,35 @@ const deleteUrl = "${pageContext.request.contextPath}/app/cart/pickup/delete";
     const selectionCount = document.getElementById("cart-pickup-selected-count");
     const deleteSelected = document.getElementById("cart-pickup-delete-selected");
     const pickupChecks = () => Array.from(pickupContent.querySelectorAll("[data-pickup-amount]"));
+    // ===== 체크한 픽업 상품으로 한 매장의 주문서를 연다 =====
+    const pickupOrder = document.getElementById("cart-pickup-order");
+    const pickupOrderHint = document.getElementById("cart-pickup-order-hint");
+
+    function selectedPickupRows() {
+        return pickupChecks().filter(check => check.checked && !check.disabled)
+            .map(check => check.closest("tr").querySelector("[data-pickup-delete]"));
+    }
+
+    function syncPickupOrder() {
+        const items = selectedPickupRows();
+        const stores = new Set(items.map(item => item.dataset.storeId));
+        pickupOrder.disabled = pickupSaving || stores.size !== 1 || items.length > 100;
+        pickupOrderHint.textContent = stores.size > 1
+            ? "한 번에 한 매장의 상품을 선택해 주세요."
+            : items.length > 100 ? "한 번에 최대 100개 품목을 선택할 수 있어요." : "";
+    }
+
+    pickupOrder.addEventListener("click", () => {
+        if (pickupOrder.disabled) return;
+        const items = selectedPickupRows();
+        const query = new URLSearchParams({ storeId: items[0].dataset.storeId });
+        items.forEach(item => query.append("productId", item.dataset.productId));
+        window.location.assign(pickupOrder.dataset.orderUrl + "?" + query);
+    });
+
 
     function syncPickupSelection() {
+        syncPickupOrder();
         if (!selectAll) return;
         const all = pickupChecks();
         const selectable = all.filter(check => !check.disabled);
