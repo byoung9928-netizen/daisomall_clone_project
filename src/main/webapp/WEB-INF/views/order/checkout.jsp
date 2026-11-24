@@ -36,7 +36,7 @@
     .order-delivery-date{font-size:13px;color:#607083}.order-product-row{display:flex;gap:16px;align-items:center;padding:0 0 24px;margin-bottom:16px;border-bottom:1px solid #edf0f3}.order-product-row img{width:80px;height:108px;object-fit:contain;background:#f6f6f6;flex-shrink:0}.order-product-name{font-size:14px;line-height:1.6;margin:4px 0;color:#19222c;text-decoration:none}.order-product-price{font-size:20px;font-weight:800}.order-product-quantity{font-size:14px;font-weight:400}.order-screen .order-note{padding:18px 20px;background:#f6f7f9;color:#6c7c8f;font-size:12px;line-height:1.8}.order-note strong{display:block;margin-bottom:6px}.order-note p{margin:2px 0}
     .coupon-row{display:flex;gap:12px}.coupon-row input{min-width:0;flex:1;height:48px;border:1px solid #e1e4e9;padding:0 18px;background:#fff;color:#85909f;font-size:14px}.coupon-row button{width:120px}.order-discount-total{color:#e60023;font-size:16px}.order-point-row{display:grid;grid-template-columns:280px minmax(0,1fr) 120px;gap:12px;align-items:start;margin:0 0 24px;padding-left:20px}.order-point-row>label{font-size:14px;padding-top:14px}.order-point-input{position:relative}.order-point-input input{width:100%;height:48px;border:1px solid #e1e4e9;background:#f6f7f9;padding:0 32px 0 16px;color:#a6aeb8;font-size:14px}.order-point-input>span{position:absolute;right:16px;top:15px;font-size:14px;color:#697688}.order-point-balance{font-size:12px;color:#6c7c8f;margin:10px 12px 0}.order-screen button:disabled{cursor:default;background:#eceef2;color:#b7bec8;border-color:#eceef2}.gift-register{margin-left:312px;border-top:1px solid #e1e4e9;padding-top:16px;display:flex;align-items:center;gap:12px;font-size:12px;color:#607083}.order-screen .gift-register button{min-height:28px;font-size:12px;padding:0 10px}
     .order-remember{display:flex;align-items:center;gap:6px;font-size:12px;color:#4e5e72}.order-screen input[type=checkbox]{appearance:auto;width:18px;height:18px;accent-color:#171e24;margin:0}.order-required{color:#ed0025}.payment-methods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.order-screen .payment-method{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:104px;border:1px solid #e1e4e9;border-radius:0;background:#fff;color:#152333;font-size:14px;position:relative;padding:12px 6px}.order-screen .payment-method:disabled{background:#fff;color:#627083;border-color:#e1e4e9}.payment-method[aria-pressed=true]{border:2px solid #171e24!important}.payment-wordmark{display:block;font-size:18px;font-weight:800;line-height:1.2}.payment-wordmark.toss{color:#0064ff}.payment-wordmark.shinhan{color:#0866ff}.payment-wordmark.samsung{color:#00479c;font-size:13px}.payment-wordmark.naver{color:#00c73c}.payment-wordmark.kakao{background:#ffdf00;border-radius:20px;padding:3px 9px;color:#171b1f;font-size:14px}.payment-wordmark.payco{color:#ef173a}.payment-wordmark.nh{color:#0475dc}.payment-wordmark.lotte{color:#df143b}.payment-wordmark.culture{font-size:12px}.payment-badge{position:absolute;top:-11px;left:12px;background:#171e24;color:#fff;border-radius:12px;padding:3px 10px;font-size:10px}.payment-help{color:#68778a;font-size:13px;line-height:1.8;margin:20px 0}.payment-detail{border:1px solid #e1e4e9;padding:18px 20px;margin-top:20px;font-size:14px;line-height:1.8}.payment-detail p{margin:0}.order-agreements{border-top:1px solid #e1e4e9;padding-top:24px}.order-agreements label{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.7}.order-agreements input{flex-shrink:0;margin-top:3px!important}
-    .order-summary{border:1px solid #e1e4e9;padding:24px;position:sticky;top:24px;background:#fff}.order-summary-line{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin:0 0 14px}.order-summary-line.sub{color:#6a788b}.order-summary-total{border-top:1px solid #e1e4e9;border-bottom:1px solid #e1e4e9;margin-top:22px;padding:20px 0;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:16px}.order-summary-total strong{color:#e60023;font-size:22px}.order-summary details{font-size:13px;line-height:1.8;color:#4e5968;padding:20px 0;border-bottom:1px solid #e1e4e9}.order-summary summary{cursor:pointer;list-style:none;text-align:center}.order-summary summary::after{content:'⌄';display:block;margin-top:7px;font-size:20px}.order-summary details[open] summary::after{content:'⌃'}.order-summary details p{font-size:12px;color:#637184}.order-pay-button{width:100%;min-height:48px;margin-top:24px;border:0;background:#171e24;color:#fff;font-size:16px;font-weight:700;cursor:pointer}.order-pay-note{font-size:12px;color:#7b8795;text-align:center;margin:10px 0 0}.order-empty{padding:80px 0;text-align:center}.order-empty a{display:inline-block;padding:14px 24px;background:#171e24;color:#fff;text-decoration:none;margin-top:18px}.order-feedback{color:#c00020;font-size:14px;line-height:1.6}
+    .order-summary{border:1px solid #e1e4e9;padding:24px;position:sticky;top:24px;background:#fff}.order-summary-line{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin:0 0 14px}.order-summary-line.sub{color:#6a788b}.order-summary-total{border-top:1px solid #e1e4e9;border-bottom:1px solid #e1e4e9;margin-top:22px;padding:20px 0;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:16px}.order-summary-total strong{color:#e60023;font-size:22px}.order-summary details{font-size:13px;line-height:1.8;color:#4e5968;padding:20px 0;border-bottom:1px solid #e1e4e9}.order-summary summary{cursor:pointer;list-style:none;text-align:center}.order-summary summary::after{content:'⌄';display:block;margin-top:7px;font-size:20px}.order-summary details[open] summary::after{content:'⌃'}.order-summary details p{font-size:12px;color:#637184}.order-pay-button{width:100%;min-height:48px;margin-top:24px;border:0;background:#171e24;color:#fff;font-size:16px;font-weight:700;cursor:pointer}.order-pay-button:disabled{opacity:.6;cursor:not-allowed}.order-pay-note{font-size:12px;color:#7b8795;text-align:center;margin:10px 0 0}.order-empty{padding:80px 0;text-align:center}.order-empty a{display:inline-block;padding:14px 24px;background:#171e24;color:#fff;text-decoration:none;margin-top:18px}.order-feedback{color:#c00020;font-size:14px;line-height:1.6}
     .delivery-dialog{width:520px;max-width:calc(100% - 32px);max-height:calc(100dvh - 64px);padding:0;border:0;border-radius:2px;color:#15202c;background:white}.delivery-dialog::backdrop{background:rgba(0,0,0,.73)}.delivery-dialog-frame{display:flex;flex-direction:column;max-height:calc(100dvh - 64px)}.delivery-dialog-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 20px;flex-shrink:0}.delivery-dialog-header h2{margin:0;font-size:20px;font-weight:800}.delivery-close{width:28px;height:28px;border:0;background:none;color:#17212a;font-size:28px;line-height:1;cursor:pointer}.delivery-form-scroll{padding:4px 24px 8px;overflow-y:auto;min-height:0}.delivery-field{margin:0 0 30px}.delivery-field>label{display:block;font-size:18px;font-weight:700;margin-bottom:12px}.delivery-field input{width:100%;min-height:48px;border:1px solid #e1e4e9;background:#fff;border-radius:0;padding:12px 20px;font-size:14px;color:#17212a}.delivery-field input::placeholder{color:#b5bdc7}.delivery-field input[readonly]{background:#f6f7f9}.delivery-field input[aria-invalid=true]{border-color:#ed0025}.delivery-field .field-error{color:#ed0025;font-size:14px;margin:8px 0 0;line-height:1.5}.delivery-address-search{display:flex;gap:8px;margin-bottom:16px}.delivery-address-search input{flex:1;min-width:0}.delivery-address-search button{flex-shrink:0}.delivery-address-line{margin-bottom:16px}.delivery-dialog-footer{padding:20px 24px 24px;flex-shrink:0}.delivery-save{width:100%;height:48px;background:#171e24;border:0;color:white;font-size:14px;font-weight:700;cursor:pointer}.delivery-save:disabled{opacity:.5}.delivery-dialog :focus-visible,.order-screen :focus-visible{outline:2px solid #2a66bd;outline-offset:3px}.coupon-empty{text-align:center;padding:40px 0;color:#718092}
     @media(max-width:1100px){.order-point-row{grid-template-columns:170px minmax(0,1fr) 100px}.gift-register{margin-left:202px}.payment-methods{gap:10px}.payment-wordmark{font-size:16px}}
     @media(max-width:800px){.order-screen.container{width:calc(100% - 32px);padding-top:28px}.order-screen .order-title{font-size:28px;margin-bottom:32px}.order-columns{grid-template-columns:1fr}.order-summary{position:static}.order-block{margin-bottom:46px}.order-section-heading h2{font-size:22px}.order-point-row{grid-template-columns:1fr 90px;padding:0;gap:10px}.order-point-row>label{grid-column:1/-1;padding-top:0}.gift-register{margin-left:0}.payment-methods{grid-template-columns:repeat(2,minmax(0,1fr))}.order-section-heading{flex-wrap:wrap}.delivery-dialog{max-height:calc(100dvh - 32px)}.delivery-dialog-frame{max-height:calc(100dvh - 32px)}.delivery-dialog-header{padding:20px}.delivery-form-scroll{padding:4px 20px 8px}.delivery-dialog-footer{padding:16px 20px 20px}.delivery-field>label{font-size:16px}.order-remember{font-size:11px}}
@@ -114,18 +114,18 @@
             <button class="payment-method" type="button" disabled><span class="payment-wordmark samsung">SAMSUNG<br>pay</span>삼성페이</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark naver">N pay</span>네이버페이</button>
             <button class="payment-method" type="button" id="payment-kakao" aria-pressed="true"><span class="payment-wordmark kakao">● pay</span>카카오페이</button>
-            <button class="payment-method" type="button" disabled><span class="payment-wordmark toss">toss pay</span>토스페이</button>
+            <button class="payment-method" type="button" id="payment-toss-pay" aria-pressed="false"><span class="payment-wordmark toss" aria-hidden="true">toss pay</span>토스페이</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark payco">PAYCO</span>PAYCO</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark nh">NH pay</span>NH pay</button>
             <button class="payment-method" type="button" disabled><span class="payment-badge">다이소 삼성카드 혜택</span><span class="payment-wordmark samsung">삼성카드</span>삼성카드</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark lotte">롯데카드</span>롯데카드</button>
-            <button class="payment-method" type="button" disabled><span class="payment-wordmark">▤</span>신용카드</button>
+            <button class="payment-method" type="button" disabled><span class="payment-wordmark" aria-hidden="true">▤</span>신용카드</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark">₩</span>가상계좌 입금</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark culture">CULTURE LAND</span>컬쳐랜드상품권</button>
             <button class="payment-method" type="button" disabled><span class="payment-wordmark">▱</span>금융 법인카드(무기명)</button>
           </div>
-          <div class="payment-detail"><p><strong>카카오페이</strong></p></div>
-          <p class="payment-help">현재 결제수단은 카카오페이로 제공됩니다.</p>
+          <div class="payment-detail"><p><strong id="selected-payment-label">카카오페이</strong></p></div>
+          <p id="selected-payment-help" class="payment-help" aria-live="polite">카카오페이로 결제할 수 있습니다.</p>
           <div class="order-agreements"><label><input id="order-consent" type="checkbox"><span>주문 상품과 배송 정보를 확인했으며, 주문 및 결제 진행에 동의합니다.</span></label></div>
         </section>
       </div>
@@ -165,6 +165,9 @@
     <%@ include file="../common/footer.jspf" %>
     
     <!--카카오 api  --><script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" defer></script>
+    <%if (request.getAttribute("tossClientKey")!= null){ %>
+    <!-- toss api --><script src = "https://js.tosspayments.com/v2/standard" defer></script>
+    <%} %>
     <script>
     document.addEventListener('DOMContentLoaded', function () {
         const openDelivery = document.getElementById('open-delivery');
@@ -196,6 +199,29 @@
         }
         openDelivery.addEventListener('click', function () { dialog.showModal(); });
         const remember = document.getElementById('remember-payment');
+        const kakaoPayment = document.getElementById('payment-kakao');
+        const tossPay = document.getElementById('payment-toss-pay');
+        const paymentLabel = document.getElementById('selected-payment-label');
+        const paymentHelp = document.getElementById('selected-payment-help');
+        const payButton = document.getElementById('order-pay');
+        let selectedPayment = 'kakao';
+
+        function selectPayment(method) {
+            if (selectedPayment === method || payButton.disabled) return;
+            selectedPayment = method;
+            const isTossPay = method === 'toss-pay';
+
+            kakaoPayment.setAttribute('aria-pressed', String(!isTossPay));
+            tossPay.setAttribute('aria-pressed', String(isTossPay));
+            paymentLabel.textContent = isTossPay ? '토스페이' : '카카오페이';
+            paymentHelp.textContent = isTossPay
+                ? '토스페이 결제창 연결을 준비 중입니다.'
+                : '카카오페이로 결제할 수 있습니다.';
+            remember.disabled = isTossPay;
+        }
+
+        kakaoPayment.addEventListener('click', () => selectPayment('kakao'));
+        tossPay.addEventListener('click', () => selectPayment('toss-pay'));
         try { remember.checked = localStorage.getItem('daiso.order.rememberKakao') === 'true'; } catch (ignored) { /* 저장소 차단 시 기본값 사용 */ }
         remember.addEventListener('change',function () { try { if (remember.checked) localStorage.setItem('daiso.order.rememberKakao','true'); else localStorage.removeItem('daiso.order.rememberKakao'); } catch (ignored) { /* 화면 선택은 유지 */ } });
         document.querySelectorAll('[data-close-dialog]').forEach(function (button) { button.addEventListener('click', function () { button.closest('dialog').close(); }); });
@@ -246,70 +272,75 @@
                 openDelivery.textContent = '⌖ 변경'; addressSaved = true; dialog.close(); showNotice('배송지가 저장되었습니다.');
             } catch (error) { feedback.textContent = error.message; } finally { save.disabled = false; }
         });
-        document.getElementById('order-pay')
-        	.addEventListener('click', async function () {
-        		
-        		 const payButton = this;
+        //택배 주문서 결제버튼:선택한 결제수단으로 요청
+        payButton.addEventListener('click', async function () {
+            if (payButton.disabled) return;
 
-        	        if (payButton.disabled) return;
+            if (!addressSaved) {
+                showNotice('배송지를 등록해 주세요.');
+                dialog.showModal();
+                return;
+            }
 
-        	        if (!addressSaved) {
-        	            showNotice("배송지를 등록해 주세요.");
-        	            dialog.showModal();
-        	            return;
-        	        }
+            const consent = document.getElementById('order-consent');
+            if (!consent.checked) {
+                showNotice('주문 및 결제 진행에 동의해 주세요.');
+                consent.focus();
+                return;
+            }
 
-        	        const consent =
-        	            document.getElementById("order-consent");
+            const isTossPay = selectedPayment === 'toss-pay';
+            if (isTossPay && typeof window.TossPayments !== 'function') {
+                showNotice('토스페이 테스트 키와 SDK 설정을 확인해 주세요.');
+                return;
+            }
 
-        	        if (!consent.checked) {
-        	            showNotice("주문 및 결제 진행에 동의해 주세요.");
-        	            consent.focus();
-        	            return;
-        	        }
+            payButton.disabled = true;
 
-        	        // 배송 요청사항 저장이 끝난 뒤 결제 준비
-        	        await messageQueue;
+            try {
+                await messageQueue;
 
-        	        payButton.disabled = true;
+                const data = new URLSearchParams();
+                data.set('csrfToken', form.elements.csrfToken.value);
+                data.set('consent', 'true');
+                document.querySelectorAll('#order-selected-items input[name="cartItemId"]')
+                    .forEach(input => data.append('cartItemId', input.value));
+                if (isTossPay) data.set('expectedAmount', '<%= orderTotal %>');
 
-        	        const data = new URLSearchParams();
+                const contextPath = '<%= orderContext %>';
+                const path = isTossPay ? '/app/payment/toss/ready' : '/app/payment/kakao/ready';
+                const response = await fetch(contextPath + path, { method: 'POST', body: data });
 
-        	        data.set("csrfToken", form.elements.csrfToken.value);
-        	        data.set("consent", "true");
-        	        document.querySelectorAll(
-        	        	    '#order-selected-items input[name="cartItemId"]'
-        	        	).forEach(function (input) {
-        	        	    data.append("cartItemId", input.value);
-        	        	});
+                if (!response.ok) throw new Error('결제 준비 요청에 실패했습니다.');
 
-        	        try {
-        	            const response = await fetch(
-        	                "${pageContext.request.contextPath}/app/payment/kakao/ready",
-        	                {
-        	                    method: "POST",
-        	                    body: data
-        	                }
-        	            );
+                const result = await response.json();
+                if (result.message) throw new Error(result.message);
 
-        	            if (!response.ok) {
-        	                throw new Error("결제 준비 요청에 실패했습니다.");
-        	            }
+                if (isTossPay) {
+                    const payment = window.TossPayments(result.clientKey)
+                        .payment({ customerKey: result.customerKey });
+                    const callbackBase = location.origin + contextPath + '/app/payment/toss';
 
-        	            const result = JSON.parse(await response.text());
+                    await payment.requestPayment({
+                        method: 'CARD',
+                        amount: { currency: 'KRW', value: result.amount },
+                        orderId: result.orderId,
+                        orderName: result.orderName,
+                        successUrl: callbackBase + '/preview-success',
+                        failUrl: callbackBase + '/preview-fail',
+                        card: { flowMode: 'DIRECT', easyPay: 'TOSSPAY' }
+                    });
 
-        	            if (!result.redirectUrl) {
-        	                throw new Error(
-        	                    result.message || "결제창 주소를 받지 못했습니다."
-        	                );
-        	            }
+                    payButton.disabled = false;
+                    return;
+                }
 
-        	            window.location.assign(result.redirectUrl);
-
-        	        } catch (error) {
-        	            showNotice(error.message);
-        	            payButton.disabled = false;
-        	        }
+                if (!result.redirectUrl) throw new Error('결제창 주소를 받지 못했습니다.');
+                window.location.assign(result.redirectUrl);
+            } catch (error) {
+                showNotice(error.message);
+                payButton.disabled = false;
+            }
         });
     });
     </script>

@@ -156,20 +156,27 @@ public class OrderDAO {
 		        }
 		    }
 		}
-		public void savePaymentReady(
-		        long orderId, String tid, int amount)
+		// ===== 결제 대기 기록 저장 =====
+		public void savePaymentReady(long orderId, String tid, int amount)
+		        throws SQLException {
+		    savePaymentReady(orderId, tid, amount, "KAKAOPAY");
+		}
+
+		public void savePaymentReady(long orderId, String tid, int amount, String method)
 		        throws SQLException {
 
+		    if (!"KAKAOPAY".equals(method) && !"TOSSPAY".equals(method)) {
+		        throw new IllegalArgumentException("지원하지 않는 결제수단입니다.");
+		    }
+
 		    if (tid == null || tid.isBlank()) {
-		        throw new IllegalArgumentException(
-		            "카카오페이 결제번호가 없습니다."
-		        );
+		        throw new IllegalArgumentException("결제 식별자가 없습니다.");
 		    }
 
 		    String sql =
 		        "INSERT INTO payment_attempts "
 		        + "(order_id, method, status, amount, tid) "
-		        + "SELECT order_id, 'KAKAOPAY', 'PENDING', "
+		        + "SELECT order_id, ?, 'PENDING', "
 		        + "total_amount, ? "
 		        + "FROM orders "
 		        + "WHERE order_id = ? "
@@ -186,9 +193,10 @@ public class OrderDAO {
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(sql)) {
 
-		                pstmt.setString(1, tid);
-		                pstmt.setLong(2, orderId);
-		                pstmt.setInt(3, amount);
+		                pstmt.setString(1, method);
+		                pstmt.setString(2, tid);
+		                pstmt.setLong(3, orderId);
+		                pstmt.setInt(4, amount);
 
 		                int result = pstmt.executeUpdate();
 

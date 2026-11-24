@@ -143,6 +143,12 @@ public class OrderController {
         request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
         request.setAttribute("deliveryMessage", session.getAttribute("orderDeliveryMessage"));
         if (!purchasable) request.setAttribute("orderError", "상품 상태 또는 재고를 확인해 주세요. 장바구니에서 수량을 변경하거나 상품을 삭제할 수 있습니다.");
+        String tossClientKey = System.getenv("TOSS_PAYMENTS_CLIENT_KEY");
+        String tossSecretKey = System.getenv("TOSS_PAYMENTS_SECRET_KEY");
+        if(tossClientKey != null && tossClientKey.startsWith("test_ck")
+        			&&tossSecretKey != null && tossSecretKey.startsWith("test_sk")) {
+        	request.setAttribute("tossClientKey", tossClientKey);
+        }
         request.setAttribute("pageName", "checkout");
         request.setAttribute("activeNavigation", "");
         return "shop/page";
