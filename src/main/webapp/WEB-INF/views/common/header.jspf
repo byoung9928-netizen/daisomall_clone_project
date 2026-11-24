@@ -23,13 +23,18 @@
         <a class="brand" href="${pageContext.request.contextPath}/" aria-label="다이소몰 클론 홈">
             <img src="${pageContext.request.contextPath}/assets/images/home/daiso-logo.svg" alt="" width="136" height="33">
         </a>
-        <form class="search-form" method="get" action="${pageContext.request.contextPath}/search.jsp" role="search" aria-label="상품 검색">
+        <form class="search-form" method="get" action="${pageContext.request.contextPath}/search.jsp" role="search" aria-label="상품 검색"
+              data-shop-search data-suggest-url="${pageContext.request.contextPath}/api/products/suggestions"
+              data-search-scope-url="${pageContext.request.contextPath}/api/products/search-scope"
+              data-history-key="<%= ProductView.searchHistoryKey(session) %>">
             <% if ("store".equals(request.getParameter("collection"))) { %>
                 <input type="hidden" name="collection" value="store">
             <% } %>
             <label class="visually-hidden" for="search-query">검색어</label>
             <input id="search-query" type="search" name="q" maxlength="100" autocomplete="off" value="<%= daiso.product.controller.ProductView.escape(request.getParameter("q")) %>" placeholder="상품명, 품번, 브랜드 검색">
+            <button type="button" class="shop-search-clear" aria-label="검색어 지우기" data-search-clear hidden>×</button>
             <button type="submit" aria-label="검색"><span class="search-icon" aria-hidden="true"></span></button>
+            <div class="shop-search-panel" id="shop-search-panel" data-search-panel hidden></div>
         </form>
 		<div class="header-service-tools">
 			<button id="open-ai-chat" class="ai-chat-trigger" type="button"

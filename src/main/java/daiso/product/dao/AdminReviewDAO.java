@@ -1,6 +1,8 @@
 package daiso.product.dao;
 
 import daiso.product.dto.ReviewExtras.Answer;
+import daiso.product.dto.ReviewFeedback.ReportStatus;
+import daiso.product.dao.ReviewFeedbackDAO.ReportCounts;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,6 +15,7 @@ import java.util.stream.Collectors;
 
 public final class AdminReviewDAO {
     public enum State { ALL, ACTIVE, HIDDEN, REMOVED, DELETED }
+    public enum ReportFilter { ALL, REPORTED, PENDING }
 
     public enum Moderation {
         PUBLISHED, HIDDEN, DELETED;
@@ -28,7 +31,10 @@ public final class AdminReviewDAO {
     }
     private final ReviewExtrasDAO extras = new ReviewExtrasDAO();
 
-    public Page list(Connection connection, String keyword, int rating, State state, int requestedPage)
+    private final ReviewFeedbackDAO feedback = new ReviewFeedbackDAO();
+
+    public Page list(Connection connection, String keyword, int rating, State state, ReportFilter reportFilter,
+            int requestedPage)
             throws SQLException {
         StringBuilder scope = new StringBuilder(" FROM product_reviews r "
                 + "JOIN products p ON p.product_id = r.product_id "
@@ -49,6 +55,16 @@ public final class AdminReviewDAO {
             scope.append(" AND r.deleted_at IS NULL AND COALESCE(rm.moderation_state, 'PUBLISHED') = ?");
             parameters.add(state == State.ACTIVE ? Moderation.PUBLISHED.name()
                     : state == State.HIDDEN ? Moderation.HIDDEN.name() : Moderation.DELETED.name());
+        }
+
+        boolean reportsAvailable = feedback.reportsAvailable(connection);
+        if (reportFilter != ReportFilter.ALL) {
+            if (!reportsAvailable) scope.append(" AND 1 = 0");
+            else {
+                scope.append(" AND EXISTS (SELECT 1 FROM product_review_reports rr WHERE rr.review_id = r.review_id");
+                if (reportFilter == ReportFilter.PENDING) scope.append(" AND rr.status = 'PENDING'");
+                scope.append(")");
+            }
         }
 
         long total;
@@ -79,7 +95,8 @@ public final class AdminReviewDAO {
         boolean attachmentsAvailable = !ids.isEmpty() && extras.available(connection);
         return new Page(items, total, page, pages,
                 attachmentsAvailable ? extras.answers(connection, ids) : Map.of(),
-                attachmentsAvailable ? extras.photos(connection, ids) : Map.of());
+                attachmentsAvailable ? extras.photos(connection, ids) : Map.of(), reportsAvailable,
+                reportsAvailable ? feedback.reportCounts(connection, ids) : Map.of());
     }
 
     public boolean moderate(Connection connection, long reviewId, long version, String administrator,
@@ -111,7 +128,23 @@ public final class AdminReviewDAO {
             query.setLong(1, reviewId);
             if (query.executeUpdate() != 1) throw new SQLException("리뷰 버전 갱신 실패");
         }
+        if (next != Moderation.PUBLISHED && feedback.reportsAvailable(connection)) {
+            feedback.processReports(connection, reviewId, administrator, ReportStatus.RESOLVED);
+        }
         return true;
+    }
+
+    public boolean dismissReports(Connection connection, long id, long version, String administrator)
+            throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement(
+                "SELECT review_id FROM product_reviews WHERE review_id = ? AND version = ? FOR UPDATE")) {
+            query.setLong(1, id);
+            query.setLong(2, version);
+            try (ResultSet rows = query.executeQuery()) {
+                if (!rows.next()) return false;
+            }
+        }
+        return feedback.processReports(connection, id, administrator, ReportStatus.DISMISSED) > 0;
     }
 
     private static void bind(PreparedStatement query, List<Object> parameters) throws SQLException {
@@ -125,15 +158,19 @@ public final class AdminReviewDAO {
         public final long pages;
         public final Map<Long, List<Answer>> answers;
         public final Map<Long, List<Long>> photos;
+        public final boolean reportsAvailable;
+        public final Map<Long, ReportCounts> reports;
 
         Page(List<Row> items, long total, int number, long pages, Map<Long, List<Answer>> answers,
-                Map<Long, List<Long>> photos) {
+                Map<Long, List<Long>> photos, boolean reportsAvailable, Map<Long, ReportCounts> reports) {
             this.items = List.copyOf(items);
             this.total = total;
             this.number = number;
             this.pages = pages;
             this.answers = answers;
             this.photos = photos;
+            this.reportsAvailable = reportsAvailable;
+            this.reports = reports;
         }
     }
 
