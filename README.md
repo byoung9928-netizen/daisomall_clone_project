@@ -60,6 +60,15 @@ JSP 기반 쇼핑몰 프론트엔드 학습 프로젝트입니다. 다이소몰 
 - 관리자 권한과 회원별 주문 구분은 클라이언트 Mock입니다. 실제 인증·인가·개인정보 보호 수단으로 사용하면 안 됩니다.
 - v0.8 통합 수정은 포함하지 않습니다. 실제 운영 전에는 인증·주문·결제·재고 처리와 데이터 검증을 서버에서 구현해야 합니다.
 
+## 상품 리뷰 반응·신고 DB 설치
+
+신규 설치와 기존 개발 DB 모두에서 members와 product_reviews가 있는지, [기존 리뷰 관리 SQL](docs/sql/product-review-moderation.sql)이 적용됐는지 먼저 확인합니다. 이어 아래 SQL을 대상 개발 DB에서 순서대로 실행합니다.
+
+1. [리뷰 반응 테이블 생성](docs/sql/product-review-reactions-migration.sql)
+2. [리뷰 신고 테이블 생성](docs/sql/product-review-reports-migration.sql)
+
+두 파일은 빈 테이블만 추가합니다. 적용 후 상품 상세의 리뷰 반응·신고와 관리자 **리뷰 관리**의 신고 필터를 확인할 수 있습니다.
+
 ## 검증 및 문서
 
 화면별 실제 HTML과 전용 JavaScript는 각 View JSP에 있습니다. 공통 HTML은 JSPF, 여러 화면에서 재사용하는 동작은 외부 JS로 공유합니다. [초보자 인수인계 문서](docs/guides/frontend-handover.md)에서 담당 파일과 수정 방법을 확인하세요. 기존 템플릿 복제 시스템은 제거했습니다.

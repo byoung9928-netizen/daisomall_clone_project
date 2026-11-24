@@ -1,6 +1,9 @@
 <%@ page pageEncoding="UTF-8" %>
-<%@ page import="java.text.NumberFormat,daiso.product.dto.ReviewExtras.Distribution,daiso.product.dto.ReviewExtras.Gallery" %>
+<%@ page import="java.text.NumberFormat,daiso.product.dto.ReviewExtras.Distribution,daiso.product.dto.ReviewExtras.Gallery,daiso.product.dto.ReviewFeedback.Reason" %>
 <section id="product-reviews" class="pd-reviews" aria-labelledby="product-reviews-title"
+         data-reaction-url="<%= ProductView.escape(context + "/app/products/reviews/reaction") %>"
+         data-report-url="<%= ProductView.escape(context + "/app/products/reviews/report") %>"
+         data-feedback-login="<%= ProductView.escape(context + "/app/member/login") %>"
          data-review-endpoint="<%= ProductView.escape(context + "/app/products/detail/reviews") %>">
     <header class="pd-reviews__heading">
         <h2 id="product-reviews-title">리뷰</h2>
@@ -84,5 +87,35 @@
             <p class="pd-reviews__status" role="status" data-review-status></p>
             <%@ include file="detail-review-results.jspf" %>
         <% } %>
+    <% } %>
+    <% if (detailReviews != null && detailReviews.feedback.reportsAvailable && !detailReviews.items.isEmpty()) { %>
+        <dialog class="pd-review-dialog" data-report-dialog aria-labelledby="review-report-title">
+            <form data-report-form>
+                <header>
+                    <h3 id="review-report-title">신고하기</h3>
+                    <button type="button" data-report-close aria-label="신고 창 닫기">×</button>
+                </header>
+                <fieldset>
+                    <legend class="visually-hidden">신고 사유</legend>
+                    <% for (Reason reason : Reason.values()) { %>
+                        <label><input type="radio" name="reason" value="<%= reason.name() %>" required
+                            <%= reason == Reason.OFF_TOPIC ? "checked" : "" %>> <%= reason.label %></label>
+                    <% } %>
+                </fieldset>
+                <p class="pd-review-dialog-note">신고는 반대 의견을 표시하는 기능이 아닙니다.</p>
+                <p class="pd-review-feedback-error" data-report-error role="alert" hidden></p>
+                <footer>
+                    <button type="button" data-report-close>취소</button>
+                    <button type="submit" class="pd-report-primary">신고하기</button>
+                </footer>
+            </form>
+        </dialog>
+        <dialog class="pd-review-dialog pd-review-dialog--complete" data-report-complete aria-labelledby="review-report-complete-title">
+            <form method="dialog">
+                <h3 id="review-report-complete-title">신고가 접수되었습니다.</h3>
+                <p>소중한 의견에 감사드립니다.</p>
+                <footer><button class="pd-report-primary" autofocus>확인</button></footer>
+            </form>
+        </dialog>
     <% } %>
 </section>

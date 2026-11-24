@@ -311,6 +311,123 @@ public class ProductDAO {
         return String.join(",", Collections.nCopies(count, "?"));
     }
 
+    List<ProductDTO> recentQuickPage(Connection conn, List<String> ids, int limit, int offset) throws SQLException {
+        if (ids.isEmpty() || offset >= ids.size()) return List.of();
+        String placeholders = markers(ids.size());
+        String sql = VISIBLE_CATEGORIES + " SELECT " + ADMIN_COLUMNS + " FROM products p "
+                + "JOIN visible_categories v ON p.category_id = v.category_id "
+                + "WHERE p.status <> 'DISCONTINUED' AND p.product_id IN (" + placeholders + ") "
+                + "ORDER BY FIELD(p.product_id, " + placeholders + ") LIMIT ? OFFSET ?";
+        List<Object> parameters = new ArrayList<>(ids);
+        parameters.addAll(ids);
+        parameters.add(limit);
+        parameters.add(offset);
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, parameters);
+            return readProducts(query);
+        }
+    }
+
+    Map<String, CardFacts> cardFacts(Connection conn, List<String> ids, boolean includePurchases) throws SQLException {
+        if (ids.isEmpty()) return Map.of();
+        String sales = includePurchases ? " LEFT JOIN (SELECT i.product_id, SUM(i.quantity) AS units "
+                + "FROM order_items i JOIN approved_orders a ON a.order_id = i.order_id "
+                + "WHERE i.product_id IN (" + markers(ids.size()) + ") GROUP BY i.product_id) sales "
+                + "ON sales.product_id = p.product_id" : "";
+        String sql = (includePurchases ? "WITH " + APPROVED_ORDER_CTE : "")
+                + " SELECT p.product_id, p.created_at >= CURRENT_TIMESTAMP - INTERVAL 14 DAY "
+                + "AND p.created_at <= CURRENT_TIMESTAMP AND NOT EXISTS (SELECT 1 FROM products batch "
+                + "WHERE batch.created_at >= CURRENT_TIMESTAMP - INTERVAL 15 DAY "
+                + "AND DATE(batch.created_at) = DATE(p.created_at) LIMIT 1 OFFSET 99) AS is_new, "
+                + (includePurchases ? "COALESCE(sales.units, 0)" : "0") + " AS units FROM products p"
+                + sales + " WHERE p.product_id IN (" + markers(ids.size()) + ")";
+        List<Object> parameters = new ArrayList<>();
+        if (includePurchases) {
+            parameters.add(-30);
+            parameters.addAll(ids);
+        }
+        parameters.addAll(ids);
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, parameters);
+            try (ResultSet results = query.executeQuery()) {
+                Map<String, CardFacts> facts = new LinkedHashMap<>();
+                while (results.next()) {
+                    facts.put(results.getString("product_id"),
+                            new CardFacts(results.getBoolean("is_new"), results.getLong("units")));
+                }
+                return facts;
+            }
+        }
+    }
+
+    List<SearchSuggestion> searchSuggestions(Connection conn, String term) throws SQLException {
+        List<Object> parameters = new ArrayList<>();
+        String sql;
+        if (term.isEmpty()) {
+            sql = VISIBLE_CATEGORIES + APPROVED_ORDERS
+                    + ", picks AS (SELECT p.name AS term, p.image_url, p.product_id, p.review_count, "
+                    + "COALESCE(sales_rank.units, 0) AS units, "
+                    + "ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY COALESCE(sales_rank.units, 0) DESC, "
+                    + "p.review_count DESC, p.product_id) AS category_rank "
+                    + "FROM products p JOIN visible_categories v ON v.category_id = p.category_id"
+                    + salesRankJoin(false, false)
+                    + " WHERE p.status = 'AVAILABLE' AND p.stock_quantity > 0) "
+                    + "SELECT term, NULL AS category_id, MAX(image_url) AS image_url FROM picks "
+                    + "WHERE category_rank = 1 GROUP BY term ORDER BY MAX(units) DESC, MAX(review_count) DESC, term LIMIT 6";
+            parameters.add(-30);
+        } else {
+            sql = VISIBLE_CATEGORIES
+                    + ", public_products AS (SELECT p.name, p.brand, p.category_id, p.review_count FROM products p "
+                    + "JOIN visible_categories v ON v.category_id = p.category_id WHERE p.status <> 'DISCONTINUED'), "
+                    + "populated_categories AS (SELECT DISTINCT category_id FROM public_products "
+                    + "UNION DISTINCT SELECT v.parent_id FROM visible_categories v "
+                    + "JOIN populated_categories c ON c.category_id = v.category_id WHERE v.parent_id IS NOT NULL), "
+                    + "terms AS (SELECT name AS term, NULL AS category_id, review_count AS popularity FROM public_products "
+                    + "WHERE LOCATE(?, name) > 0 UNION ALL SELECT brand, NULL, review_count FROM public_products "
+                    + "WHERE LOCATE(?, brand) > 0 UNION ALL SELECT v.name, v.category_id, 0 FROM visible_categories v "
+                    + "JOIN populated_categories c ON c.category_id = v.category_id WHERE LOCATE(?, v.name) > 0) "
+                    + "SELECT term, CASE WHEN COUNT(category_id) = COUNT(*) AND COUNT(DISTINCT category_id) = 1 "
+                    + "THEN MAX(category_id) END AS category_id, NULL AS image_url FROM terms "
+                    + "GROUP BY term HAVING COUNT(category_id) <> COUNT(*) OR COUNT(DISTINCT category_id) = 1 "
+                    + "ORDER BY CASE WHEN term = ? THEN 0 WHEN LOCATE(?, term) = 1 THEN 1 ELSE 2 END, "
+                    + "MAX(popularity) DESC, CHAR_LENGTH(term), term LIMIT 10";
+            parameters.addAll(Collections.nCopies(5, term));
+        }
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, parameters);
+            try (ResultSet results = query.executeQuery()) {
+                List<SearchSuggestion> matches = new ArrayList<>();
+                while (results.next()) {
+                    matches.add(new SearchSuggestion(results.getString("term"), results.getString("category_id"),
+                            results.getString("image_url")));
+                }
+                return matches;
+            }
+        }
+    }
+
+    public static final class CardFacts {
+        public final boolean newProduct;
+        public final long units;
+
+        CardFacts(boolean newProduct, long units) {
+            this.newProduct = newProduct;
+            this.units = units;
+        }
+    }
+
+    static final class SearchSuggestion {
+        final String term;
+        final String categoryId;
+        final String image;
+
+        SearchSuggestion(String term, String categoryId, String image) {
+            this.term = term;
+            this.categoryId = categoryId;
+            this.image = image;
+        }
+    }
+
     List<ProductActivityItem> findRecentlyViewed(Connection conn, List<String> ids, int limit, int offset) throws SQLException {
         if (ids.isEmpty() || offset >= ids.size()) return List.of();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
@@ -591,11 +708,13 @@ public class ProductDAO {
         }
     }
 
-    private static final String APPROVED_ORDERS = ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
+    private static final String APPROVED_ORDER_CTE = "approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "
             + "FROM orders o JOIN payment_attempts pa ON pa.order_id = o.order_id "
             + "WHERE o.status = 'PAID' AND o.canceled_at IS NULL AND pa.status = 'APPROVED' "
             + "AND pa.tid <> '' AND pa.amount = o.total_amount "
             + "AND pa.approved_at >= TIMESTAMPADD(DAY, ?, CURRENT_TIMESTAMP) GROUP BY o.order_id)";
+
+    private static final String APPROVED_ORDERS = ", " + APPROVED_ORDER_CTE;
 
     private static String salesRankJoin(boolean required, boolean growth) {
         String units = growth

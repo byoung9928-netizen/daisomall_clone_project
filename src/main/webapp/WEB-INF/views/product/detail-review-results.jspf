@@ -1,22 +1,28 @@
 <%@ page pageEncoding="UTF-8" %>
-<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview,daiso.product.dto.ReviewExtras.Answer" %>
+<%@ page import="java.time.format.DateTimeFormatter,daiso.product.dto.ProductReview,daiso.product.dto.ReviewFeedback.Reaction,daiso.product.dto.ReviewFeedback.Tally,daiso.product.dto.ReviewExtras.Answer" %>
 <% DateTimeFormatter reviewDate = DateTimeFormatter.ISO_LOCAL_DATE; %>
 <div class="pd-reviews__results" data-review-results
      data-review-product="<%= ProductView.escape(product.getProductId()) %>"
      data-review-sort="<%= ProductView.escape(selectedReviewSort) %>"
+     data-feedback-csrf="<%= ProductView.escape(request.getAttribute("detailReviewCsrf")) %>"
      data-review-page="<%= detailReviews.page %>" tabindex="-1">
     <% if (detailReviews.items.isEmpty()) { %>
         <p class="pd-reviews__empty">아직 등록된 리뷰가 없습니다.</p>
     <% } else { %>
         <ul class="pd-reviews__list">
             <% for (ProductReview review : detailReviews.items) { %>
-                <li class="pd-reviews__item">
+                <li class="pd-reviews__item" data-feedback-review="<%= review.id %>">
                     <div class="pd-reviews__meta">
                         <span class="pd-reviews__stars" aria-label="별점 <%= review.rating %>점">
                             <span aria-hidden="true"><%= "★".repeat(review.rating) %><span class="pd-reviews__stars-empty"><%= "★".repeat(5 - review.rating) %></span></span>
                         </span>
                         <span class="pd-reviews__author"><%= ProductView.escape(review.authorLabel) %></span>
-                        <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
+                        <div class="pd-review-date-actions">
+                            <time datetime="<%= review.createdAt %>"><%= review.createdAt.format(reviewDate) %></time>
+                            <% if (detailReviews.feedback.reportsAvailable && !review.owner) { %>
+                                <button type="button" data-review-report>신고</button>
+                            <% } %>
+                        </div>
                     </div>
                     <% if (!detailReviews.extras.answers(review.id).isEmpty()) { %>
                         <dl class="pd-reviews__answers">
@@ -40,6 +46,19 @@
                             <% } %>
                         </div>
                     <% } %>
+                    <% if (detailReviews.feedback.reactionsAvailable) { %>
+                        <div class="pd-review-reactions" role="group" aria-label="리뷰 반응">
+                            <% for (Reaction reaction : Reaction.values()) {
+                                   Tally tally = detailReviews.feedback.tally(review.id, reaction); %>
+                                <button type="button" data-review-reaction="<%= reaction.name() %>"
+                                        aria-pressed="<%= tally.selected %>" <%= review.owner ? "disabled" : "" %>>
+                                    <span aria-hidden="true"><%= reaction.icon %></span>
+                                    <%= reaction.label %><span class="pd-review-reaction-count" data-reaction-count <%= tally.count == 0 ? "hidden" : "" %>><%= tally.count == 0 ? "" : Long.toString(tally.count) %></span>
+                                </button>
+                            <% } %>
+                        </div>
+                    <% } %>
+                    <p class="pd-review-feedback-error" data-feedback-error role="status" hidden></p>
                 </li>
             <% } %>
         </ul>

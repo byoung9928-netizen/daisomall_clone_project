@@ -3,6 +3,11 @@ package daiso.product.controller;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
+import daiso.common.annotation.DaisoResponseBody;
+import daiso.product.dto.ReviewFeedback.Reaction;
+import daiso.product.dto.ReviewFeedback.Reason;
+import daiso.product.dto.ReviewFeedback.Tally;
+import daiso.product.service.ProductReviewService.ReportResult;
 import daiso.product.dao.ProductReviewDAO.Sort;
 import daiso.product.dto.ReviewExtras.Submission;
 import daiso.product.service.ProductReviewService;
@@ -76,6 +81,54 @@ public final class ProductReviewController {
         } catch (SQLException | NamingException failure) {
             return unavailable(request, response, failure);
         }
+    }
+
+    @DaisoPostMapping(ROUTE + "/reaction")
+    @DaisoResponseBody
+    public String reaction(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return feedback(request, response, false);
+    }
+
+    @DaisoPostMapping(ROUTE + "/report")
+    @DaisoResponseBody
+    public String report(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return feedback(request, response, true);
+    }
+
+    private String feedback(HttpServletRequest request, HttpServletResponse response, boolean report) throws IOException {
+        request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setHeader("Cache-Control", "private, no-store");
+        HttpSession session = request.getSession(false);
+        String member = memberId(session);
+        if (member == null) return feedbackError(response, 401, "LOGIN");
+        if (!validToken(request, session, member)) return feedbackError(response, 403, "CSRF");
+        try {
+            long id = Long.parseLong(ProductQueries.text(request, "reviewId", 19));
+            if (id < 1) throw new IllegalArgumentException();
+            if (report) {
+                Reason reason = Reason.valueOf(ProductQueries.text(request, "reason", 24));
+                ReportResult result = service.report(id, member, reason);
+                if (result == ReportResult.DUPLICATE) return feedbackError(response, 409, "ALREADY_REPORTED");
+                if (result != ReportResult.SAVED) return feedbackError(response, 404, "UNAVAILABLE_REVIEW");
+                return "REPORTED";
+            }
+            Reaction type = Reaction.valueOf(ProductQueries.text(request, "reaction", 24));
+            String selected = ProductQueries.text(request, "selected", 5);
+            if (!"true".equals(selected) && !"false".equals(selected)) throw new IllegalArgumentException();
+            Tally tally = service.react(id, member, type, Boolean.parseBoolean(selected));
+            if (tally == null) return feedbackError(response, 404, "UNAVAILABLE_REVIEW");
+            return "{\"selected\":" + tally.selected + ",\"count\":" + tally.count + "}";
+        } catch (IllegalArgumentException error) {
+            return feedbackError(response, 400, "INVALID_INPUT");
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("리뷰 반응 또는 신고 저장 실패", error);
+            return feedbackError(response, 503, "UNAVAILABLE");
+        }
+    }
+
+    private static String feedbackError(HttpServletResponse response, int status, String code) {
+        response.setStatus(status);
+        return code;
     }
 
     @DaisoPostMapping(ROUTE + "/create")
@@ -222,12 +275,12 @@ public final class ProductReviewController {
         return id;
     }
 
-    private static String memberId(HttpSession session) {
+    static String memberId(HttpSession session) {
         Object value = session == null ? null : session.getAttribute("member_id");
         return value instanceof String && !((String) value).isBlank() ? (String) value : null;
     }
 
-    private static String token(HttpSession session, String member) {
+    static String token(HttpSession session, String member) {
         synchronized (session) {
             Object value = session.getAttribute(TOKEN);
             if (!(value instanceof String) || !member.equals(session.getAttribute(TOKEN_OWNER))) {
