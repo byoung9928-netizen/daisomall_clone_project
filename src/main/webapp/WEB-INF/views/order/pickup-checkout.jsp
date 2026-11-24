@@ -218,14 +218,12 @@
             padding-top: 24px;
         }
         .pickup-checkout-actions .button { width: min(100%, 360px); border-radius: 0; }
-        .pickup-checkout .button { font-weight: 700; }
-        .pickup-checkout .button:disabled {
+        .pickup-checkout .pickup-pay-button {
             min-height: 48px;
-            border: 1px solid var(--pickup-border);
-            color: var(--pickup-muted);
-            background: var(--pickup-surface);
-            opacity: 1;
-            cursor: not-allowed;
+            border-color: #414141;
+            background: #414141;
+            color: #fff;
+            font-weight: 700;
         }
 
         .pickup-checkout .pickup-checkout-total .button {
@@ -233,12 +231,6 @@
             margin-top: 16px;
             border-radius: 0;
         }
-        .pickup-checkout .pickup-checkout-total .button:disabled {
-            background: #414141;
-            border-color: #414141;
-            color: #fff;
-        }
-
         .pickup-method-grid {
             list-style: none;
             padding: 0;
@@ -258,12 +250,23 @@
             gap: 7px;
             padding: 14px 8px;
             border: 1px solid var(--pickup-border);
-            border-radius: 10px;
+            border-radius: 0;
             background: #fff;
             text-align: center;
         }
-        .pickup-method--planned {
-            border-color: var(--pickup-muted);
+        .pickup-method-option {
+            position: relative;
+            min-width: 0;
+            display: grid;
+        }
+        .pickup-method-option label { cursor: pointer; }
+        .pickup-method-option input:focus-visible + .pickup-method {
+            outline: 2px solid var(--pickup-accent);
+            outline-offset: 2px;
+        }
+        .pickup-method-option input:checked + .pickup-method {
+            border-color: var(--pickup-accent);
+            box-shadow: inset 0 0 0 1px var(--pickup-accent);
             background: var(--pickup-surface);
         }
         .pickup-method-mark {
@@ -283,7 +286,7 @@
         .pickup-method-mark--lotte { color: #9a2348; }
         .pickup-method-mark--credit, .pickup-method-mark--bank { font-size: 20px; }
         .pickup-method-name { line-height: 1.35; overflow-wrap: anywhere; }
-        .pickup-method--planned .pickup-method-name { font-weight: 750; }
+        .pickup-method-option input:checked + .pickup-method .pickup-method-name { font-weight: 750; }
 
         @media (min-width: 841px) and (max-width: 1060px) {
             .pickup-method-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -381,11 +384,14 @@
                     </section>
                     <section aria-labelledby="pickup-payment-method-title">
                         <h2 id="pickup-payment-method-title">결제수단</h2>
-                        <%-- ===== 결제수단 타일: 결제 API가 연결되기 전까지 안내용 ===== --%>
-                        <ul class="pickup-method-grid" aria-label="결제수단 미리보기">
-                            <li class="pickup-method pickup-method--planned">
-                                <span class="pickup-method-mark pickup-method-mark--kakao" aria-hidden="true">● pay</span>
-                                <span class="pickup-method-name">카카오페이</span>
+                        <%-- ===== 결제수단 타일 ===== --%>
+                        <ul class="pickup-method-grid" aria-label="결제수단">
+                            <li class="pickup-method-option">
+                                <input class="visually-hidden" id="pickup-kakao-pay" type="radio" name="pickup-payment-method" value="kakao">
+                                <label class="pickup-method" for="pickup-kakao-pay">
+                                    <span class="pickup-method-mark pickup-method-mark--kakao" aria-hidden="true">● pay</span>
+                                    <span class="pickup-method-name">카카오페이</span>
+                                </label>
                             </li>
                             <li class="pickup-method">
                                 <span class="pickup-method-mark pickup-method-mark--toss" aria-hidden="true">toss</span>
@@ -403,9 +409,12 @@
                                 <span class="pickup-method-mark pickup-method-mark--naver" aria-hidden="true">N pay</span>
                                 <span class="pickup-method-name">네이버페이</span>
                             </li>
-                            <li class="pickup-method">
-                                <span class="pickup-method-mark pickup-method-mark--toss" aria-hidden="true">toss pay</span>
-                                <span class="pickup-method-name">토스페이</span>
+                            <li class="pickup-method-option">
+                                <input class="visually-hidden" id="pickup-toss-pay" type="radio" name="pickup-payment-method" value="toss-pay">
+                                <label class="pickup-method" for="pickup-toss-pay">
+                                    <span class="pickup-method-mark pickup-method-mark--toss" aria-hidden="true">toss pay</span>
+                                    <span class="pickup-method-name">토스페이</span>
+                                </label>
                             </li>
                             <li class="pickup-method">
                                 <span class="pickup-method-mark pickup-method-mark--payco" aria-hidden="true">PAYCO</span>
@@ -436,11 +445,11 @@
                                 <span class="pickup-method-name">공용 법인카드</span>
                             </li>
                         </ul>
-                        <p class="pickup-note">매장픽업 카카오페이 모의결제 연동을 준비 중이에요.</p>
+                        <p class="pickup-note" id="pickup-payment-note" aria-live="polite">결제수단을 선택해 주세요.</p>
                     </section>
                     <%-- ===== 주문서 하단 결제 버튼 ===== --%>
                     <div class="pickup-checkout-actions">
-                        <button class="button primary" type="button" disabled>
+                        <button class="button primary pickup-pay-button" type="button" data-pickup-pay>
                             <%= pickupPaymentLabel %> 결제하기
                         </button>
                     </div>
@@ -461,7 +470,7 @@
                             <li>주문상품 <strong><%= pickupOrderItems.size() %>종</strong></li>
                         </ul>
                     </details>
-                    <button class="button primary" type="button" aria-describedby="pickup-payment-status" disabled>
+                    <button class="button primary pickup-pay-button" type="button" aria-describedby="pickup-payment-status" data-pickup-pay>
                         <%= pickupPaymentLabel %> 결제하기
                     </button>
                     <p id="pickup-payment-status" class="pickup-payment-status">
@@ -472,6 +481,39 @@
             </div>
             <script>
                 (() => {
+                    const paymentOptions = Array.from(document.querySelectorAll('input[name="pickup-payment-method"]'));
+                    const paymentNames = { kakao: "카카오페이", "toss-pay": "토스페이" };
+                    const paymentNote = document.getElementById("pickup-payment-note");
+
+                    function selectedPaymentName() {
+                        const selected = paymentOptions.find(option => option.checked);
+                        return selected ? paymentNames[selected.value] : "";
+                    }
+
+                    function updatePaymentNote() {
+                        const name = selectedPaymentName();
+                        paymentNote.textContent = name
+                            ? "선택한 결제수단 · " + name
+                            : "결제수단을 선택해 주세요.";
+                    }
+
+                    paymentOptions.forEach(option => option.addEventListener("change", updatePaymentNote));
+                    window.addEventListener("pageshow", updatePaymentNote);
+                    updatePaymentNote();
+
+                    document.querySelectorAll("[data-pickup-pay]").forEach(button => {
+                        button.addEventListener("click", () => {
+                            const name = selectedPaymentName();
+                            if (!name) {
+                                window.Daiso.ui.notice("결제수단을 선택해 주세요.");
+                                paymentOptions[0].focus();
+                                return;
+                            }
+                            window.Daiso.ui.notice(name + " 결제는 연결 준비 중입니다.");
+                        });
+                    });
+
+
                     const same = document.getElementById("pickup-same-buyer");
                     const fields = ["pickup-recipient-name", "pickup-recipient-phone"]
                         .map(id => document.getElementById(id));
