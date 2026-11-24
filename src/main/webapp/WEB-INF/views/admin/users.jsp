@@ -142,7 +142,9 @@
                                                 ? "활성"
                                                 : "SUSPENDED".equalsIgnoreCase(member.getStatus())
                                                         ? "이용 중지"
-                                                        : member.getStatus();
+                                                        		: "WITHDRAWN".equalsIgnoreCase(member.getStatus())
+                                                                ? "탈퇴"
+                                                                : member.getStatus();
                                 String createdAt =
                                         member.getCreatedAt() == null
                                                 ? "-"

@@ -30,6 +30,20 @@ public class RememberMeFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
 
         HttpSession session = httpRequest.getSession(false);
+        
+        if (session != null && session.getAttribute("member_id") instanceof String) {
+            String memberId = (String) session.getAttribute("member_id");
+            try {
+                if (memberService.isWithdrawn(memberId)) {
+                    session.invalidate();
+                    expireCookie(httpRequest, httpResponse);
+                    httpResponse.sendRedirect(httpRequest.getContextPath() + "/app/member/login");
+                    return;
+                }
+            } catch (javax.naming.NamingException | java.sql.SQLException e) {
+                throw new ServletException("회원 상태 확인 중 오류가 발생했습니다.", e);
+            }
+        }
 
         // 이미 로그인한 세션이 없을 때만 자동 로그인을 확인합니다.
         if (session == null || session.getAttribute("member_id") == null) {
