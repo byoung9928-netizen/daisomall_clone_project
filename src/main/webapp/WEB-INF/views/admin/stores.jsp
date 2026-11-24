@@ -45,9 +45,13 @@
                 <% if (!rowVisible || "adjust".equals(storeDraft.get("kind"))) { %>
                     <details class="store-assortment" open>
                         <summary>저장하지 못한 입력값</summary>
-                        <p>변경 유형 <%= ProductView.escape(storeDraft.get("change")) %><%= ProductView.escape(storeDraft.get("operation")) %></p>
-                        <% if (storeDraft.get("amount") != null) { %><p>입력 수량 <%= ProductView.escape(storeDraft.get("amount")) %></p><% } %>
-                        <p>변경 사유 · <%= ProductView.escape(storeDraft.get("reason")) %></p>
+                        <% if ("threshold".equals(storeDraft.get("kind"))) { %>
+                            <p>입력한 부족 기준 · <%= ProductView.escape(storeDraft.get("threshold")) %></p>
+                        <% } else { %>
+                            <p>변경 유형 <%= ProductView.escape(storeDraft.get("change")) %><%= ProductView.escape(storeDraft.get("operation")) %></p>
+                            <% if (storeDraft.get("amount") != null) { %><p>입력 수량 <%= ProductView.escape(storeDraft.get("amount")) %></p><% } %>
+                            <p>변경 사유 · <%= ProductView.escape(storeDraft.get("reason")) %></p>
+                        <% } %>
                     </details>
                 <% } %>
             <% } %>
@@ -103,7 +107,7 @@
                     <div class="store-metrics" aria-label="매장 재고 요약">
                         <div><span>취급 상품</span><strong><%= inventoryPage.summary.kinds %>종</strong></div>
                         <div><span>총 재고</span><strong><%= inventoryPage.summary.units %>개</strong></div>
-                        <a data-stock-state="LOW" href="<%= inventoryPage.summaryUrl(State.LOW) %>"><span>재고 부족 (1~5개)</span><strong><%= inventoryPage.summary.low %>종</strong></a>
+                        <a data-stock-state="LOW" href="<%= inventoryPage.summaryUrl(State.LOW) %>"><span>재고 부족</span><strong><%= inventoryPage.summary.low %>종</strong></a>
                         <a data-stock-state="SOLD_OUT" href="<%= inventoryPage.summaryUrl(State.SOLD_OUT) %>"><span>품절 (0개)</span><strong><%= inventoryPage.summary.soldOut %>종</strong></a>
                     </div>
                     <nav class="store-admin-links" aria-label="매장 관리 화면">
@@ -117,7 +121,7 @@
                         <dialog id="store-adjustment" class="store-adjustment store-drawer" open aria-labelledby="store-adjustment-title"
                                 data-row-anchor="<%= Page.rowAnchor(stock.id) %>">
                             <header class="store-drawer-heading">
-                                <h3 id="store-adjustment-title" tabindex="-1">재고 조정</h3>
+                                <h3 id="store-adjustment-title" tabindex="-1">재고·기준 조정</h3>
                                 <a class="button secondary" href="<%= inventoryPage.closeDrawerUrl(stock.id) %>" data-drawer-close>닫기</a>
                             </header>
                             <p><%= ProductView.escape(inventoryPage.selected.name) %> · <strong><%= ProductView.escape(stock.name) %></strong></p>
@@ -179,8 +183,37 @@
                                     </div>
                                 <% } %>
                             </form>
+                            <% if (preview == null) { %>
+                                <section class="store-threshold" aria-labelledby="store-threshold-heading">
+                                    <h4 id="store-threshold-heading">부족 기준</h4>
+                                    <% if (inventoryPage.thresholdsEnabled) { %>
+                                        <form method="post" data-store-write data-store-threshold
+                                              action="<%= ProductView.escape(storeRoute) %>/threshold">
+                                            <% for (Map.Entry<String, String> field : inventoryPage.filters.entrySet()) { %>
+                                                <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
+                                            <% } %>
+                                            <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("storeInventoryCsrf")) %>">
+                                            <input type="hidden" name="product" value="<%= ProductView.escape(stock.id) %>">
+                                            <input type="hidden" name="version" value="<%= stock.version %>">
+                                            <label class="field">새 부족 기준 (개 이하)
+                                                <input name="threshold" type="number" inputmode="numeric" min="1" max="2147483647" step="1" required
+                                                       value="<%= ProductView.escape(storeDraft.containsKey("threshold") ? storeDraft.get("threshold") : stock.threshold) %>"
+                                                       <%= "threshold".equals(storeFieldError) ? "aria-invalid=\"true\" aria-describedby=\"store-adjustment-error\"" : "" %>>
+                                            </label>
+                                            <dl class="store-adjustment-summary">
+                                                <div><dt>변경 전</dt><dd><%= stock.threshold %>개 이하</dd></div>
+                                                <div data-threshold-preview hidden><dt>변경 후</dt><dd><output data-threshold-after></output></dd></div>
+                                            </dl>
+                                            <button class="button secondary" type="submit">부족 기준 저장</button>
+                                        </form>
+                                    <% } else { %>
+                                        <p>현재 기준은 <%= stock.threshold %>개 이하입니다. 마이그레이션 적용 후 변경할 수 있습니다.</p>
+                                    <% } %>
+                                </section>
+                            <% } %>
                         </dialog>
                     <% } %>
+                    <p class="store-stock-hint">조회 결과 <%= inventoryPage.total %>건</p>
                     <% if (inventoryPage.showingHistory) {
                            DateTimeFormatter historyDate = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"); %>
                         <div class="admin-table-scroll" tabindex="0" role="region" aria-label="매장 재고 변경 이력 표">
@@ -195,7 +228,11 @@
                                             <td><time datetime="<%= entry.date %>"><%= historyDate.format(entry.date) %></time></td>
                                             <td><%= ProductView.escape(entry.name) %><br><small><%= ProductView.escape(entry.code.isEmpty() ? entry.reference : entry.code) %></small></td>
                                             <td><%= entry.type %></td>
-                                            <td><%= entry.before %> → <%= entry.after %></td>
+                                            <td><% if (entry.beforeThreshold != null) { %>
+                                                    <%= entry.beforeThreshold %>개 이하 → <%= entry.afterThreshold %>개 이하
+                                                <% } else { %>
+                                                    <%= entry.before %>개 → <%= entry.after %>개
+                                                <% } %></td>
                                             <td><%= ProductView.escape(entry.reason) %></td>
                                             <td><%= entry.administrator == null ? "초기 데이터" : ProductView.escape(entry.administrator) %></td>
                                         </tr>
@@ -213,11 +250,13 @@
                             <table class="admin-table store-stock-table">
                                 <thead><tr>
                                     <th scope="col">상품</th><th scope="col">매장 재고</th>
-                                    <th scope="col">상태</th><th scope="col">관리</th>
+                                    <th scope="col">상태</th>
+                                    <% if (!inventoryPage.showingAssortment) { %><th scope="col">부족 기준</th><% } %>
+                                    <th scope="col">관리</th>
                                 </tr></thead>
                                 <tbody>
                                     <% for (Stock stock : inventoryPage.inventory) {
-                                           State state = State.ofQuantity(stock.quantity);
+                                           State state = stock.state();
                                            boolean activeList = !inventoryPage.showingAssortment;
                                            Assortment action = activeList ? Assortment.UNLIST
                                                    : stock.version < 0 ? Assortment.REGISTER : Assortment.RESUME;
@@ -238,11 +277,12 @@
                                                     <%= stock.carried ? "취급 중" : stock.version < 0 ? "미등록" : "취급 종료" %>
                                                 <% } %>
                                             </td>
+                                            <% if (activeList) { %><td><%= stock.threshold %>개 이하</td><% } %>
                                             <td>
                                                 <div class="store-stock-actions">
                                                     <% if (activeList) { %>
                                                         <a class="button secondary" href="<%= inventoryPage.editUrl(stock.id) %>#store-adjustment"
-                                                           data-open-store-drawer aria-label="<%= ProductView.escape(stock.name) %> 재고 조정">재고 조정</a>
+                                                           data-open-store-drawer aria-label="<%= ProductView.escape(stock.name) %> 재고·기준 조정">재고·기준 조정</a>
                                                     <% } %>
                                                     <% if (activeList ? stock.quantity == 0 : !stock.carried) { %>
                                                         <details class="store-assortment" <%= editingAssortment ? "open" : "" %>>
@@ -289,18 +329,15 @@
                                         </tr>
                                     <% } %>
                                     <% if (inventoryPage.inventory.isEmpty()) { %>
-                                        <tr><td colspan="4">조건에 맞는 상품이 없습니다.</td></tr>
+                                        <tr><td colspan="<%= inventoryPage.showingAssortment ? 4 : 5 %>">조건에 맞는 상품이 없습니다.</td></tr>
                                     <% } %>
                                 </tbody>
                             </table>
                         </div>
                     <% } %>
-                    <% if (inventoryPage.previous != null || inventoryPage.next != null) { %>
-                        <nav class="admin-product-pagination" aria-label="매장 재고 페이지">
-                            <% if (inventoryPage.previous != null) { %><a class="button secondary" rel="prev" href="<%= inventoryPage.previous %>">이전</a><% } %>
-                            <span aria-current="page"><%= inventoryPage.page %> 페이지</span>
-                            <% if (inventoryPage.next != null) { %><a class="button secondary" rel="next" href="<%= inventoryPage.next %>">다음</a><% } %>
-                        </nav>
+                    <% if (inventoryPage.total > 0) {
+                           InventoryPagination inventoryPagination = inventoryPage.pagination; %>
+                        <%@ include file="inventory-pagination.jspf" %>
                     <% } %>
                 <% } %>
             <% } %>

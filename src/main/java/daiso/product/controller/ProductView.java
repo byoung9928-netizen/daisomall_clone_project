@@ -70,6 +70,10 @@ public final class ProductView {
         return "AVAILABLE".equals(product.getStatus()) && product.getStockQuantity() > 0;
     }
 
+    public static boolean pickupEligible(ProductDTO product) {
+        return "AVAILABLE".equals(product.getStatus()) || "SOLD_OUT".equals(product.getStatus());
+    }
+
     public static boolean temporarilySoldOut(ProductDTO product) {
         return daiso.cart.db.CartBean.isTemporarilySoldOut(product.getStatus(), product.getStockQuantity());
     }

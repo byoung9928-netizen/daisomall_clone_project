@@ -4,6 +4,9 @@
     const configFor = button => button.closest('[data-wishlist-config]')
         || document.querySelector('[data-wishlist-config]');
     const pending = new Set();
+    let revision = 0;
+    let refreshConfig = null;
+    let refreshing = false;
 
     function notice(config, message) {
         config.querySelector("[data-wishlist-feedback]").textContent = message;
@@ -19,6 +22,63 @@
         return Array.from(document.querySelectorAll("[data-wishlist-product]"))
             .filter(button => button.dataset.wishlistProduct === productId);
     }
+
+    async function refreshWishlist() {
+        if (!refreshConfig || refreshing || pending.size) return;
+        const config = refreshConfig;
+        const panel = config.closest("[data-product-activity]");
+        const target = panel || document.querySelector("[data-wishlist-results]");
+        const currentRevision = revision;
+        refreshing = true;
+        try {
+            const response = await fetch(panel ? panel.dataset.url : location.href, {
+                credentials: "same-origin",
+                cache: "no-store"
+            });
+            if (!response.ok) throw new Error("Wishlist refresh failed");
+            const markup = new DOMParser().parseFromString(await response.text(), "text/html");
+            const result = markup.querySelector(panel ? "[data-product-activity-result]" : "[data-wishlist-results]");
+            if (!result || !target?.isConnected) throw new Error("Wishlist results missing");
+            if (revision !== currentRevision) return;
+
+            const active = document.activeElement;
+            const hadFocus = target.contains(active);
+            const nextFocusId = active?.dataset.wishlistProduct;
+            const checked = new Set(Array.from(target.querySelectorAll("[data-history-select]:checked"), box => box.value));
+            target.replaceChildren(...result.childNodes);
+            refreshConfig = null;
+            if (panel) {
+                target.querySelectorAll("[data-history-select]:not(:disabled)").forEach(box => {
+                    box.checked = checked.has(box.value);
+                });
+                panel.dispatchEvent(new Event("wishlist:refreshed"));
+            }
+            if (hadFocus) {
+                const next = nextFocusId && buttonsFor(nextFocusId).find(control => target.contains(control));
+                (next || target.querySelector("[data-wishlist-product], a")
+                    || target.closest("main"))?.focus({ preventScroll: true });
+            }
+        } catch {
+            if (revision === currentRevision) {
+                refreshConfig = null;
+                notice(config, "찜 해제는 저장되었습니다. 새로고침하면 업데이트된 목록을 볼 수 있습니다.");
+            }
+        } finally {
+            refreshing = false;
+            if (refreshConfig && !pending.size) void refreshWishlist();
+        }
+    }
+
+    function showRemoved(config, origin) {
+        window.Daiso.ui.showToast({ message: "찜하기가 해제되었습니다.", origin });
+        if (config.dataset.wishlistPage === "true") refreshConfig = config;
+    }
+
+    document.addEventListener("wishlist:selection-removed", event => {
+        revision += 1;
+        showRemoved(event.target, event.detail.origin);
+        void refreshWishlist();
+    });
 
     // 이벤트 위임으로 더 보기로 추가된 상품 카드도 처리
     document.addEventListener("click", async event => {
@@ -36,6 +96,7 @@
         if (pending.has(productId)) return;
         const selected = button.getAttribute("aria-pressed") !== "true";
         pending.add(productId);
+        revision += 1;
         buttonsFor(productId).forEach(control => {
             control.disabled = true;
             control.setAttribute("aria-busy", "true");
@@ -77,8 +138,17 @@
                     control.dataset.wishlistName + (selected ? " 관심상품 해제" : " 관심상품 등록"));
                 control.querySelector("[data-wishlist-label]").textContent = selected ? "찜 해제" : "찜";
             });
-            notice(config, selected ? "관심상품에 등록했습니다." : "관심상품에서 해제했습니다.");
-            if (!selected && config.dataset.wishlistPage === "true") location.reload();
+            notice(config, "");
+            if (selected) {
+                window.Daiso.ui.showToast({
+                    message: "상품을 찜했습니다.",
+                    actionText: "보러가기",
+                    actionUrl: config.dataset.baseUrl,
+                    origin: button
+                });
+            } else {
+                showRemoved(config, button);
+            }
         } catch (error) {
             notice(config, "저장 결과를 확인하지 못했습니다. 새로고침 후 찜 상태를 확인해 주세요.");
         } finally {
@@ -87,6 +157,7 @@
                 control.disabled = false;
                 control.removeAttribute("aria-busy");
             });
+            void refreshWishlist();
         }
     });
 

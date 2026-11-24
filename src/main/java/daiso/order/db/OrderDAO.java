@@ -728,7 +728,7 @@ public class OrderDAO {
 		        String memberId, String orderNo) throws SQLException {
 
 		    String selectSql =
-		        "SELECT o.order_id, o.total_amount, "
+		        "SELECT o.order_id, o.total_amount, o.stock_deducted, "
 		        + "o.status AS order_status, "
 		        + "p.payment_id, p.tid, p.amount, "
 		        + "p.status AS payment_status "
@@ -757,6 +757,7 @@ public class OrderDAO {
 
 		        try {
 		            Map<String, Object> order = new HashMap<>();
+		            boolean restoreStock;
 
 		            // 주문과 결제 행을 잠그고 본인 주문·상태 확인
 		            try (PreparedStatement pstmt =
@@ -795,12 +796,15 @@ public class OrderDAO {
 		                        );
 		                    }
 
+		                    restoreStock = rs.getBoolean("stock_deducted");
 		                    order.put("orderId", rs.getLong("order_id"));
 		                    order.put("paymentId", rs.getLong("payment_id"));
 		                    order.put("tid", tid);
 		                    order.put("total", total);
 		                }
 		            }
+
+		            if (restoreStock) OnlineStockRestoration.requireSchema(con);
 
 		            // 확인한 결제만 취소 처리 중으로 변경
 		            try (PreparedStatement pstmt =
@@ -850,7 +854,7 @@ public class OrderDAO {
 		    }
 
 		    String checkSql =
-		        "SELECT o.status AS order_status, o.total_amount, "
+		        "SELECT o.status AS order_status, o.total_amount, o.stock_deducted, "
 		        + "p.status AS payment_status, p.amount "
 		        + "FROM orders o "
 		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
@@ -866,6 +870,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            boolean restoreStock;
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(checkSql)) {
 
@@ -889,6 +894,7 @@ public class OrderDAO {
 		                        );
 		                    }
 
+		                    restoreStock = rs.getBoolean("stock_deducted");
 		                    String orderStatus =
 		                        rs.getString("order_status");
 
@@ -909,6 +915,10 @@ public class OrderDAO {
 		                        );
 		                    }
 		                }
+		            }
+
+		            if (restoreStock) {
+		                OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_CANCEL);
 		            }
 
 		            String paymentSql =

@@ -134,3 +134,124 @@
     .home-tile-warmer { aspect-ratio: 2.06; }
     .home-shortcuts { grid-auto-columns: 82px; }
 }
+
+.featured-carousel {
+    --featured-visible: 6;
+    --featured-gap: 20px;
+    position: relative;
+}
+
+.featured-viewport {
+    overflow-x: auto;
+}
+
+.featured-carousel.is-ready .featured-viewport {
+    overflow: clip;
+    touch-action: pan-y pinch-zoom;
+}
+
+.featured-track {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: calc((100% - (var(--featured-visible) - 1) * var(--featured-gap)) / var(--featured-visible));
+    gap: var(--featured-gap);
+}
+
+.featured-carousel.is-sliding .featured-track {
+    transition: transform 340ms ease-in-out;
+}
+
+.featured-track a:focus-visible,
+.featured-track button:focus-visible {
+    outline-offset: -3px;
+}
+
+.featured-arrow {
+    position: absolute;
+    z-index: 1;
+    top: var(--featured-arrow-top);
+    width: 44px;
+    height: 44px;
+    transform: translateY(-50%);
+    background: #353535b8;
+    color: #fff;
+    font-size: 30px;
+    line-height: 1;
+}
+
+.featured-prev { inset-inline-start: 0; }
+.featured-next { inset-inline-end: 0; }
+.featured-arrow:not([aria-disabled="true"]):hover,
+.featured-arrow:focus-visible { background: #353535; }
+.featured-arrow[aria-disabled="true"] { opacity: .55; cursor: default; }
+
+@media (max-width: 1050px) {
+    .featured-carousel { --featured-visible: 4; }
+}
+
+@media (max-width: 760px) {
+    .featured-carousel { --featured-visible: 3; --featured-gap: 14px; }
+}
+
+@media (max-width: 560px) {
+    .featured-carousel { --featured-visible: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .featured-carousel.is-sliding .featured-track { transition: none; }
+}
+
+.home-ranking-tabs {
+    display: flex;
+    gap: 8px;
+    margin-block-end: 18px;
+    padding: 4px 3px 8px;
+    overflow-x: auto;
+}
+.home-ranking-tabs button {
+    flex: none;
+    padding: 8px 15px;
+    border: 1px solid #d9dce0;
+    border-radius: 999px;
+    background: #fff;
+    color: #26323c;
+    font-size: 14px;
+    white-space: nowrap;
+}
+.home-ranking-tabs button:hover { border-color: #26323c; }
+.home-ranking-tabs button[aria-selected="true"] {
+    border-color: #172432;
+    background: #172432;
+    color: #fff;
+}
+.home-ranking-status {
+    margin: 0 0 12px;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+.home-ranking-status:empty { display: none; }
+[data-ranked-carousel] .featured-track { grid-template-rows: auto auto; }
+.home-ranked-card { position: relative; min-width: 0; }
+.home-rank-position {
+    position: absolute;
+    z-index: 3;
+    inset: 0 auto auto 0;
+    display: grid;
+    place-items: center;
+    min-width: 28px;
+    height: 28px;
+    padding-inline: 4px;
+    background: #172432;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.product-recommendation-reason {
+    margin: 6px 0 0;
+    color: var(--color-muted);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}

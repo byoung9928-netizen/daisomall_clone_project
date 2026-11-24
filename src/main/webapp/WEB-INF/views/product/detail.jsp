@@ -132,7 +132,8 @@
                     </section>
 
                     <form id="cartAddForm" method="post" action="${pageContext.request.contextPath}/app/cart/add"
-                    					data-pickup-action="${pageContext.request.contextPath}/app/cart/pickup/add">
+                          data-cart-view-url="${pageContext.request.contextPath}/app/cart"
+                          data-pickup-action="${pageContext.request.contextPath}/app/cart/pickup/add">
                         <input type="hidden" name="productId" value="<%= ProductView.escape(product.getProductId()) %>">
                         <div class="pd-order-summary">
                             <div class="pd-order-product">
@@ -213,6 +214,9 @@
             <% if (!related.isEmpty()) { %>
                 <section class="product-section" id="related-products">
                     <h2 class="section-title">함께 둘러볼 상품</h2>
+                    <% if (Boolean.TRUE.equals(request.getAttribute("cardPickupLookupError"))) { %>
+                        <p class="card-pickup-note" role="status">매장픽업 가능 여부를 확인하지 못했습니다.</p>
+                    <% } %>
                     <div class="product-grid">
                         <% for (ProductDTO item : related) { %>
                             <%@ include file="card.jspf" %>

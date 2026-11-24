@@ -43,6 +43,10 @@
                 while (nextGrid.firstElementChild) {
                     grid.appendChild(nextGrid.firstElementChild);
                 }
+                const pickupNotice = catalog.querySelector("[data-card-pickup-error]");
+                if (pickupNotice && documentPage.querySelector("[data-card-pickup-error]:not([hidden])")) {
+                    pickupNotice.hidden = false;
+                }
                 next.closest("nav").replaceWith(pagination);
             }).catch(function () {
                 location.assign(next.href);

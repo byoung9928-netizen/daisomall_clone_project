@@ -104,10 +104,8 @@
         font-size: 14px;
         word-break: keep-all;
     }
-    .category-item-arrow {
-        width: 6px;
-        height: 6px;
-        margin-right: 0;
+    .category-disclosure {
+        flex-basis: 32px;
     }
     .category-empty {
         padding: 12px 8px;

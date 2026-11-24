@@ -1,0 +1,26 @@
+<%@ page pageEncoding="UTF-8" %>
+<% if (carouselProducts.isEmpty()) { %>
+    <p class="empty-state">표시할 상품이 없습니다.</p>
+<% } else { %>
+    <div class="featured-carousel" data-featured-carousel<%= carouselRanked ? " data-ranked-carousel" : "" %>>
+        <div class="featured-viewport" id="<%= carouselId %>">
+            <div class="featured-track">
+                <% int carouselPosition = 0;
+                   for (ProductDTO item : carouselProducts) {
+                       carouselPosition++;
+                       if (carouselRanked) { %>
+                    <div class="home-ranked-card">
+                        <span class="home-rank-position" aria-label="<%= carouselPosition %>위"><%= carouselPosition %></span>
+                <%     } %>
+                    <%@ include file="../product/card.jspf" %>
+                <%     if (carouselRanked) { %></div><% }
+                   } %>
+            </div>
+        </div>
+        <button class="featured-arrow featured-prev" type="button" data-featured-prev
+                aria-label="이전 <%= carouselLabel %>" aria-controls="<%= carouselId %>" hidden><span aria-hidden="true">‹</span></button>
+        <button class="featured-arrow featured-next" type="button" data-featured-next
+                aria-label="다음 <%= carouselLabel %>" aria-controls="<%= carouselId %>" hidden><span aria-hidden="true">›</span></button>
+        <p class="visually-hidden" role="status" data-featured-status></p>
+    </div>
+<% } %>

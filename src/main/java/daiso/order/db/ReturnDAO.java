@@ -225,7 +225,7 @@ public class ReturnDAO {
 
         String selectSql =
             "SELECT r.status AS return_status, r.refund_amount, "
-            + "o.order_id, o.order_no, o.member_id, "
+            + "o.order_id, o.order_no, o.member_id, o.stock_deducted, "
             + "o.status AS order_status, o.total_amount, "
             + "p.payment_id, p.tid, p.amount, "
             + "p.status AS payment_status "
@@ -260,6 +260,7 @@ public class ReturnDAO {
 
             try {
                 Map<String, Object> target = new HashMap<>();
+                boolean restoreStock;
 
                 // 반품·주문·결제 정보를 잠그고 확인
                 try (PreparedStatement pstmt =
@@ -303,6 +304,7 @@ public class ReturnDAO {
                             );
                         }
 
+                        restoreStock = rs.getBoolean("stock_deducted");
                         target.put("returnId", returnId);
                         target.put("orderId", rs.getLong("order_id"));
                         target.put("orderNo", rs.getString("order_no"));
@@ -312,6 +314,8 @@ public class ReturnDAO {
                         target.put("amount", amount);
                     }
                 }
+
+                if (restoreStock) OnlineStockRestoration.requireSchema(con);
 
                 // 같은 신청에 대한 추가 환불 요청 차단
                 try (PreparedStatement pstmt =
@@ -359,7 +363,7 @@ public class ReturnDAO {
 
         String checkSql =
             "SELECT r.status AS return_status, r.refund_amount, "
-            + "o.status AS order_status, o.total_amount, "
+            + "o.status AS order_status, o.order_id, o.total_amount, o.stock_deducted, "
             + "p.status AS payment_status, p.amount "
             + "FROM order_returns r "
             + "JOIN orders o ON o.order_id = r.order_id "
@@ -387,6 +391,8 @@ public class ReturnDAO {
             con.setAutoCommit(false);
 
             try {
+                long orderId;
+                boolean restoreStock;
                 try (PreparedStatement pstmt =
                         con.prepareStatement(checkSql)) {
 
@@ -408,6 +414,8 @@ public class ReturnDAO {
                             );
                         }
 
+                        orderId = rs.getLong("order_id");
+                        restoreStock = rs.getBoolean("stock_deducted");
                         String returnStatus =
                             rs.getString("return_status");
 
@@ -433,6 +441,10 @@ public class ReturnDAO {
                             );
                         }
                     }
+                }
+
+                if (restoreStock) {
+                    OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_REFUND);
                 }
 
                 try (PreparedStatement pstmt =

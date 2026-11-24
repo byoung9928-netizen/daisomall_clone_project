@@ -111,6 +111,7 @@ public final class AdminProductChanges {
         public final String afterStatus;
         public final String stockOperation;
         public final String stockReason;
+        public final String orderNo;
 
         Entry(ResultSet rows) throws SQLException {
             id = rows.getLong("change_id");
@@ -125,8 +126,11 @@ public final class AdminProductChanges {
             afterStock = rows.getObject("after_stock", Integer.class);
             beforeStatus = rows.getString("before_status");
             afterStatus = rows.getString("after_status");
-            stockOperation = "STOCK_ADJUST".equals(action) ? rows.getString("stock_operation") : null;
-            stockReason = "STOCK_ADJUST".equals(action) ? rows.getString("stock_reason") : null;
+            boolean automatic = "STOCK_RESTORE".equals(action);
+            boolean stockHistory = automatic || "STOCK_ADJUST".equals(action);
+            stockOperation = stockHistory ? rows.getString("stock_operation") : null;
+            stockReason = stockHistory ? rows.getString("stock_reason") : null;
+            orderNo = automatic ? rows.getString("order_no") : null;
         }
 
         public boolean priceChanged() { return !Objects.equals(beforePrice, afterPrice); }

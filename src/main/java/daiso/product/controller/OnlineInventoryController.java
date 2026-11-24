@@ -292,8 +292,7 @@ public final class OnlineInventoryController {
         public final String sort;
         public final int first;
         public final int last;
-        public final String previous;
-        public final String next;
+        public final InventoryPagination pagination;
 
         private Page(String context, ProductDAO.CatalogPage result, String keyword, String category,
                 Map<String, String> categories, OnlineStockState state, int page, int pages, String sort,
@@ -312,8 +311,7 @@ public final class OnlineInventoryController {
             resetEditor = ProductView.url(context, ROUTE, filters);
             first = products.isEmpty() ? 0 : (page - 1) * PAGE_SIZE + 1;
             last = products.isEmpty() ? 0 : first + products.size() - 1;
-            previous = page > 1 ? pageUrl(context, page - 1) : null;
-            next = page < pages ? pageUrl(context, page + 1) : null;
+            pagination = new InventoryPagination(page, pages, target -> pageUrl(context, target));
         }
 
         private String pageUrl(String context, int target) {

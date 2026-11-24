@@ -6,7 +6,7 @@
 %>
 <% if (productHistory != null) {
     DateTimeFormatter changeTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제", "STOCK_ADJUST", "수동 온라인 재고");
+    Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제", "STOCK_ADJUST", "수동 온라인 재고", "STOCK_RESTORE", "온라인 재고 자동 복구");
 %>
     <section class="admin-panel admin-product-history" id="product-history" aria-labelledby="product-history-title">
         <div class="admin-product-history-heading">
@@ -21,16 +21,16 @@
         <% } else { %>
             <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 변경 이력">
                 <table class="admin-table">
-                    <caption class="visually-hidden">관리자가 변경한 가격, 재고, 판매 상태</caption>
+                    <caption class="visually-hidden">가격, 재고, 판매 상태 변경 기록</caption>
                     <thead><tr>
-                        <th scope="col">변경 시각</th><th scope="col">관리자</th><th scope="col">상품</th>
+                        <th scope="col">변경 시각</th><th scope="col">처리자</th><th scope="col">상품</th>
                         <th scope="col">작업</th><th scope="col">변경 항목</th>
                     </tr></thead>
                     <tbody>
                         <% for (Entry change : productHistory) { %>
                             <tr>
                                 <td><time datetime="<%= change.at %>"><%= change.at.format(changeTime) %></time></td>
-                                <td><%= ProductView.escape(change.actor) %></td>
+                                <td><%= change.orderNo == null ? ProductView.escape(change.actor) : "시스템" %></td>
                                 <td><%= ProductView.escape(change.productName) %> (<%= ProductView.escape(change.productCode) %>)</td>
                                 <td><%= ProductView.escape(actionNames.get(change.action)) %></td>
                                 <td>
@@ -41,7 +41,11 @@
                                         <% if (change.stockChanged()) { %>
                                             <li><strong>재고</strong> <%= change.beforeStock == null ? "—" : change.beforeStock %> → <%= change.afterStock == null ? "—" : change.afterStock %></li>
                                         <% } %>
-                                        <% if (change.stockOperation != null) { %>
+                                        <% if (change.orderNo != null) { %>
+                                            <li><strong>주문번호</strong> <%= ProductView.escape(change.orderNo) %></li>
+                                            <li><strong>복구 수량</strong> +<%= change.afterStock - change.beforeStock %>개</li>
+                                            <li><strong>사유</strong> <%= ProductView.escape(change.stockReason) %></li>
+                                        <% } else if (change.stockOperation != null) { %>
                                             <% int delta = change.afterStock - change.beforeStock; %>
                                             <li><strong>유형</strong> <%= daiso.product.controller.OnlineInventoryController.operationLabel(daiso.product.dao.StoreInventoryDAO.Change.valueOf(change.stockOperation)) %> · <%= delta > 0 ? "+" : "" %><%= delta %>개</li>
                                             <li><strong>사유</strong> <%= ProductView.escape(change.stockReason) %></li>

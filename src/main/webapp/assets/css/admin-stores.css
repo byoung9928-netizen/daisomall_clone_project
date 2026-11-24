@@ -184,3 +184,12 @@
     .store-drawer:modal { width: 100%; }
     .store-stock-actions { min-width: 6rem; }
 }
+
+.store-threshold {
+    margin-block-start: 20px;
+    padding-block-start: 16px;
+    border-top: 1px solid var(--admin-line);
+}
+.store-threshold h4 {
+    margin: 0 0 12px;
+}
