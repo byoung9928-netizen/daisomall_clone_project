@@ -1760,6 +1760,84 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	background: #17212a;
 	color: #fff;
 }
+#demoRefundDialog {
+    width: min(520px, calc(100vw - 32px));
+    height: auto;
+    max-height: calc(100vh - 32px);
+    border-radius: 16px;
+}
+
+#demoRefundForm {
+    display: grid;
+    gap: 14px;
+}
+
+#demoRefundForm p {
+    margin: 0;
+}
+
+#demoRefundForm select,
+#demoRefundForm input[name="accountNumber"],
+#demoRefundForm input[name="holderName"] {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font: inherit;
+}
+
+#demoRefundForm .refund-holder-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+}
+
+#demoRefundForm .refund-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid #e1e5eb;
+}
+
+#demoRefundForm .refund-actions button {
+    flex: 1;
+}
+
+#demoRefundForm button {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+
+#demoRefundForm button[type="reset"] {
+    justify-self: start;
+}
+
+#demoRefundForm button[value="save"] {
+    background: #25354a;
+    color: #fff;
+}
+
+#demoRefundForm button:disabled {
+    background: #e2e8f0;
+    color: #475569;
+    cursor: default;
+}
+
+@media (max-width: 420px) {
+    #demoRefundForm .refund-holder-row {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 </head>
 <body>
@@ -1861,10 +1939,10 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 					<h2>나의 정보</h2>
 					<a
 						class="<%="profile".equals(request.getAttribute("myPageSection")) ? "my-current" : ""%>"
-						href="<%=myContext%>/app/member/profile"> 회원정보 </a>
+						href="<%=myContext%>/app/member/profile">회원정보</a>
 					<button type="button" data-my-unavailable>프로필</button>
-					<button type="button" data-my-unavailable>배송지/픽업매장</button>
-					<button type="button" data-my-unavailable>환불계좌</button>
+					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=delivery">배송지/픽업매장</a>						
+					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=refund">환불계좌</a>				    
 					<button type="button" data-my-unavailable>알림 목록</button>
 				</section>
 				<section class="my-menu-group">
@@ -2210,6 +2288,87 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
     <% } %>
 </section>
 					</dialog>
+					<%
+String demoRefundBank = (String) request.getAttribute("demoRefundBank");
+%>
+
+<dialog id="demoRefundDialog" class="delivery-pickup-dialog"
+        aria-labelledby="demoRefundTitle">
+    <div class="delivery-pickup-header">
+        <h2 id="demoRefundTitle">환불계좌 관리</h2>
+        <form method="dialog">
+            <button type="submit" aria-label="닫기">×</button>
+        </form>
+    </div>
+
+    <div style="padding: 1.25rem;">
+        <p>가상의 계좌번호를 숫자 5~20자리로 입력해 주세요.
+    예금주는 로그인한 계정의 회원 이름을 입력해 주세요.
+    이 화면은 회원 이름 일치 여부를 확인하는 시연용입니다.</p>
+
+        <strong>
+    <%=ProductView.escape(demoRefundBank)%> ••••
+    <%=ProductView.escape((String) request.getAttribute("demoRefundLastFour"))%>
+</strong>
+
+        <form id="demoRefundForm" method="post"
+              action="<%=myContext%>/app/order/profile/demo-refund-account">
+            <input type="hidden" name="csrfToken"
+                   value="<%=ProductView.escape(orderCsrfToken)%>">
+
+            <p>
+                <label>은행
+                    <select name="bank" required>
+                        <option value="">은행을 선택해 주세요</option>
+                        <% for (String bank : List.of("국민은행", "신한은행", "우리은행")) { %>
+                            <option value="<%=bank%>"
+                                    <%=bank.equals(demoRefundBank) ? "selected" : ""%>>
+                                <%=bank%>
+                            </option>
+                        <% } %>
+                    </select>
+                </label>
+            </p>
+
+            <p>
+                <label>계좌번호
+                    <input name="accountNumber" inputmode="numeric"
+                           pattern="[0-9]{5,20}" maxlength="20" required>
+                </label>
+            </p>
+
+							<div class="refund-holder-row">
+								<label>예금주 <input name="holderName" maxlength="20"
+									required>
+								</label>
+								<button type="submit" value="verify">시연 계좌 확인</button>
+							</div>
+
+							<button type="reset">입력 초기화</button>
+
+							<p>
+                <label>
+                    <input type="checkbox" name="consent" value="yes" required>
+                    시연 데이터 이용에 동의합니다. 로그인 세션 동안만 보관됩니다.
+                </label>
+            </p>
+
+							<p id="demoRefundMessage" role="status"></p>
+
+							<div class="refund-actions">
+								<%
+								if (demoRefundBank != null) {
+								%>
+								<button type="submit" value="delete" formnovalidate>환불계좌
+									삭제</button>
+								<%
+								}
+								%>
+								<button type="submit" value="save" disabled>저장</button>
+							</div>
+						</form>
+    </div>
+</dialog>
 					<%
 					String profileLoginId = profile.getLoginId() == null ? "" : profile.getLoginId();
 
@@ -3388,6 +3547,70 @@ const manageMode = new URLSearchParams(window.location.search).get('manage');
 if (manager && (manageMode === 'delivery' || manageMode === 'pickup')) {
     manager.querySelector('[data-delivery-tab="' + manageMode + '"]').click();
     manager.showModal();
+}
+
+const refundDialog = document.getElementById('demoRefundDialog');
+const refundForm = document.getElementById('demoRefundForm');
+
+if (refundDialog && refundForm && manageMode === 'refund') {
+    refundDialog.showModal();
+
+    const message = document.getElementById('demoRefundMessage');
+    const saveButton = refundForm.querySelector('button[value="save"]');
+    const controls = refundForm.querySelectorAll('input, select, button');
+
+    refundForm.addEventListener('input', function () {
+        saveButton.disabled = true;
+        message.textContent = '';
+    });
+    
+    refundForm.addEventListener('reset', function () {
+        saveButton.disabled = true;
+        message.textContent = '';
+    });
+
+    refundForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const action = event.submitter ? event.submitter.value : 'verify';
+        const data = new URLSearchParams(new FormData(refundForm));
+        data.set('action', action);
+
+        controls.forEach(function (control) {
+            control.disabled = true;
+        });
+
+        let verified = false;
+        try {
+            const response = await fetch(refundForm.action, {
+                method: 'POST',
+                body: data
+            });
+            if (!response.ok) {
+                throw new Error('환불계좌 요청 실패');
+            }
+
+            const result = (await response.text()).trim();
+            if (result !== 'OK') {
+                message.textContent = result;
+                return;
+            }
+
+            if (action === 'verify') {
+                verified = true;
+                message.textContent = '시연용 계좌 확인이 완료되었습니다.';
+            } else {
+                window.location.reload();
+            }
+        } catch (error) {
+            message.textContent = '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        } finally {
+            controls.forEach(function (control) {
+                control.disabled = false;
+            });
+            saveButton.disabled = !verified;
+        }
+    });
 }
 
 	if (deliveryForm) {
