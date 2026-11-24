@@ -2,29 +2,48 @@ package daiso.product.controller;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.ProductDAO.CatalogFilter;
 import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.controller.ProductDAO.Category;
+import daiso.product.controller.ProductDAO.HomeRankCategory;
 import daiso.product.dao.ProductReviewDAO.Sort;
 import daiso.product.dao.StoreInventoryDAO;
+import daiso.product.dao.RecommendationActivityDAO;
+import daiso.product.dao.RecommendationActivityDAO.Kind;
+import daiso.product.dao.RecommendationActivityDAO.Signal;
+import daiso.product.service.RecommendationService;
+import daiso.product.service.RecommendationService.Interest;
 import daiso.product.service.ProductReviewService;
 
 @DaisoController
 public class ProductController {
     private static final int PAGE_SIZE = 30;
+    private static final int HOME_FEATURED_LIMIT = 21;
+    private static final int POPULAR_POOL = 84;
+    private static final int CANDIDATES_PER_ROOT = 48;
+    private static final int ACTION_LIMIT = 120;
+    private static final int VIEW_LIMIT = 50;
+    private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int HOME_RANK_CATEGORY_LIMIT = 10;
+    private static final int HOME_RANK_PRODUCT_LIMIT = 24;
     private static final Map<String, String> COLLECTIONS = Map.ofEntries(
             Map.entry("new", "신상발견"), Map.entry("ranking", "랭킹"), Map.entry("rating", "별점 5점"),
             Map.entry("selling-out", "품절임박"), Map.entry("open-run", "오픈런"), Map.entry("brand", "브랜드 상품"),
@@ -36,25 +55,123 @@ public class ProductController {
     private final OfficialProductDetails officialDetails = new OfficialProductDetails();
     private final ProductDetailImages detailImages = new ProductDetailImages();
     private final StoreInventoryDAO storeInventory = new StoreInventoryDAO();
+    private final RecommendationActivityDAO recommendationActivity = new RecommendationActivityDAO();
+    private final RecommendationService recommendations = new RecommendationService();
     private final ProductReviewService reviews = new ProductReviewService();
 
     @DaisoGetMapping("/products/home")
     public String home(HttpServletRequest request, HttpServletResponse response) throws SQLException, NamingException {
         try (Connection conn = ProductQueries.connect()) {
-            request.setAttribute("productCategories", dao.findVisibleCategories(conn));
+            List<Category> categories = dao.findVisibleCategories(conn);
+            request.setAttribute("productCategories", categories);
             request.setAttribute("activeNavigation", "home");
-            List<ProductDTO> featured = dao.findCatalog(conn, selection("recommended", "", 6)).products;
-            List<ProductDTO> newest = dao.findCatalog(conn, selection("newest", "", 6)).products;
-            request.setAttribute("featuredProducts", featured);
+            List<ProductDTO> newest = dao.findCatalog(conn, selection("newest", "", HOME_FEATURED_LIMIT)).products;
             request.setAttribute("newProducts", newest);
-            // 메인에 표시된 상품의 찜 상태를 한 번에 조회
-            List<String> wishlistIds = new ArrayList<>();
-            for (ProductDTO item : featured) wishlistIds.add(item.getProductId());
-            for (ProductDTO item : newest) wishlistIds.add(item.getProductId());
-            WishlistController.prepare(request, response, conn, wishlistIds);
+            prepareHomeRecommendations(request, response, conn, categories, newest);
             conn.commit();
         }
         return "shop/home";
+    }
+
+    private void prepareHomeRecommendations(HttpServletRequest request, HttpServletResponse response, Connection conn,
+            List<Category> categories, List<ProductDTO> newest) throws SQLException {
+        HttpSession session = request.getSession(false);
+        String member = ProductActivityController.member(session);
+        if (member != null && session.getAttribute("name") instanceof String) {
+            String name = ((String) session.getAttribute("name")).strip();
+            if (!name.isEmpty() && name.length() <= 100 && name.codePoints().noneMatch(Character::isISOControl)) {
+                request.setAttribute("homeRecommendationTitle", name + "님을 위한 오늘 추천상품");
+            }
+        }
+
+        List<ProductDTO> popular = dao.recommendationCandidates(conn, null, POPULAR_POOL);
+        List<Interest> interests = member == null ? List.of() : homeInterests(request, conn, session, member);
+        List<ProductDTO> seeds = new ArrayList<>();
+        List<String> seedIds = interests.stream().map(interest -> interest.id).collect(Collectors.toList());
+        for (var item : dao.findRecentlyViewed(conn, seedIds, seedIds.size(), 0)) seeds.add(item.product);
+        List<ProductDTO> candidates = dao.recommendationCandidates(conn,
+                recommendations.scope(interests, seeds, categories), CANDIDATES_PER_ROOT);
+
+        var ids = new LinkedHashSet<String>();
+        for (List<ProductDTO> group : List.of(popular, candidates, newest)) {
+            for (ProductDTO product : group) ids.add(product.getProductId());
+        }
+        Set<String> pickup = prepareCardPickup(request, conn, List.copyOf(ids));
+        Map<String, String> featured = recommendations.select(member != null, interests, seeds, candidates,
+                popular, newest, categories, pickup, HOME_FEATURED_LIMIT);
+        request.setAttribute("featuredProducts", dao.recommendationCards(conn, List.copyOf(featured.keySet())));
+        request.setAttribute("recommendationReasons", featured);
+        List<String> wishlistIds = new ArrayList<>(featured.keySet());
+        newest.forEach(product -> wishlistIds.add(product.getProductId()));
+        WishlistController.prepare(request, response, conn, wishlistIds);
+    }
+
+    private List<Interest> homeInterests(HttpServletRequest request, Connection conn, HttpSession session, String member) {
+        LocalDate today = LocalDate.now(STORE_ZONE);
+        LocalDate since = today.minusDays(RecommendationService.HISTORY_DAYS);
+        List<Signal> signals = new ArrayList<>();
+        ProductActivityController.snapshot(session, member).forEach((id, date) -> signals.add(new Signal(id, Kind.VIEW, date)));
+        try {
+            signals.addAll(recommendationActivity.findActions(conn, member, since, ACTION_LIMIT));
+        } catch (SQLException error) {
+            request.getServletContext().log("추천 행동 조회 실패", error);
+        }
+        try {
+            signals.addAll(recommendationActivity.findViews(conn, member, since, VIEW_LIMIT));
+        } catch (SQLException error) {
+            if (!RecommendationActivityDAO.viewTableMissing(error)) {
+                request.getServletContext().log("추천 조회 이력 확인 실패", error);
+            }
+        }
+        return recommendations.interests(signals, today);
+    }
+
+    @DaisoGetMapping("/products/home/category-rankings")
+    public String homeCategoryRankings(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, NamingException {
+        response.setHeader("Cache-Control", "private, no-store");
+        String category;
+        try {
+            category = ProductQueries.text(request, "category", 100);
+        } catch (IllegalArgumentException error) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return "shop/home-category-ranking";
+        }
+        try (Connection conn = ProductQueries.connect()) {
+            if (category.isEmpty()) {
+                List<HomeRankCategory> categories = homeRankCategories(dao.findHomeRankCategories(conn));
+                request.setAttribute("homeRankCategories", categories);
+                if (!categories.isEmpty()) category = categories.get(0).id;
+            }
+            if (!category.isEmpty()) {
+                List<ProductDTO> products = dao.findHomeRankProducts(conn, category, HOME_RANK_PRODUCT_LIMIT);
+                if (products.size() < ProductDAO.HOME_RANK_MINIMUM) {
+                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    return "shop/home-category-ranking";
+                }
+                request.setAttribute("homeRankProducts", products);
+                List<String> ids = products.stream().map(ProductDTO::getProductId).collect(Collectors.toList());
+                prepareCardPickup(request, conn, ids);
+                WishlistController.prepare(request, response, conn, ids);
+            }
+            conn.commit();
+        }
+        return "shop/home-category-ranking";
+    }
+
+    private static List<HomeRankCategory> homeRankCategories(List<HomeRankCategory> candidates) {
+        Set<String> represented = new LinkedHashSet<>();
+        List<HomeRankCategory> selected = new ArrayList<>();
+        for (HomeRankCategory candidate : candidates) {
+            if (represented.add(candidate.rootId)) selected.add(candidate);
+            if (selected.size() == HOME_RANK_CATEGORY_LIMIT) return selected;
+        }
+        // Prefer a new product family first, then fill the remaining tabs in popularity order.
+        for (HomeRankCategory candidate : candidates) {
+            if (!selected.contains(candidate)) selected.add(candidate);
+            if (selected.size() == HOME_RANK_CATEGORY_LIMIT) break;
+        }
+        return selected;
     }
 
     @DaisoGetMapping("/products")
@@ -115,15 +232,19 @@ public class ProductController {
                 request.setAttribute("relatedProducts", recommendations);
                 // 상세와 추천 카드가 같은 찜 상태를 사용
                 List<String> wishlistIds = new ArrayList<>();
-                wishlistIds.add(product.getProductId());
                 for (ProductDTO item : recommendations) wishlistIds.add(item.getProductId());
+                prepareCardPickup(request, conn, wishlistIds);
+                wishlistIds.add(product.getProductId());
                 WishlistController.prepare(request, response, conn, wishlistIds);
             }
             conn.commit();
         }
         ProductDTO product = (ProductDTO) request.getAttribute("product");
         if (product != null) {
-            ProductActivityController.remember(request, product.getProductId());
+            HttpSession session = request.getSession(false);
+            String member = ProductActivityController.member(session);
+            LocalDate viewedOn = ProductActivityController.remember(session, member, product.getProductId());
+            if (member != null && viewedOn != null) recordView(request, member, product.getProductId(), viewedOn);
             prepareDetailReviews(request, product.getProductId(), positiveReviewPage(request.getParameter("photoPage")));
         }
         return "product/detail";
@@ -140,13 +261,40 @@ public class ProductController {
     }
 
     private void preparePickupStores(HttpServletRequest request, Connection connection, ProductDTO product) {
-        String status = product.getStatus();
-        if (!"AVAILABLE".equals(status) && !"SOLD_OUT".equals(status)) return;
+        if (!ProductView.pickupEligible(product)) return;
         try {
             request.setAttribute("pickupStores", storeInventory.pickupStores(connection, product.getProductId()));
         } catch (SQLException error) {
             request.getServletContext().log("상품 상세 픽업 재고 조회 실패", error);
             request.setAttribute("pickupLookupError", true);
+        }
+    }
+
+    private Set<String> prepareCardPickup(HttpServletRequest request, Connection connection, List<String> productIds) {
+        try {
+            Set<String> pickup = storeInventory.pickupProductIds(connection, productIds);
+            request.setAttribute("cardPickupIds", pickup);
+            return pickup;
+        } catch (SQLException error) {
+            request.getServletContext().log("상품 카드 픽업 재고 조회 실패", error);
+            request.setAttribute("cardPickupLookupError", true);
+            return Set.of();
+        }
+    }
+
+    private void recordView(HttpServletRequest request, String member, String product, LocalDate day) {
+        try (Connection conn = ProductQueries.connect()) {
+            try {
+                recommendationActivity.recordView(conn, member, product, day);
+                conn.commit();
+            } catch (SQLException error) {
+                conn.rollback();
+                throw error;
+            }
+        } catch (SQLException | NamingException error) {
+            if (!(error instanceof SQLException) || !RecommendationActivityDAO.viewTableMissing((SQLException) error)) {
+                request.getServletContext().log("상품 조회 이력 저장 실패", error);
+            }
         }
     }
 
@@ -278,6 +426,7 @@ public class ProductController {
                     request.setAttribute("stockWatchHero", new StockWatchView(request.getContextPath(), filter, counts,
                             categories, ranked));
                 }
+                prepareCardPickup(request, conn, wishlistIds);
                 WishlistController.prepare(request, response, conn, wishlistIds);
                 request.setAttribute("activeNavigation", collectionPage == null ? collection : collectionPage.key);
                 request.setAttribute("categoryPath", path);

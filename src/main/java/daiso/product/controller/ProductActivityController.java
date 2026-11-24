@@ -95,17 +95,18 @@ public final class ProductActivityController {
         return VIEW;
     }
 
-    static void remember(HttpServletRequest request, String productId) {
-        HttpSession session = request.getSession(false);
-        String member = member(session);
-        if (member == null) return;
+    static LocalDate remember(HttpSession session, String member, String productId) {
+        if (member == null) return null;
+        LocalDate today = LocalDate.now(STORE_ZONE);
         synchronized (session) {
+            Map<String, LocalDate> previous = snapshot(session, member);
             Map<String, LocalDate> items = new LinkedHashMap<>();
-            items.put(productId, LocalDate.now(STORE_ZONE));
-            snapshot(session, member).forEach((id, date) -> {
+            items.put(productId, today);
+            previous.forEach((id, date) -> {
                 if (items.size() < MAX_RECENT) items.putIfAbsent(id, date);
             });
             session.setAttribute(SESSION_KEY, new RecentViews(member, items));
+            return today.equals(previous.get(productId)) ? null : today;
         }
     }
 
@@ -158,13 +159,13 @@ public final class ProductActivityController {
         return "ERROR";
     }
 
-    private static Map<String, LocalDate> snapshot(HttpSession session, String member) {
+    static Map<String, LocalDate> snapshot(HttpSession session, String member) {
         Object value = session.getAttribute(SESSION_KEY);
         return value instanceof RecentViews && member.equals(((RecentViews) value).member)
                 ? ((RecentViews) value).items : Map.of();
     }
 
-    private static String member(HttpSession session) {
+    static String member(HttpSession session) {
         Object value = session == null ? null : session.getAttribute("member_id");
         return value instanceof String && !((String) value).isBlank() ? (String) value : null;
     }

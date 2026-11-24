@@ -118,6 +118,8 @@
                 </label>
                 <% } %>
             </div>
+            <p class="card-pickup-note" role="status" data-card-pickup-error
+               <%= Boolean.TRUE.equals(request.getAttribute("cardPickupLookupError")) ? "" : "hidden" %>>매장픽업 가능 여부를 확인하지 못했습니다.</p>
             <div class="product-grid catalog-grid<%= catalog.feed ? " collection-feed" : "" %>">
                 <% int position = catalog.firstRank;
                    for (ProductDTO item : catalog.products) {

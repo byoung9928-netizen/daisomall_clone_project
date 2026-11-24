@@ -2,6 +2,7 @@ package daiso.product.controller;
 
 import daiso.product.dao.ReviewVisibility;
 import daiso.product.dto.ProductActivityItem;
+import daiso.product.service.RecommendationService.Scope;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -252,6 +253,64 @@ public class ProductDAO {
         }
     }
 
+    List<ProductDTO> recommendationCandidates(Connection conn, Scope scope, int limit) throws SQLException {
+        String fields = "SELECT p.product_id, p.category_id, p.brand, p.price, p.status, p.stock_quantity";
+        String filter = " WHERE p.status IN ('AVAILABLE','SOLD_OUT')";
+        String sql;
+        List<Object> args = new ArrayList<>();
+        if (scope == null) {
+            sql = VISIBLE_CATEGORIES + " " + fields + " FROM products p JOIN visible_categories v "
+                    + "ON v.category_id = p.category_id" + filter + " ORDER BY " + sortSql("recommended")
+                    + ", p.product_id LIMIT ?";
+        } else {
+            if (scope.roots.isEmpty()) return List.of();
+            String priority = "CASE WHEN p.category_id IN (" + markers(scope.leaves.size()) + ") THEN 0 ";
+            args.addAll(scope.leaves);
+            if (!scope.parents.isEmpty()) {
+                priority += "WHEN v.parent_id IN (" + markers(scope.parents.size()) + ") THEN 1 ";
+                args.addAll(scope.parents);
+            }
+            String root = "COALESCE(parent.parent_id, v.parent_id, v.category_id)";
+            sql = VISIBLE_CATEGORIES + ", shortlist AS (SELECT p.product_id, ROW_NUMBER() OVER (PARTITION BY "
+                    + root + " ORDER BY " + priority + "ELSE 2 END, p.sales DESC, p.product_id) AS position "
+                    + "FROM products p JOIN visible_categories v ON v.category_id = p.category_id "
+                    + "LEFT JOIN visible_categories parent ON parent.category_id = v.parent_id" + filter
+                    + " AND " + root + " IN (" + markers(scope.roots.size()) + ")) "
+                    + fields + " FROM shortlist s JOIN products p ON p.product_id = s.product_id "
+                    + "WHERE s.position <= ? ORDER BY s.position, p.product_id";
+            args.addAll(scope.roots);
+        }
+        args.add(limit);
+        List<ProductDTO> result = new ArrayList<>();
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, args);
+            try (ResultSet row = query.executeQuery()) {
+                while (row.next()) {
+                    ProductDTO item = new ProductDTO();
+                    item.setProductId(row.getString("product_id"));
+                    item.setCategoryId(row.getString("category_id"));
+                    item.setBrand(row.getString("brand"));
+                    item.setPrice(row.getInt("price"));
+                    item.setStatus(row.getString("status"));
+                    item.setStockQuantity(row.getInt("stock_quantity"));
+                    result.add(item);
+                }
+            }
+        }
+        return result;
+    }
+
+    List<ProductDTO> recommendationCards(Connection connection, List<String> ids) throws SQLException {
+        List<ProductDTO> cards = new ArrayList<>();
+        for (ProductActivityItem item : findRecentlyViewed(connection, ids, ids.size(), 0)) cards.add(item.product);
+        loadRatings(connection, cards);
+        return cards;
+    }
+
+    private static String markers(int count) {
+        return String.join(",", Collections.nCopies(count, "?"));
+    }
+
     List<ProductActivityItem> findRecentlyViewed(Connection conn, List<String> ids, int limit, int offset) throws SQLException {
         if (ids.isEmpty() || offset >= ids.size()) return List.of();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
@@ -471,6 +530,65 @@ public class ProductDAO {
         }
         if (!reviewStatsNeeded) loadRatings(conn, products);
         return new CatalogPage(products, total);
+    }
+
+    private static final String HOME_RANK_SCOPE = " WHERE p.status IN ('AVAILABLE','SOLD_OUT')";
+    private static final int HOME_RANK_DAYS = 30;
+    static final int HOME_RANK_MINIMUM = 12;
+
+    List<HomeRankCategory> findHomeRankCategories(Connection conn) throws SQLException {
+        String members = ", category_members AS (SELECT category_id AS ranking_id, category_id FROM visible_categories "
+                + "WHERE level IN (1,2) UNION ALL SELECT m.ranking_id, v.category_id FROM category_members m "
+                + "JOIN visible_categories v ON v.parent_id = m.category_id)";
+        String sql = VISIBLE_CATEGORIES + APPROVED_ORDERS + members
+                + " SELECT v.category_id, v.name, COALESCE(v.parent_id, v.category_id) AS root_id, "
+                + "COUNT(*) AS eligible_products, SUM(COALESCE(sales_rank.units, 0)) AS approved_units, "
+                + "SUM(" + REVIEW_COUNT + ") AS public_reviews"
+                + " FROM category_members m JOIN visible_categories v ON v.category_id = m.ranking_id"
+                + " JOIN products p ON p.category_id = m.category_id"
+                + salesRankJoin(false, false) + ACTIVE_REVIEW_STATS + HOME_RANK_SCOPE
+                + " GROUP BY v.category_id, v.name, v.parent_id HAVING COUNT(*) >= ?"
+                + " ORDER BY (approved_units > 0) DESC, (eligible_products >= 20) DESC, approved_units DESC, public_reviews DESC, v.category_id";
+        List<HomeRankCategory> result = new ArrayList<>();
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            query.setInt(1, -HOME_RANK_DAYS);
+            query.setInt(2, HOME_RANK_MINIMUM);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    result.add(new HomeRankCategory(rows.getString("category_id"), rows.getString("name"),
+                            rows.getString("root_id"), rows.getInt("eligible_products"), rows.getLong("approved_units")));
+                }
+            }
+        }
+        return result;
+    }
+
+    List<ProductDTO> findHomeRankProducts(Connection conn, String category, int limit) throws SQLException {
+        String sql = VISIBLE_CATEGORIES + SCOPED_CATEGORIES + APPROVED_ORDERS
+                + " SELECT " + PUBLIC_COLUMNS + " FROM products p JOIN selected_categories c ON p.category_id = c.category_id"
+                + salesRankJoin(false, false) + ACTIVE_REVIEW_STATS + HOME_RANK_SCOPE
+                + " AND EXISTS (SELECT 1 FROM visible_categories WHERE category_id = ? AND level IN (1,2))"
+                + " ORDER BY COALESCE(sales_rank.units, 0) DESC, " + REVIEW_COUNT + " DESC, p.product_id LIMIT ?";
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, List.of(category, -HOME_RANK_DAYS, category, limit));
+            return readProducts(query);
+        }
+    }
+
+    public static final class HomeRankCategory {
+        public final String id;
+        public final String name;
+        final String rootId;
+        public final int products;
+        public final long units;
+
+        private HomeRankCategory(String id, String name, String rootId, int products, long units) {
+            this.id = id;
+            this.name = name;
+            this.rootId = rootId;
+            this.products = products;
+            this.units = units;
+        }
     }
 
     private static final String APPROVED_ORDERS = ", approved_orders AS (SELECT o.order_id, MAX(pa.approved_at) AS approved_at "

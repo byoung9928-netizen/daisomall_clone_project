@@ -6,6 +6,8 @@ import java.util.stream.Collectors;
 
 import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.dao.StoreInventoryDAO.Location;
+import daiso.product.dao.StoreInventoryDAO.State;
+import daiso.product.dao.StoreInventoryDAO.StockAvailability;
 
 public final class StoreFinderView {
     private static final Map<String, String> AREA_BOUNDS = Map.of(
@@ -34,7 +36,7 @@ public final class StoreFinderView {
     }
 
     StoreFinderView(String context, String keyword, String storeKeyword, String picker, ProductDTO product,
-            Location selected, Integer quantity, List<Location> locations, CatalogPage result, int page, int size) {
+            Location selected, StockAvailability availability, List<Location> locations, CatalogPage result, int page, int size) {
         this.keyword = keyword;
         this.storeKeyword = storeKeyword;
         this.picker = picker;
@@ -44,9 +46,15 @@ public final class StoreFinderView {
         products = result == null ? List.of() : List.copyOf(result.products);
         total = result == null ? 0 : result.total;
         checked = product != null && selected != null;
-        stockLabel = quantity == null ? "이 매장에서 취급하지 않는 상품입니다."
-                : quantity == 0 ? "품절 · 0개" : (quantity <= 5 ? "재고 부족 · " : "재고 있음 · ") + quantity + "개";
-        stockState = quantity == null ? "not-carried" : quantity == 0 ? "sold-out" : quantity <= 5 ? "low" : "available";
+        if (availability == null) {
+            stockLabel = "이 매장에서 취급하지 않는 상품입니다.";
+            stockState = "not-carried";
+        } else {
+            State state = availability.state;
+            stockLabel = (state == State.NORMAL ? "재고 있음" : state == State.SOLD_OUT ? "품절" : state.label)
+                    + " · " + availability.quantity + "개";
+            stockState = state == State.SOLD_OUT ? "sold-out" : state == State.LOW ? "low" : "available";
+        }
 
         Map<String, String> params = Map.of("q", keyword, "product", product == null ? "" : product.getProductId(),
                 "store", selected == null ? "" : selected.id);

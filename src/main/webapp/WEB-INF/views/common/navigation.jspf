@@ -43,7 +43,8 @@
         </template>
     <% } %>
     <div class="container category-anchor">
-        <section id="category-panel" class="category-panel" aria-label="전체 카테고리 탐색" data-source="${pageContext.request.contextPath}/api/products/categories" hidden>
+        <section id="category-panel" class="category-panel" aria-label="전체 카테고리 탐색" data-source="${pageContext.request.contextPath}/api/products/categories"
+                 data-catalog-url="${pageContext.request.contextPath}/list.jsp" hidden>
             <div class="category-heading">
                 <button id="category-close" class="category-close" type="button" aria-label="카테고리 닫기">
                     <span aria-hidden="true"></span>
@@ -65,7 +66,6 @@
                     <ul id="category-leaves"></ul>
                 </section>
             </div>
-            <p id="common-category-selection" class="visually-hidden" role="status">아직 선택한 카테고리가 없습니다.</p>
         </section>
     </div>
 </div>

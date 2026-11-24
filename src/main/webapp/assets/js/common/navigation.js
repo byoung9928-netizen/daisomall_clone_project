@@ -6,7 +6,6 @@
         if (model) {
             const nodes = model.content.querySelectorAll("[data-id]");
             const categories = [];
-            const parents = Object.create(null);
             for (let i = 0; i < nodes.length; i += 1) {
                 const node = nodes[i];
                 const parentId = node.dataset.parentId || null;
@@ -17,13 +16,7 @@
                     level: Number(node.dataset.level),
                     displayOrder: Number(node.dataset.displayOrder)
                 });
-                if (parentId !== null) {
-                    parents[parentId] = true;
-                }
             }
-            categories.forEach(function (category) {
-                category.isLeaf = !parents[category.id];
-            });
             return categories;
         }
         return fetch(url, { credentials: "same-origin" }).then(function (response) {
@@ -50,8 +43,6 @@
                     throw new Error("Invalid category parent");
                 }
             });
-            const parents = new Set(payload.map(item => item.parentId));
-            payload.forEach(item => { item.isLeaf = !parents.has(item.id); });
             return payload;
         });
     }
@@ -63,12 +54,12 @@
             .map(function (id) { return document.getElementById(id); });
         const loadStatus = document.querySelector("#category-load-status");
         const retry = document.querySelector("#category-retry");
-        const selection = document.querySelector("#common-category-selection");
+        const catalogUrl = panel && panel.dataset.catalogUrl;
         const close = document.querySelector("#category-close");
-        if (!toggle || !panel || !loadStatus || !retry || !close || lists.some(function (list) { return !list; })) {
+        if (!toggle || !catalogUrl || !loadStatus || !retry || !close || lists.some(function (list) { return !list; })) {
             return;
         }
-        const selected = [null, null, null];
+        const expanded = [null, null];
         let categories = [];
         let loading = false;
 
@@ -97,34 +88,36 @@
             const items = childrenOf(parentId);
             items.forEach(function (item) {
                 const row = document.createElement("li");
-                const button = document.createElement("button");
-                button.type = "button";
-                button.className = "category-item";
-                button.dataset.id = item.id;
-                const label = document.createElement("span");
-                label.className = "category-item-label";
-                label.textContent = item.name;
-                button.append(label);
-                button.setAttribute("aria-pressed", String(selected[level - 1] === item.id));
-                if (childrenOf(item.id).length > 0) {
-                    button.setAttribute("aria-controls", lists[level].id);
-                    const arrow = document.createElement("span");
-                    arrow.className = "category-item-arrow";
-                    arrow.textContent = "›";
-                    arrow.setAttribute("aria-hidden", "true");
-                    button.append(arrow);
+                row.className = "category-row";
+
+                const link = document.createElement("a");
+                link.className = "category-item";
+                const url = new URL(catalogUrl, window.location.href);
+                url.searchParams.set("category", item.id);
+                link.href = url.href;
+                link.textContent = item.name;
+                row.append(link);
+
+                if (level < lists.length && childrenOf(item.id).length > 0) {
+                    const disclosure = document.createElement("button");
+                    disclosure.type = "button";
+                    disclosure.className = "category-disclosure";
+                    disclosure.setAttribute("aria-label", item.name + " 하위 분류");
+                    disclosure.setAttribute("aria-controls", lists[level].id);
+                    disclosure.setAttribute("aria-expanded", "false");
+                    disclosure.addEventListener("click", function () {
+                        browse(level, expanded[level - 1] === item.id ? null : item.id);
+                    });
+                    row.append(disclosure);
                 }
-                button.addEventListener("pointerenter", function (event) {
-                    if (item.level < 3 && event.pointerType === "mouse"
-                            && window.matchMedia("(any-hover: hover)").matches) {
-                        browse(item);
-                    }
-                });
-                button.addEventListener("click", function () {
-                    browse(item);
-                    confirmSelection(item);
-                });
-                row.append(button);
+                if (level < lists.length) {
+                    link.addEventListener("pointerenter", function (event) {
+                        if (event.pointerType === "mouse" && window.matchMedia("(any-hover: hover)").matches) {
+                            browse(level, row.querySelector(".category-disclosure") ? item.id : null);
+                        }
+                    });
+                }
+                row.dataset.id = item.id;
                 list.append(row);
             });
             if (items.length === 0) {
@@ -140,42 +133,29 @@
             list.append(row);
         }
 
-        function browse(item) {
-            if (selected[item.level - 1] === item.id) {
+        function browse(level, id) {
+            const index = level - 1;
+            if (expanded[index] === id) {
                 return;
             }
-            selected[item.level - 1] = item.id;
-            for (let index = item.level; index < selected.length; index += 1) {
-                selected[index] = null;
-            }
-            // Keep the activated element mounted so keyboard focus remains stable.
-            lists[item.level - 1].querySelectorAll("button").forEach(function (button) {
-                button.setAttribute("aria-pressed", String(button.dataset.id === item.id));
+            expanded[index] = id;
+            lists[index].querySelectorAll(".category-row").forEach(function (row) {
+                const open = row.dataset.id === id;
+                row.classList.toggle("is-expanded", open);
+                const disclosure = row.querySelector(".category-disclosure");
+                if (disclosure) {
+                    disclosure.setAttribute("aria-expanded", String(open));
+                }
             });
-            if (item.level < 3) {
-                renderLevel(item.level + 1, item.id);
+            if (id) {
+                renderLevel(level + 1, id);
+            } else {
+                showEmpty(lists[level], level === 1 ? "대분류를 선택해 주세요." : "중분류를 선택해 주세요.");
             }
-            if (item.level === 1) {
+            if (level === 1) {
+                expanded[1] = null;
                 showEmpty(lists[2], "중분류를 선택해 주세요.");
             }
-        }
-
-        function findCategory(id) {
-            return categories.find(function (category) { return category.id === id; });
-        }
-
-        function confirmSelection(item) {
-            const path = selected.filter(Boolean).map(function (id) {
-                return findCategory(id).name;
-            });
-            if (selection) {
-                selection.textContent = "선택한 카테고리: " + path.join(" › ")
-                    + (childrenOf(item.id).length === 0 ? " · 상품 목록을 엽니다." : "");
-            }
-            panel.dispatchEvent(new CustomEvent("category:select", {
-                bubbles: true,
-                detail: { id: item.id, path: selected.filter(Boolean), isLeaf: item.isLeaf },
-            }));
         }
 
         function initialize() {
@@ -219,28 +199,27 @@
             }
         });
         panel.addEventListener("keydown", function (event) {
-            const button = event.target.closest(".category-item");
-            if (!button) {
+            const row = event.target.closest(".category-row");
+            if (!row) {
                 return;
             }
-            const level = lists.findIndex(function (list) { return list.contains(button); });
-            const buttons = Array.from(lists[level].querySelectorAll("button"));
-            const index = buttons.indexOf(button);
+            const level = lists.indexOf(row.parentElement);
+            const links = Array.from(lists[level].querySelectorAll(".category-item"));
+            const index = links.indexOf(row.querySelector(".category-item"));
             let target;
             if (event.key === "ArrowDown") {
-                target = buttons[(index + 1) % buttons.length];
+                target = links[(index + 1) % links.length];
             } else if (event.key === "ArrowUp") {
-                target = buttons[(index + buttons.length - 1) % buttons.length];
+                target = links[(index + links.length - 1) % links.length];
             } else if (event.key === "Home") {
-                target = buttons[0];
+                target = links[0];
             } else if (event.key === "End") {
-                target = buttons[buttons.length - 1];
-            } else if (event.key === "ArrowRight" && level < 2) {
-                const item = findCategory(button.dataset.id);
-                browse(item);
-                target = lists[level + 1].querySelector("button");
+                target = links[links.length - 1];
+            } else if (event.key === "ArrowRight" && row.querySelector(".category-disclosure")) {
+                browse(level + 1, row.dataset.id);
+                target = lists[level + 1].querySelector(".category-item");
             } else if (event.key === "ArrowLeft" && level > 0) {
-                target = lists[level - 1].querySelector('[aria-pressed="true"]');
+                target = lists[level - 1].querySelector(".is-expanded .category-item");
             }
             if (target) {
                 event.preventDefault();

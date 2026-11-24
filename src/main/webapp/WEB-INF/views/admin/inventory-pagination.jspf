@@ -1,0 +1,24 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.Map,daiso.product.controller.InventoryPagination" %>
+<nav class="admin-product-pagination" aria-label="재고 목록 페이지">
+    <% if (inventoryPagination.previous != null) { %>
+        <a class="button secondary" rel="prev" href="<%= inventoryPagination.previous %>">이전 페이지</a>
+    <% } %>
+    <div class="admin-product-page-numbers">
+        <% int lastInventoryPage = 0;
+           for (Map.Entry<Integer, String> link : inventoryPagination.links.entrySet()) {
+               int targetPage = link.getKey(); %>
+            <% if (targetPage > lastInventoryPage + 1) { %><span aria-hidden="true">…</span><% } %>
+            <% if (targetPage == inventoryPagination.page) { %>
+                <span class="admin-product-page-number" aria-current="page"><%= targetPage %></span>
+            <% } else { %>
+                <a class="admin-product-page-number" href="<%= link.getValue() %>" aria-label="<%= targetPage %>페이지"><%= targetPage %></a>
+            <% } %>
+        <% lastInventoryPage = targetPage;
+           } %>
+    </div>
+    <% if (inventoryPagination.next != null) { %>
+        <a class="button secondary" rel="next" href="<%= inventoryPagination.next %>">다음 페이지</a>
+    <% } %>
+    <span>총 <%= inventoryPagination.pages %>페이지</span>
+</nav>

@@ -16,6 +16,7 @@ import daiso.product.controller.ProductDAO.CatalogFilter;
 import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.Location;
+import daiso.product.dao.StoreInventoryDAO.StockAvailability;
 
 @DaisoController
 public final class StoreFinderController {
@@ -79,10 +80,10 @@ public final class StoreFinderController {
                 filter.offset = (page - 1) * PAGE_SIZE;
                 productResults = products.findCatalog(connection, filter);
             }
-            Integer quantity = product == null || selected == null
-                    ? null : stores.quantity(connection, selected.id, product.getProductId());
+            StockAvailability availability = product == null || selected == null ? null
+                    : StoreInventoryDAO.forInventory(connection).availability(connection, selected.id, product.getProductId());
             request.setAttribute("storeFinder", new StoreFinderView(request.getContextPath(), keyword, storeKeyword,
-                    picker, product, selected, quantity, storeResults, productResults, page, PAGE_SIZE));
+                    picker, product, selected, availability, storeResults, productResults, page, PAGE_SIZE));
             connection.commit();
         } catch (IllegalArgumentException error) {
             return message(request, response, 400, "검색 조건을 다시 확인해 주세요.");

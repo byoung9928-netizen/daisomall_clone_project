@@ -13,6 +13,9 @@
 
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/home.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/home-carousel.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/featured-carousel.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/home-category-ranking.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/stock-watch.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>
@@ -41,6 +44,9 @@ document.addEventListener("DOMContentLoaded", function () {
     <%@ include file="../common/navigation.jspf" %>
     <div class="wishlist-tools" data-wishlist-config
          data-base-url="${pageContext.request.contextPath}/app/products/wishlist"
+         data-cart-url="${pageContext.request.contextPath}/app/cart/add"
+         data-cart-preview-url="${pageContext.request.contextPath}/app/products/cart/preview"
+         data-cart-view-url="${pageContext.request.contextPath}/app/cart"
          data-login-url="${pageContext.request.contextPath}/app/member/login"
          data-csrf="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>"
          data-logged-in="<%= Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn")) %>">
@@ -48,35 +54,46 @@ document.addEventListener("DOMContentLoaded", function () {
     </div>
     <main id="main-content" class="container storefront" data-page="home" tabindex="-1">
         <%@ include file="home-promotions.jspf" %>
-        <section class="product-section" id="featured">
+        <% if (Boolean.TRUE.equals(request.getAttribute("cardPickupLookupError"))) { %>
+            <p class="card-pickup-note" role="status">매장픽업 가능 여부를 확인하지 못했습니다.</p>
+        <% } %>
+        <section class="product-section" id="featured" aria-labelledby="featured-title">
             <p class="section-eyebrow">
                 EVERYDAY PICKS
             </p>
-            <h2 class="section-title">
-                오늘의 추천 상품
-            </h2>
-            <div class="product-grid">
-                <% for (ProductDTO item : (List<ProductDTO>) request.getAttribute("featuredProducts")) { %>
-                    <%@ include file="../product/card.jspf" %>
-                <% } %>
-            </div>
-            <a class="button secondary" href="<%= ProductView.url(context, "/list.jsp", Map.of("sort", "recommended", "collection", "ranking")) %>">상품 더 보기</a>
+            <h2 class="section-title" id="featured-title"><%= request.getAttribute("homeRecommendationTitle") == null
+                    ? "오늘의 추천 상품" : ProductView.escape(request.getAttribute("homeRecommendationTitle")) %></h2>
+            <% {
+                List<ProductDTO> carouselProducts = (List<ProductDTO>) request.getAttribute("featuredProducts");
+                String carouselId = "featured-products";
+                String carouselLabel = "추천 상품";
+                boolean carouselRanked = false;
+                request.setAttribute("browseCatalog", true);
+            %>
+                <%@ include file="home-product-carousel.jspf" %>
+            <% request.removeAttribute("browseCatalog");
+               request.removeAttribute("recommendationReasons");
+               } %>
         </section>
-        <section class="product-section" id="new-products">
-            <p class="section-eyebrow">
-                EVERYDAY PICKS
-            </p>
-            <h2 class="section-title">
-                신상발견
-            </h2>
-            <div class="product-grid">
-                <% for (ProductDTO item : (List<ProductDTO>) request.getAttribute("newProducts")) { %>
-                    <%@ include file="../product/card.jspf" %>
-                <% } %>
-            </div>
-            <a class="button secondary" href="<%= ProductView.url(context, "/list.jsp", Map.of("sort", "newest", "collection", "new")) %>">상품 더 보기</a>
+        <section class="product-section" id="new-products" aria-labelledby="new-products-title">
+            <p class="section-eyebrow">EVERYDAY PICKS</p>
+            <h2 class="section-title" id="new-products-title">신상발견</h2>
+            <% {
+                List<ProductDTO> carouselProducts = (List<ProductDTO>) request.getAttribute("newProducts");
+                String carouselId = "new-product-cards";
+                String carouselLabel = "신상품";
+                boolean carouselRanked = false;
+            %>
+                <%@ include file="home-product-carousel.jspf" %>
+            <% } %>
         </section>
-        <section class="product-section" aria-labelledby="stock-chat-title">
+        <section class="product-section" id="home-category-ranking" aria-labelledby="home-ranking-title"
+                 data-home-ranking data-source="${pageContext.request.contextPath}/app/products/home/category-rankings">
+            <h2 class="section-title" id="home-ranking-title">카테고리 랭킹</h2>
+            <p class="home-ranking-status" role="status" data-ranking-status></p>
+            <button class="button secondary" type="button" data-ranking-retry hidden>다시 불러오기</button>
+            <div data-ranking-content></div>
+        </section>
     </main>
     <%@ include file="../common/footer.jspf" %>
 </body>

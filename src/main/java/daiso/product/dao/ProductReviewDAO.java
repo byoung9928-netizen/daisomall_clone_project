@@ -28,9 +28,7 @@ public final class ProductReviewDAO {
             + "AND o.status = 'CANCELLED' AND o.canceled_at IS NOT NULL "
             + "AND p.method = 'KAKAOPAY' AND p.status = 'CANCELLED' AND p.approved_at IS NOT NULL "
             + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount) AS refunded";
-    private static final String APPROVED_PURCHASE = "o.status = 'PAID' AND o.canceled_at IS NULL "
-            + "AND p.method = 'KAKAOPAY' AND p.status = 'APPROVED' "
-            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.approved_at IS NOT NULL AND p.amount = o.total_amount";
+    private static final String APPROVED_PURCHASE = ApprovedPurchase.CONDITION;
     private static final String PURCHASE = "SELECT i.order_item_id FROM order_items i "
             + "JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "

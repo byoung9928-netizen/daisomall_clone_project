@@ -1,12 +1,15 @@
 <%@ page pageEncoding="UTF-8" %>
 <% boolean wishlistCardSelected = request.getAttribute("wishlistSelected") instanceof java.util.Set<?>
         && ((java.util.Set<?>) request.getAttribute("wishlistSelected")).contains(item.getProductId());
-   boolean temporarilySoldOut = ProductView.temporarilySoldOut(item); %>
+   boolean temporarilySoldOut = ProductView.temporarilySoldOut(item);
+   boolean deliveryAvailable = ProductView.available(item);
+   boolean pickupAvailable = ProductView.pickupEligible(item) && request.getAttribute("cardPickupIds") instanceof java.util.Set<?>
+       && ((java.util.Set<?>) request.getAttribute("cardPickupIds")).contains(item.getProductId()); %>
 <article class="product-card" data-product-id="<%= ProductView.escape(item.getProductId()) %>">
     <a class="product-cover<%= temporarilySoldOut ? " product-cover--sold-out" : "" %>" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>">
         <img src="<%= ProductView.image(context, item) %>" alt="<%= ProductView.escape(item.getName()) %>" loading="lazy">
         <% if (!ProductView.available(item)) { %>
-            <span class="product-status"><%= temporarilySoldOut ? "일시품절" : ProductView.status(item) %></span>
+            <span class="product-status"><%= pickupAvailable ? "택배 품절" : temporarilySoldOut ? "일시품절" : ProductView.status(item) %></span>
         <% } %>
     </a>
     <button type="button" class="wishlist-button<%= wishlistCardSelected ? " is-selected" : "" %>"
@@ -40,6 +43,17 @@
     <% } %>
     <p class="product-price"><%= ProductView.money(item.getPrice()) %></p>
     <a class="product-name" href="<%= ProductView.url(context, "/product.jsp", Map.of("id", item.getProductId())) %>"><%= ProductView.escape(item.getName()) %></a>
-    <div class="product-badges"><span class="badge">택배배송</span></div>
+    <% if (deliveryAvailable || pickupAvailable) { %>
+        <div class="product-badges" role="group" aria-label="구매 가능한 수령 방식">
+            <% if (deliveryAvailable) { %><span class="badge">택배</span><% } %>
+            <% if (pickupAvailable) { %><span class="badge">픽업</span><% } %>
+        </div>
+    <% } %>
     <p class="product-rating">★ <%= String.format(java.util.Locale.ROOT, "%.1f", item.getRating()) %> (<%= item.getReviewCount() %>)</p>
+    <% if (request.getAttribute("recommendationReasons") instanceof java.util.Map<?, ?>) {
+           Object reason = ((java.util.Map<?, ?>) request.getAttribute("recommendationReasons")).get(item.getProductId());
+           if (reason != null && !reason.toString().isBlank()) { %>
+               <p class="product-recommendation-reason"><%= ProductView.escape(reason) %></p>
+        <% }
+       } %>
 </article>

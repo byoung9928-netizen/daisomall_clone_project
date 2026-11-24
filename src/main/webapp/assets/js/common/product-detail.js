@@ -168,15 +168,21 @@
 	    updateQuantity();
 	    try {
 	        const response = await fetch(url, { method: "POST", body });
-	        if (!response.ok) {
+	        if (!response.ok || response.redirected) {
 	            throw new Error("장바구니 저장 중 오류가 발생했습니다.");
 	        }
 
 	        const result = (await response.text()).trim();
-	        const successMessage = isPickup
-	            ? "매장픽업 장바구니에 담았습니다."
-	            : "장바구니에 담았습니다.";
-	        window.Daiso.ui.notice(result === "OK" ? successMessage : result);
+	        if (result !== "OK") {
+	            window.Daiso.ui.notice(result || "장바구니에 담지 못했습니다.");
+	            return;
+	        }
+	        window.Daiso.ui.showToast({
+	            message: isPickup ? "매장픽업 장바구니에 담았습니다." : "택배배송 장바구니에 담았습니다.",
+	            actionText: "바로가기",
+	            actionUrl: cart.dataset.cartViewUrl,
+	            origin: cartButton
+	        });
 	    } catch (error) {
 	        window.Daiso.ui.notice(error.message);
 	    } finally {
