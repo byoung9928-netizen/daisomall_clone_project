@@ -267,6 +267,7 @@ public class OrderCancelPageController {
                     + "다시 취소 요청하지 마세요.";
 
             } catch (SQLException e) {
+                session.getServletContext().log("카카오페이 취소 완료 후 DB 반영 실패", e);
                 return "카카오페이 취소 결과를 DB에 저장하지 못했습니다. "
                     + "재요청하지 말고 결제 상태를 확인해 주세요.";
 
