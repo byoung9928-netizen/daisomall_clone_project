@@ -235,6 +235,15 @@ public class OrderMyPageController {
 		        session.setAttribute("orderCsrf", csrfToken);
 		    }
 		    request.setAttribute("orderCsrf", csrfToken);
+		    Object savedRefundAccount = session.getAttribute("demoRefundBank:" + memberId);
+		    if (savedRefundAccount instanceof Map<?, ?>) {
+		        Map<?, ?> account = (Map<?, ?>) savedRefundAccount;
+		        request.setAttribute("demoRefundBank", account.get("bank"));
+		        request.setAttribute("demoRefundLastFour", account.get("lastFour"));
+		    } else if (savedRefundAccount instanceof String) {
+		        request.setAttribute("demoRefundBank", savedRefundAccount);
+		        request.setAttribute("demoRefundLastFour", "1234");
+		    }
 
 		    try {
 		    	request.setAttribute(
@@ -314,6 +323,101 @@ public class OrderMyPageController {
                 return "상태 확인 필요";
         }
     }
+    
+    @DaisoPostMapping("/order/profile/demo-refund-account")
+    @DaisoResponseBody
+    public String manageDemoRefundAccount(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        String memberId = session == null
+                ? null : (String) session.getAttribute("member_id");
+
+        if (memberId == null || memberId.isBlank()) {
+            return "로그인 후 이용해 주세요.";
+        }
+
+        Object token = session.getAttribute("orderCsrf");
+        if (!(token instanceof String) || !token.equals(request.getParameter("csrfToken"))) {
+            return "화면을 새로고침한 뒤 다시 시도해 주세요.";
+        }
+
+        String action = request.getParameter("action");
+        String savedKey = "demoRefundBank:" + memberId;
+        String verifiedKey = "demoRefundVerifiedBank:" + memberId;
+
+        synchronized (session) {
+            if ("delete".equals(action)) {
+                session.removeAttribute(savedKey);
+                session.removeAttribute(verifiedKey);
+                return "OK";
+            }
+
+            boolean verifying = "verify".equals(action);
+            if (verifying) {
+                session.removeAttribute(verifiedKey);
+            } else if (!"save".equals(action)) {
+                return "등록 요청을 확인해 주세요.";
+            }
+
+            if (!"yes".equals(request.getParameter("consent"))) {
+                return "시연 데이터 이용에 동의해 주세요.";
+            }
+
+            String bank = request.getParameter("bank");
+            if (bank == null || !List.of("국민은행", "신한은행", "우리은행").contains(bank)) {
+                return "은행을 선택해 주세요.";
+            }
+
+            String accountNumber = request.getParameter("accountNumber");
+            if (accountNumber == null || !accountNumber.matches("[0-9]{5,20}")) {
+                return "시연용 계좌번호를 숫자 5~20자리로 입력해 주세요.";
+            }
+
+            String holderName = request.getParameter("holderName");
+            if (holderName == null || holderName.isBlank()) {
+                return "예금주 이름을 입력해 주세요.";
+            }
+            holderName = holderName.strip();
+
+            String memberName;
+            try {
+                MemberProfileInfo profile = memberService.findProfileByMemberId(memberId);
+                if (profile == null || profile.getName() == null || profile.getName().isBlank()) {
+                    return "등록된 회원 이름을 확인해 주세요.";
+                }
+                memberName = profile.getName().strip();
+            } catch (Exception e) {
+                request.getServletContext().log("시연 환불계좌 회원정보 조회 실패", e);
+                return "회원 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+            }
+
+            if (!memberName.equals(holderName)) {
+                return "예금주 이름이 로그인한 회원 이름과 일치하지 않습니다.";
+            }
+
+            List<String> accountToVerify = List.of(bank, accountNumber, holderName);
+
+            if (verifying) {
+                session.setAttribute(verifiedKey, accountToVerify);
+                return "OK";
+            }
+
+            if (!accountToVerify.equals(session.getAttribute(verifiedKey))) {
+                return "입력한 정보로 시연 계좌 확인을 다시 해 주세요.";
+            }
+
+            String lastFour = accountNumber.substring(accountNumber.length() - 4);
+            session.setAttribute(savedKey, Map.of("bank", bank, "lastFour", lastFour));
+
+            if (!bank.equals(session.getAttribute(verifiedKey))) {
+                return "계좌 확인을 먼저 해 주세요.";
+            }
+
+            session.setAttribute(savedKey, bank);
+            session.removeAttribute(verifiedKey);
+            return "OK";
+        }
+    }
+    
     @DaisoPostMapping("/order/profile/consent")
     @DaisoResponseBody
     public String saveMemberConsentSettings(HttpServletRequest request) {
