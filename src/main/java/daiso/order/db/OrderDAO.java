@@ -35,7 +35,23 @@ public class OrderDAO {
 					
 			}
 		}
+		// ===== 택배·픽업 주문을 같은 트랜잭션으로 저장 =====
 		public long createOrder(OrderBean order) throws SQLException {
+		    return insertOrder(order, null, 0);
+		}
+
+		public long createPickupOrder(OrderBean order, String storeId) throws SQLException {
+		    if (storeId == null || storeId.isBlank() || storeId.length() > 40) {
+		        throw new IllegalArgumentException("픽업 매장을 확인해 주세요.");
+		    }
+		    if (order.getShippingFee() != 0) {
+		        throw new IllegalArgumentException("픽업 주문의 배송비는 0원이어야 합니다.");
+		    }
+		    return insertOrder(order, storeId, 200);
+		}
+
+		private long insertOrder(OrderBean order, String storeId, int pickupFee)
+		        throws SQLException {
 
 		    // 주문할 상품이 있는지 확인
 		    if (order.getItems() == null || order.getItems().isEmpty()) {
@@ -54,27 +70,27 @@ public class OrderDAO {
 		                "상품 가격과 수량을 확인해 주세요."
 		            );
 		        }
-
+		        if (storeId != null && !storeId.equals(item.getStoreId())) {
+		            throw new IllegalArgumentException("선택한 픽업 매장과 상품의 매장이 다릅니다.");
+		        }
 		        calculatedSubtotal += item.getItemTotal();
 		    }
 
+		    long calculatedTotal = calculatedSubtotal + order.getShippingFee() + pickupFee;
+
 		    if (calculatedSubtotal != order.getSubtotalAmount()
 		            || order.getShippingFee() < 0
-		            || (long) order.getSubtotalAmount()
-		                + order.getShippingFee() != order.getTotalAmount()) {
-
-		        throw new IllegalArgumentException(
-		            "주문 금액이 일치하지 않습니다."
-		        );
+		            || calculatedTotal != order.getTotalAmount()) {
+		        throw new IllegalArgumentException("주문 금액이 일치하지 않습니다.");
 		    }
 
 		    String orderSql =
-		        "INSERT INTO orders "
-		        + "(order_no, member_id, checkout_token, status, "
-		        + "recipient, phone, postcode, address1, address2, "
-		        + "delivery_message, subtotal_amount, shipping_fee, "
-		        + "total_amount) "
-		        + "VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		            "INSERT INTO orders "
+		            + "(order_no, member_id, checkout_token, status, "
+		            + "recipient, phone, postcode, address1, address2, "
+		            + "delivery_message, subtotal_amount, shipping_fee, total_amount, "
+		            + "fulfillment_type, pickup_store_id, pickup_fee) "
+		            + "VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 		    String itemSql =
 		        "INSERT INTO order_items "
@@ -107,6 +123,9 @@ public class OrderDAO {
 		                pstmt.setInt(10, order.getSubtotalAmount());
 		                pstmt.setInt(11, order.getShippingFee());
 		                pstmt.setInt(12, order.getTotalAmount());
+		                pstmt.setString(13, storeId == null ? "DELIVERY" : "PICKUP");
+		                pstmt.setString(14, storeId);
+		                pstmt.setInt(15, pickupFee);
 
 		                pstmt.executeUpdate();
 
@@ -630,7 +649,6 @@ public class OrderDAO {
 		    }
 		}
 		
-		
 		// 결제대기 주문을 취소하고 주문내역에서 제외
 		public boolean cancelPendingOrder(
 		        String memberId,
@@ -684,6 +702,225 @@ public class OrderDAO {
 		    }
 		}
 		// 대기 주문을 승인 처리 중으로 변경
+		
+		//로그인 회원의 픽업 주문을 검증하고 토스 승인 요청을 한 번만 시작
+		public long beginPickupTossApproval(String memberId, String orderNo,
+		                                    String paymentKey, int amount) throws SQLException {
+		    String findOrderSql =
+		            "SELECT order_id, total_amount, status FROM orders "
+		            + "WHERE member_id = ? AND order_no = ? "
+		            + "AND fulfillment_type = 'PICKUP' AND pickup_store_id IS NOT NULL "
+		            + "FOR UPDATE";
+
+		    String startOrderSql =
+		            "UPDATE orders SET status = 'APPROVING' "
+		            + "WHERE order_id = ? AND status = 'PENDING'";
+
+		    String insertAttemptSql =
+		            "INSERT INTO payment_attempts (order_id, method, status, amount, tid) "
+		            + "VALUES (?, 'TOSSPAY', 'APPROVING', ?, ?)";
+
+		    if (paymentKey == null || paymentKey.isBlank() || amount <= 0) {
+		        throw new IllegalArgumentException("픽업 결제 인증 정보를 확인해 주세요.");
+		    }
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            long orderId;
+		            try (PreparedStatement stmt = con.prepareStatement(findOrderSql)) {
+		                stmt.setString(1, memberId);
+		                stmt.setString(2, orderNo);
+
+		                try (ResultSet rs = stmt.executeQuery()) {
+		                    if (!rs.next() || rs.getInt("total_amount") != amount) {
+		                        throw new IllegalArgumentException("픽업 주문번호와 결제 금액을 확인해 주세요.");
+		                    }
+		                    if (!"PENDING".equals(rs.getString("status"))) {
+		                        throw new IllegalStateException("이미 처리 중이거나 완료된 픽업 주문입니다.");
+		                    }
+		                    orderId = rs.getLong("order_id");
+		                }
+		            }
+
+		            try (PreparedStatement stmt = con.prepareStatement(startOrderSql)) {
+		                stmt.setLong(1, orderId);
+		                if (stmt.executeUpdate() != 1) {
+		                    throw new SQLException("픽업 주문을 승인 대기로 변경하지 못했습니다.");
+		                }
+		            }
+
+		            try (PreparedStatement stmt = con.prepareStatement(insertAttemptSql)) {
+		                stmt.setLong(1, orderId);
+		                stmt.setInt(2, amount);
+		                stmt.setString(3, paymentKey);
+		                if (stmt.executeUpdate() != 1) {
+		                    throw new SQLException("픽업 결제 시도를 저장하지 못했습니다.");
+		                }
+		            }
+
+		            con.commit();
+		            return orderId;
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
+		// 로그인 회원의 결제 완료된 매장픽업 주문 조회
+		public Map<String, Object> findPaidPickupOrder(String memberId, String orderNo)
+		        throws SQLException {
+			String sql =
+			        "SELECT o.order_no, o.recipient, o.subtotal_amount, o.pickup_fee, "
+			        + "o.total_amount, p.method, "
+			        + "COALESCE(s.store_name, o.pickup_store_id) AS store_name "
+			        + "FROM orders o "
+			        + "LEFT JOIN store_locations s ON s.store_id = o.pickup_store_id "
+			        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+			        + "AND p.status = 'APPROVED' AND p.amount = o.total_amount "
+			        + "AND p.method IN ('TOSSPAY', 'KAKAOPAY') "
+			        + "WHERE o.member_id = ? AND o.order_no = ? "
+			        + "AND o.fulfillment_type = 'PICKUP' AND o.status = 'PAID'";
+
+		    try (Connection con = ds.getConnection();
+		         PreparedStatement stmt = con.prepareStatement(sql)) {
+		        stmt.setString(1, memberId);
+		        stmt.setString(2, orderNo);
+
+		        try (ResultSet rs = stmt.executeQuery()) {
+		            if (!rs.next()) return null;
+
+		            Map<String, Object> result = new HashMap<>();
+		            result.put("orderNo", rs.getString("order_no"));
+		            result.put("recipient", rs.getString("recipient"));
+		            result.put("storeName", rs.getString("store_name"));
+		            result.put("subtotal", rs.getInt("subtotal_amount"));
+		            result.put("pickupFee", rs.getInt("pickup_fee"));
+		            result.put("total", rs.getInt("total_amount"));
+		            result.put("paymentMethod",
+		                    "KAKAOPAY".equals(rs.getString("method")) ? "카카오페이" : "토스페이");
+		            return result;
+		        }
+		    }
+		}
+		//토스 승인 결과, 선택 매장 재고, 픽업 장바구니를 한 트랜잭션에 반영
+		// ===== 토스페이와 카카오페이의 픽업 승인 결과를 매장 재고에 반영 =====
+		public void completePickupTossApproval(String memberId, long orderId,
+		        String paymentKey, int amount, Timestamp approvedAt) throws SQLException {
+		    completePickupApproval(memberId, orderId, paymentKey, amount, approvedAt, "TOSSPAY");
+		}
+
+		public void completePickupApproval(String memberId, long orderId,
+		        String paymentKey, int amount, Timestamp approvedAt, String method) throws SQLException {
+		    if (!"TOSSPAY".equals(method) && !"KAKAOPAY".equals(method)) {
+		        throw new IllegalArgumentException("지원하지 않는 픽업 결제수단입니다.");
+		    }
+
+
+		    String lockSql =
+		            "SELECT o.pickup_store_id, o.status AS order_status, p.status AS pay_status "
+		            + "FROM orders o JOIN payment_attempts p ON p.order_id = o.order_id "
+		            + "WHERE o.order_id = ? AND o.member_id = ? AND o.fulfillment_type = 'PICKUP' "
+		            + "AND o.total_amount = ? AND p.amount = ? AND p.method = ? "
+		            + "AND p.tid = ? FOR UPDATE";
+
+		    String itemsSql =
+		            "SELECT product_id, SUM(quantity) AS qty FROM order_items "
+		            + "WHERE order_id = ? GROUP BY product_id ORDER BY product_id";
+
+		    String stockSql =
+		            "UPDATE store_inventory SET quantity = quantity - ? "
+		            + "WHERE store_id = ? AND product_id = ? AND is_carried = 1 AND quantity >= ?";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            String storeId;
+		            try (PreparedStatement stmt = con.prepareStatement(lockSql)) {
+		                stmt.setLong(1, orderId);
+		                stmt.setString(2, memberId);
+		                stmt.setInt(3, amount);
+		                stmt.setInt(4, amount);
+		                stmt.setString(5, method);
+		                stmt.setString(6, paymentKey);
+
+		                try (ResultSet rs = stmt.executeQuery()) {
+		                    if (!rs.next()) throw new SQLException("일치하는 픽업 결제가 없습니다.");
+		                    if ("PAID".equals(rs.getString("order_status"))
+		                            && "APPROVED".equals(rs.getString("pay_status"))) {
+		                        con.commit();
+		                        return;
+		                    }
+		                    if (!"APPROVING".equals(rs.getString("order_status"))
+		                            || !"APPROVING".equals(rs.getString("pay_status"))) {
+		                        throw new SQLException("승인 처리 중인 픽업 주문이 아닙니다.");
+		                    }
+		                    storeId = rs.getString("pickup_store_id");
+		                }
+		            }
+
+		            try (PreparedStatement items = con.prepareStatement(itemsSql);
+		                 PreparedStatement stock = con.prepareStatement(stockSql)) {
+		                items.setLong(1, orderId);
+		                try (ResultSet rs = items.executeQuery()) {
+		                    if (!rs.next()) throw new SQLException("픽업 주문상품이 없습니다.");
+		                    do {
+		                        long qty = rs.getLong("qty");
+		                        if (qty <= 0) throw new SQLException("픽업 주문 수량이 잘못됐습니다.");
+		                        stock.setLong(1, qty);
+		                        stock.setString(2, storeId);
+		                        stock.setString(3, rs.getString("product_id"));
+		                        stock.setLong(4, qty);
+		                        if (stock.executeUpdate() != 1) {
+		                            throw new SQLException("선택 매장의 픽업 재고가 부족합니다.");
+		                        }
+		                    } while (rs.next());
+		                }
+		            }
+
+		            try (PreparedStatement pay = con.prepareStatement(
+		                    "UPDATE payment_attempts SET status = 'APPROVED', approved_at = ? "
+		                    		+ "WHERE order_id = ? AND tid = ? AND method = ? AND status = 'APPROVING'");
+		                 PreparedStatement order = con.prepareStatement(
+		                    "UPDATE orders SET status = 'PAID', stock_deducted = TRUE "
+		                    + "WHERE order_id = ? AND status = 'APPROVING'");
+		                 PreparedStatement cart = con.prepareStatement(
+		                    "DELETE c FROM pickup_cart_items c JOIN order_items i "
+		                    + "ON i.order_id = ? AND i.product_id = c.product_id "
+		                    + "WHERE c.member_id = ? AND c.store_id = ? AND c.quantity = i.quantity")) {
+		                pay.setTimestamp(1, approvedAt);
+		                pay.setLong(2, orderId);
+		                pay.setString(3, paymentKey);
+		                pay.setString(4, method);
+		                
+		                order.setLong(1, orderId);
+		                if (pay.executeUpdate() != 1 || order.executeUpdate() != 1) {
+		                    throw new SQLException("픽업 결제 완료 상태를 저장하지 못했습니다.");
+		                }
+
+		                cart.setLong(1, orderId);
+		                cart.setString(2, memberId);
+		                cart.setString(3, storeId);
+		                cart.executeUpdate();
+		            }
+
+		            con.commit();
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
 		// 취소가 먼저 끝났다면 변경하지 못하므로 승인 요청을 보내지 않음
 		public boolean beginPaymentApproval(
 		        String memberId,
