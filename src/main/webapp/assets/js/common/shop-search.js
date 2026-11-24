@@ -10,8 +10,11 @@
     const normalize = value => value.trim().normalize('NFC').toLocaleLowerCase('ko');
     let history = [];
     let timer;
+    let compositionTimer;
     let pending;
+    let activeQuery;
     let composing = false;
+    let imeEnter = false;
     let entries = [];
     let selected = -1;
     function readHistory() {
@@ -146,9 +149,12 @@
     function stop() {
         clearTimeout(timer);
         pending?.abort();
+        pending = undefined;
+        activeQuery = undefined;
     }
 
     function shut() {
+        clearTimeout(compositionTimer);
         stop();
         panel.hidden = true;
         input.setAttribute('aria-expanded', 'false');
@@ -156,11 +162,11 @@
     }
 
     function refresh() {
-        stop();
         clear.hidden = !input.value;
-        if (composing) return;
-        panel.hidden = false;
         const query = input.value.trim().normalize('NFC');
+        if (!panel.hidden && activeQuery === query) return;
+        stop();
+        panel.hidden = false;
         const cached = cache.get(query);
         const combine = results => {
             if (!query) return results;
@@ -182,6 +188,7 @@
             return;
         }
         draw(query, [], '검색어를 불러오는 중입니다.');
+        activeQuery = query;
         timer = setTimeout(async () => {
             const request = new AbortController();
             pending = request;
@@ -191,12 +198,19 @@
                 const response = await fetch(url, { signal: request.signal });
                 if (!response.ok) throw new Error();
                 const items = await response.json();
-                if (request.signal.aborted || panel.hidden) return;
+                if (pending !== request || panel.hidden || input.value.trim().normalize('NFC') !== query) return;
                 if (cache.size >= 30) cache.delete(cache.keys().next().value);
                 cache.set(query, { time: Date.now(), items });
                 render(items);
             } catch {
-                if (!request.signal.aborted) draw(query, combine([]), '추천 검색어를 불러오지 못했습니다. 검색은 계속할 수 있습니다.');
+                if (pending === request && !panel.hidden && input.value.trim().normalize('NFC') === query) {
+                    draw(query, combine([]), '추천 검색어를 불러오지 못했습니다. 검색은 계속할 수 있습니다.');
+                }
+            } finally {
+                if (pending === request) {
+                    pending = undefined;
+                    activeQuery = undefined;
+                }
             }
         }, query ? 250 : 0);
     }
@@ -209,10 +223,26 @@
     input.addEventListener('focus', refresh);
     input.addEventListener('click', () => { if (panel.hidden) refresh(); });
     input.addEventListener('input', refresh);
-    input.addEventListener('compositionstart', () => { composing = true; shut(); });
-    input.addEventListener('compositionend', () => { composing = false; refresh(); });
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionupdate', () => {
+        // The browser can dispatch this before updating the field value.
+        clearTimeout(compositionTimer);
+        compositionTimer = setTimeout(() => {
+            if (document.activeElement === input) refresh();
+        }, 0);
+    });
+    input.addEventListener('compositionend', () => {
+        clearTimeout(compositionTimer);
+        composing = false;
+        if (document.activeElement === input) refresh();
+    });
+    input.addEventListener('keyup', event => { if (event.key === 'Enter') imeEnter = false; });
     clear.addEventListener('click', () => { input.value = ''; input.focus(); refresh(); });
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', event => {
+        if (composing || imeEnter) {
+            event.preventDefault();
+            return;
+        }
         const term = input.value.trim().normalize('NFC');
         if (term) remember({ term });
     });
@@ -236,7 +266,15 @@
         }
     });
     form.addEventListener('keydown', event => {
-        if (composing || event.isComposing || panel.hidden) return;
+        if (composing || event.isComposing) {
+            if (event.target === input && event.key === 'Enter') imeEnter = true;
+            return;
+        }
+        if (event.target === input && event.key === 'Enter') {
+            if (imeEnter && event.repeat) return;
+            imeEnter = false;
+        }
+        if (panel.hidden) return;
         if (event.key === 'Escape') {
             event.preventDefault();
             input.focus();
