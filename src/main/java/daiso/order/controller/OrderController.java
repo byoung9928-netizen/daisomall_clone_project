@@ -20,6 +20,51 @@ import com.google.gson.JsonObject;
 @DaisoController
 public class OrderController {
     // 기존 orderForm()을 이 메서드로 교체합니다.
+    // ===== 매장픽업 주문서: 선택 상품을 로그인 회원의 장바구니에서 다시 조회 =====
+    @DaisoGetMapping("/order/pickup/form")
+    public String pickupOrderForm(HttpServletRequest request, HttpServletResponse response)
+            throws java.sql.SQLException, javax.naming.NamingException {
+        javax.servlet.http.HttpSession session = request.getSession(false);
+        String memberId = session == null ? null : (String) session.getAttribute("member_id");
+        if (memberId == null || memberId.isBlank()) return "redirect:/member/login";
+
+        String storeId = request.getParameter("storeId");
+        String[] products = request.getParameterValues("productId");
+        if (storeId == null || storeId.isBlank() || storeId.length() > 40
+                || products == null || products.length == 0 || products.length > 100) {
+            return "redirect:/cart?tab=pickup";
+        }
+
+        Set<String> remaining = new HashSet<>();
+        for (String productId : products) {
+            if (productId.isBlank() || productId.length() > 100) return "redirect:/cart?tab=pickup";
+            remaining.add(productId);
+        }
+
+        List<CartBean> items = new ArrayList<>();
+        long subtotal = 0;
+        for (CartBean item : new CartDAO().getPickupCartList(memberId)) {
+            if (!storeId.equals(item.getStoreId()) || !remaining.remove(item.getProductId())) continue;
+            if (item.getQuantity() < 1 || item.getQuantity() > item.getStockQuantity()) {
+                request.setAttribute("pickupOrderError", "매장 재고가 변경됐어요. 장바구니에서 수량을 확인해 주세요.");
+                response.setStatus(HttpServletResponse.SC_CONFLICT);
+                return "order/pickup-checkout";
+            }
+            items.add(item);
+            subtotal += item.getItemTotal();
+        }
+        if (!remaining.isEmpty() || items.isEmpty()) return "redirect:/cart?tab=pickup";
+
+        request.setAttribute("pickupBuyer", new daiso.member.controller.MemberDAO().findProfileByMemberId(memberId));
+        request.setAttribute("pickupOrderItems", items);
+        request.setAttribute("pickupStoreName", items.get(0).getStoreName());
+        request.setAttribute("pickupSubtotal", subtotal);
+        request.setAttribute("pickupFee", 200);
+        response.setHeader("Cache-Control", "private, no-store");
+        return "order/pickup-checkout";
+    }
+
+
     @DaisoGetMapping("/order/form")
     public String orderForm(HttpServletRequest request) throws java.sql.SQLException {
         javax.servlet.http.HttpSession session = request.getSession(false);
