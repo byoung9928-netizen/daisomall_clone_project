@@ -60,6 +60,22 @@ public class OrderController {
         request.setAttribute("pickupStoreName", items.get(0).getStoreName());
         request.setAttribute("pickupSubtotal", subtotal);
         request.setAttribute("pickupFee", 200);
+        //매장픽업 주문서에서 사용할 토스페이 테스트 클라이언트 키 전달
+        String tossClientKey = System.getenv("TOSS_PAYMENTS_CLIENT_KEY");
+        String tossSecretKey = System.getenv("TOSS_PAYMENTS_SECRET_KEY");
+        
+        if(tossClientKey != null&& tossClientKey.startsWith("test_ck_")
+        		&& tossSecretKey != null && tossSecretKey.startsWith("test_sk_")) {
+        	request.setAttribute("tossClientKey", tossClientKey);
+        }
+        //매장 픽업 결제 준비 요청에 사용할 주문 검증 토큰
+        synchronized(session) {
+        	if(session.getAttribute("orderCsrf")==null) {
+        		session.setAttribute("orderCsrf", java.util.UUID.randomUUID().toString());
+        	}
+        	request.setAttribute("orderCsrf", session.getAttribute("orderCsrf"));
+        }
+        		 
         response.setHeader("Cache-Control", "private, no-store");
         return "order/pickup-checkout";
     }

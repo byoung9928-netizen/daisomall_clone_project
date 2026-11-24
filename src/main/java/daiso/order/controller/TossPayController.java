@@ -225,7 +225,227 @@ public class TossPayController {
     public String previewFail() {
         return "토스페이 테스트 인증이 취소됐거나 실패했습니다.";
     }
+    //  토스페이 매장픽업 결제 전 수령인·매장 재고·결제 금액 검증 
+    @DaisoPostMapping("/payment/toss/pickup/check")
+    @DaisoResponseBody
+    public String checkPickup(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException {
+        response.setHeader("Cache-Control", "no-store");
 
+        HttpSession session = request.getSession(false);
+        Object member = session == null ? null : session.getAttribute("member_id");
+        if (!(member instanceof String) || ((String) member).isBlank()) {
+            return error("로그인 후 이용해 주세요.");
+        }
+
+        Object csrf = session.getAttribute("orderCsrf");
+        if (!(csrf instanceof String) || !csrf.equals(request.getParameter("csrfToken"))) {
+            return error("주문서를 새로고침해 주세요.");
+        }
+
+        String recipient = request.getParameter("recipient");
+        String phone = request.getParameter("phone");
+        if (recipient == null || recipient.isBlank() || phone == null
+                || !phone.replaceAll("[\\s-]", "").matches("01[0-9]{8,9}")) {
+            return error("수령인 이름과 휴대폰 번호를 확인해 주세요.");
+        }
+
+        String storeId = request.getParameter("storeId");
+        String[] productIds = request.getParameterValues("productId");
+        if (storeId == null || storeId.isBlank() || storeId.length() > 40
+                || productIds == null || productIds.length == 0 || productIds.length > 100) {
+            return error("픽업 매장과 상품을 다시 선택해 주세요.");
+        }
+
+        Set<String> remaining = new HashSet<>();
+        for (String id : productIds) {
+            if (id == null || id.isBlank() || id.length() > 100 || !remaining.add(id)) {
+                return error("선택한 픽업 상품을 확인해 주세요.");
+            }
+        }
+        List<CartBean> selectedItems = new ArrayList<>();
+        long subtotal = 0;
+        for (CartBean item : new CartDAO().getPickupCartList((String) member)) {
+            if (!storeId.equals(item.getStoreId()) || !remaining.remove(item.getProductId())) {
+                continue;
+            }
+            if (item.getQuantity() < 1 || item.getQuantity() > item.getStockQuantity()) {
+                return error("매장 재고가 변경됐어요. 장바구니에서 수량을 확인해 주세요.");
+            }
+            selectedItems.add(item);
+            subtotal += item.getItemTotal();
+        }
+
+        if (!remaining.isEmpty()) {
+            return error("픽업 장바구니가 변경됐어요. 상품을 다시 선택해 주세요.");
+        }
+
+        long amount = subtotal + 200;
+        if (subtotal <= 0 || amount > Integer.MAX_VALUE
+                || !Long.toString(amount).equals(request.getParameter("expectedAmount"))) {
+            return error("픽업 결제 금액이 변경됐어요. 주문서를 새로고침해 주세요.");
+        }
+
+     // ===== 검증된 매장픽업 주문과 주문상품을 결제 대기 상태로 저장 =====
+        String checkoutToken = request.getParameter("checkoutToken");
+        if (checkoutToken == null
+                || !checkoutToken.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
+            return error("주문서를 새로고침한 뒤 다시 시도해 주세요.");
+        }
+
+        String orderNo = UUID.randomUUID().toString();
+        OrderBean order = new OrderBean();
+        order.setOrderNo(orderNo);
+        order.setCheckoutToken(checkoutToken);
+        order.setMemberId((String) member);
+        order.setRecipient(recipient.trim());
+        order.setPhone(phone.trim());
+        order.setSubtotalAmount(Math.toIntExact(subtotal));
+        order.setShippingFee(0);
+        order.setTotalAmount(Math.toIntExact(amount));
+        order.setItems(selectedItems);
+
+     // ===== 선택한 픽업 결제수단 확인 후 주문 저장 =====
+        String method = request.getParameter("paymentMethod");
+        if (method == null) method = "TOSSPAY";
+        if (!"TOSSPAY".equals(method) && !"KAKAOPAY".equals(method)) {
+            return error("결제수단을 다시 선택해 주세요.");
+        }
+
+        OrderDAO orderDAO = new OrderDAO();
+        long dbOrderId;
+        try {
+            dbOrderId = orderDAO.createPickupOrder(order, storeId);
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1062) {
+                return error("이미 접수된 주문 요청입니다. 주문 내역을 확인해 주세요.");
+            }
+            throw e;
+        }
+     // ===== 카카오 픽업 결제 준비 및 승인에 사용할 거래번호 보관 =====
+        if ("KAKAOPAY".equals(method)) {
+            int totalAmount = Math.toIntExact(amount);
+            int quantity = selectedItems.stream().mapToInt(CartBean::getQuantity).sum();
+            String baseUrl = "http://localhost:8080" + request.getContextPath()
+                    + "/app/payment/kakao";
+
+            try {
+                daiso.order.payment.kakaoPayClient client = new daiso.order.payment.kakaoPayClient();
+                JsonObject ready = client.ready(
+                        orderNo, (String) member, "매장픽업 주문", quantity, totalAmount,
+                        baseUrl + "/approve?orderNo=" + orderNo,
+                        baseUrl + "/cancel?orderNo=" + orderNo,
+                        baseUrl + "/fail?orderNo=" + orderNo);
+
+                String tid = ready.get("tid").getAsString();
+                String redirectUrl = ready.get("next_redirect_pc_url").getAsString();
+                orderDAO.savePaymentReady(dbOrderId, tid, totalAmount, "KAKAOPAY");
+
+                Map<String, Object> pending = new java.util.HashMap<>();
+                pending.put("orderId", dbOrderId);
+                pending.put("orderNo", orderNo);
+                pending.put("memberId", member);
+                pending.put("tid", tid);
+                pending.put("totalAmount", totalAmount);
+                pending.put("fulfillmentType", "PICKUP");
+                session.setAttribute("kakaoPending:" + orderNo, pending);
+
+                JsonObject result = new JsonObject();
+                result.addProperty("redirectUrl", redirectUrl);
+                return result.toString();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return error("카카오페이 결제 준비 요청이 중단되었습니다.");
+            } catch (java.io.IOException e) {
+                request.getServletContext().log("픽업 카카오페이 준비 실패. 주문번호=" + orderNo, e);
+                return error("카카오페이 결제창을 열지 못했습니다.");
+            }
+        }
+
+        JsonObject result = new JsonObject();
+        result.addProperty("orderId", orderNo);
+        result.addProperty("amount", amount);
+        return result.toString();
+    }
+    // 토스 인증 결과를 픽업 주문과 대조하고 승인 완료 처리
+    @DaisoGetMapping("/payment/toss/pickup/auth-result")
+    @DaisoResponseBody
+ 
+    public String pickupAuthResult(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException {
+        response.setHeader("Cache-Control", "no-store");
+
+        HttpSession session = request.getSession(false);
+        Object member = session == null ? null : session.getAttribute("member_id");
+        if (!(member instanceof String) || ((String) member).isBlank()) {
+            return "로그인 후 픽업 주문 내역을 확인해 주세요.";
+        }
+
+        String memberId = (String) member;
+        String orderNo = request.getParameter("orderId");
+        String paymentKey = request.getParameter("paymentKey");
+        int amount;
+        try {
+            amount = Integer.parseInt(request.getParameter("amount"));
+            UUID.fromString(orderNo == null ? "" : orderNo);
+        } catch (IllegalArgumentException e) {
+            return "픽업 주문번호와 금액을 확인해 주세요.";
+        }
+
+        OrderDAO dao = new OrderDAO();
+        long orderId;
+        try {
+            orderId = dao.beginPickupTossApproval(memberId, orderNo, paymentKey, amount);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return e.getMessage();
+        }
+
+        try {
+            JsonObject payment = new TossPayClient().confirm(paymentKey, orderNo, amount);
+            if (!"DONE".equals(payment.get("status").getAsString())
+                    || !orderNo.equals(payment.get("orderId").getAsString())
+                    || !paymentKey.equals(payment.get("paymentKey").getAsString())
+                    || amount != payment.get("totalAmount").getAsInt()) {
+                throw new IllegalStateException("토스 승인 결과와 픽업 주문이 일치하지 않습니다.");
+            }
+
+            Timestamp approvedAt = Timestamp.from(
+                    OffsetDateTime.parse(payment.get("approvedAt").getAsString()).toInstant());
+            dao.completePickupTossApproval(memberId, orderId, paymentKey, amount, approvedAt);
+            response.sendRedirect(request.getContextPath() + "/app/order/pickup/complete?orderNo="
+                    + java.net.URLEncoder.encode(orderNo, java.nio.charset.StandardCharsets.UTF_8));
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            request.getServletContext().log("픽업 승인 요청 중단. 주문번호=" + orderNo, e);
+        } catch (Exception e) {
+            request.getServletContext().log("픽업 승인 결과 확인 실패. 주문번호=" + orderNo, e);
+        }
+        return "픽업 결제 결과를 확인 중입니다. 다시 결제하기 전에 주문 상태를 확인해 주세요.";
+    }
+    // 결제 재요청 없이 매장픽업 완료 화면 표시
+    @DaisoGetMapping("/order/pickup/complete")
+    public String pickupComplete(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, java.io.IOException {
+        response.setHeader("Cache-Control", "private, no-store");
+        HttpSession session = request.getSession(false);
+        Object member = session == null ? null : session.getAttribute("member_id");
+        if (!(member instanceof String) || ((String) member).isBlank()) {
+            return "redirect:/member/login";
+        }
+
+        Map<String, Object> completed = new OrderDAO().findPaidPickupOrder(
+                (String) member, request.getParameter("orderNo"));
+
+        if (completed == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND, "픽업 주문을 찾을 수 없습니다.");
+            return null;
+        }
+
+        request.setAttribute("pickupCompleted", completed);
+        return "order/pickup-complete";
+    }
+    
     private String error(String message) {
         JsonObject result = new JsonObject();
         result.addProperty("message", message);

@@ -355,13 +355,22 @@ public class KakaoPayController {
             	OrderDAO orderDAO= new OrderDAO();
             	
             	//결제승인이 확인된 주문에 가상운송장 번호 생성
-            	String trackingNumber = DemoTrackingNumber.create();
-            	
-            	orderDAO.approvePayment(memberId,orderId,tid,approvedAmount,approvedAt,trackingNumber);
+            	// ===== 카카오 승인 결과를 주문 유형에 맞는 재고에 반영 =====
+            	if ("PICKUP".equals(pending.get("fulfillmentType"))) {
+            	    orderDAO.completePickupApproval(
+            	            memberId, orderId, tid, approvedAmount, approvedAt, "KAKAOPAY");
+            	} else {
+            	    String trackingNumber = DemoTrackingNumber.create();
+            	    orderDAO.approvePayment(
+            	            memberId, orderId, tid, approvedAmount, approvedAt, trackingNumber);
+            	}
             }
+            	// ===== DB 반영 후 카카오 승인 결과를 세션에 기록 =====
             synchronized (pending) {
-                pending.put("status",
-                    matches ? "APPROVED" : "CHECK_REQUIRED");
+                pending.put("status", matches ? "APPROVED" : "CHECK_REQUIRED");
+            }
+            if (matches && "PICKUP".equals(pending.get("fulfillmentType"))) {
+                return "redirect:/order/pickup/complete?orderNo=" + orderNo;
             }
 
             request.setAttribute("paymentMessage",

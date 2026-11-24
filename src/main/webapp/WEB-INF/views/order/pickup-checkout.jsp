@@ -479,12 +479,42 @@
                     </p>
                 </aside>
             </div>
+            <%--토스페이 결제 준비 요청에 보낼 매장과 선택 상품 --%>
+            <form id="pickup-toss-order" hidden
+      data-client-key="<%= ProductView.escape(request.getAttribute("tossClientKey")) %>">
+            <%--같은 주문서에 결제버튼을 두번눌러도 같은 요청번호를 사용 --%>
+            <input type="hidden" name="checkoutToken" value="<%=java.util.UUID.randomUUID() %>">
+            <input type="hidden" name="csrfToken"
+            				value="<%=ProductView.escape(request.getAttribute("orderCsrf")) %>">
+            <input type="hidden" name="storeId"
+            				value="<%=ProductView.escape(pickupOrderItems.get(0).getStoreId()) %>">
+            <input type="hidden" name="expectedAmount" value="<%=pickupPaymentAmount %>">
+            
+            <%for(CartBean item : pickupOrderItems){ %>
+            	<input type="hidden" name="productId"
+            				value="<%=ProductView.escape(item.getProductId()) %>">
+            <%} %>
+            
+            </form>
+            <%--매장 픽업 토스페이 결제창 sdk로드 --%>
+            <% if(request.getAttribute("tossClientKey")!=null){ %>
+            	<script src="https://js.tosspayments.com/v2/standard" defer></script>
+            	<%} %>
             <script>
                 (() => {
                     const paymentOptions = Array.from(document.querySelectorAll('input[name="pickup-payment-method"]'));
                     const paymentNames = { kakao: "카카오페이", "toss-pay": "토스페이" };
                     const paymentNote = document.getElementById("pickup-payment-note");
-
+					//현재 수령인 정보를 포함한 픽업 결제 요청 만들기
+					function buildPickupTossRequest(){
+						const form=document.getElementById("pickup-toss-order");
+						const body = new URLSearchParams(new FormData(form));
+						
+						body.set("recipient", document.getElementById("pickup-recipient-name").value.trim());
+						body.set("phone", document.getElementById("pickup-recipient-phone").value.trim());
+						return body;
+						
+					}
                     function selectedPaymentName() {
                         const selected = paymentOptions.find(option => option.checked);
                         return selected ? paymentNames[selected.value] : "";
@@ -502,14 +532,68 @@
                     updatePaymentNote();
 
                     document.querySelectorAll("[data-pickup-pay]").forEach(button => {
-                        button.addEventListener("click", () => {
+                        button.addEventListener("click", async() => {
                             const name = selectedPaymentName();
                             if (!name) {
                                 window.Daiso.ui.notice("결제수단을 선택해 주세요.");
                                 paymentOptions[0].focus();
                                 return;
                             }
-                            window.Daiso.ui.notice(name + " 결제는 연결 준비 중입니다.");
+                            const isKakao = document.getElementById("pickup-kakao-pay").checked;
+
+                            try {
+                            	// ===== 픽업 주문 저장 전에 토스 테스트 결제창 설정 확인 =====
+                            	const clientKey = document.getElementById("pickup-toss-order").dataset.clientKey;
+                            	if (!isKakao && (!clientKey || !clientKey.startsWith("test_ck_")
+                            	        || typeof window.TossPayments !== "function")) {
+                            	    window.Daiso.ui.notice("토스페이 테스트 키와 SDK 설정을 확인해 주세요.");
+                            	    return;
+                            	}
+                            	// ===== 선택한 결제수단과 픽업 주문을 함께 전송 =====
+                            	const body = buildPickupTossRequest();
+                            	body.set("paymentMethod", isKakao ? "KAKAOPAY" : "TOSSPAY");
+
+                            	const response = await fetch(
+                            	    "<%= request.getContextPath() %>/app/payment/toss/pickup/check",
+                            	    { method: "POST", body }
+                            	);
+                                if (!response.ok) {
+                                    throw new Error("픽업 주문 확인 실패");
+                                }
+
+                                const result = await response.json();
+                                if (result.message) {
+                                    window.Daiso.ui.notice(result.message);
+                                    return;
+                                }
+                                if (isKakao) {
+                                    if (!result.redirectUrl) {
+                                        window.Daiso.ui.notice("카카오페이 결제창 주소를 받지 못했습니다.");
+                                        return;
+                                    }
+                                    window.location.assign(result.redirectUrl);
+                                    return;
+                                }
+
+                             // ===== 서버에 저장한 픽업 주문번호와 금액으로 토스페이 결제창 열기 =====
+                                const sdk = window.TossPayments(clientKey);
+                                const payment = sdk.payment({ customerKey: window.TossPayments.ANONYMOUS });
+                                const callbackBase = window.location.origin
+                                        + "<%= request.getContextPath() %>/app/payment/toss";
+
+                                await payment.requestPayment({
+                                    method: "CARD",
+                                    amount: { currency: "KRW", value: result.amount },
+                                    orderId: result.orderId,
+                                    orderName: "매장픽업 주문",
+                                    successUrl: callbackBase + "/pickup/auth-result",
+                                    failUrl: callbackBase + "/preview-fail",
+                                    card: { flowMode: "DIRECT", easyPay: "TOSSPAY" }
+                                });
+                                
+                            } catch (e) {
+                                window.Daiso.ui.notice("픽업 주문을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.");
+                            }
                         });
                     });
 
