@@ -211,11 +211,34 @@
     flex-wrap: wrap;
     gap: 4px;
 }
-.badge {
-    padding: 2px 5px;
-    border: 1px solid #d9dce0;
-    font-size: 10px;
+.product-badges .badge {
+    padding: 2px 6px;
+    background: #edeff1;
+    color: #303942;
+    font-size: 11px;
+    font-weight: 600;
 }
+.card-pickup-note {
+    margin: 0 0 12px;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+.browse-card-add {
+    width: 100%;
+    min-height: 40px;
+    margin-block-start: 8px;
+    padding: 6px;
+    border: 1px solid var(--category-line, #e2e6eb);
+    border-radius: 4px;
+    color: var(--color-ink);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.browse-card-add:hover:not(:disabled) { border-color: #8c959f; background: var(--category-subtle, #f5f6f8); }
+.browse-card-add:disabled { color: var(--color-muted); background: var(--category-subtle, #f5f6f8); cursor: not-allowed; }
+
 .product-rating {
     margin-block: 8px 0;
     color: var(--color-muted);

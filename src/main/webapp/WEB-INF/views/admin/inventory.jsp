@@ -102,12 +102,9 @@
                         </tbody>
                     </table>
                 </div>
-                <% if (online.previous != null || online.next != null) { %>
-                    <nav class="admin-product-pagination" aria-label="온라인 재고 페이지">
-                        <% if (online.previous != null) { %><a class="button secondary" rel="prev" href="<%= online.previous %>">이전</a><% } %>
-                        <span aria-current="page"><%= online.page %> / <%= online.pages %></span>
-                        <% if (online.next != null) { %><a class="button secondary" rel="next" href="<%= online.next %>">다음</a><% } %>
-                    </nav>
+                <% if (online.total > 0) {
+                       InventoryPagination inventoryPagination = online.pagination; %>
+                    <%@ include file="inventory-pagination.jspf" %>
                 <% } %>
             <% } %>
         </main>

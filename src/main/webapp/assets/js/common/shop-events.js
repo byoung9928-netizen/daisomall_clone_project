@@ -3,11 +3,6 @@
     const app = window.Daiso;
     app.features = { catalog: true, orders: true, admin: true };
     app.ui.orderStatus = status => ({ PAID: "결제 완료", PAYMENT_FAILED: "결제 실패", PREPARING: "배송 준비", SHIPPED: "배송 중", DELIVERED: "배송 완료", CANCELLED: "주문 취소" })[status] || status;
-    document.addEventListener("category:select", (event) => {
-        if (event.detail.isLeaf || event.detail.navigate) {
-            location.href = app.url("list.jsp", { category: event.detail.id });
-        }
-    });
     document.querySelectorAll("[data-navigation-key]").forEach((item) => {
         const key = item.dataset.navigationKey;
         const choices = { season: "newest" };

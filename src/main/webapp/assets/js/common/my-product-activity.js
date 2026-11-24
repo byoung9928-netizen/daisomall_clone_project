@@ -32,6 +32,17 @@
                 for (const item of items) body.append('productId', item.value);
                 const response = await fetch(config.dataset.historyRemove, { method: 'POST', credentials: 'same-origin', body });
                 if (!response.ok || (await response.text()).trim() !== 'REMOVED') throw new Error(String(response.status));
+                if (config.dataset.historyKind === 'wishlist') {
+                    items.forEach(box => { box.checked = false; });
+                    pending = false;
+                    update();
+                    feedback.textContent = '';
+                    config.dispatchEvent(new CustomEvent('wishlist:selection-removed', {
+                        bubbles: true,
+                        detail: { origin: remove }
+                    }));
+                    return;
+                }
                 const next = new URL(location.href);
                 next.searchParams.delete('activityPage');
                 location.assign(next);
@@ -45,6 +56,7 @@
     }
 
     document.querySelectorAll('[data-product-activity]').forEach(async panel => {
+        panel.addEventListener("wishlist:refreshed", () => bindHistorySelection(panel));
         try {
             const response = await fetch(panel.dataset.url, { credentials: 'same-origin' });
             if (!response.ok) throw new Error(String(response.status));

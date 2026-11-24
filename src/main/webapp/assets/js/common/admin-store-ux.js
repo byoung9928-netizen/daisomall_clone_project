@@ -115,6 +115,18 @@
     }
 
     function bindCalculation(panel) {
+        const thresholdForm = panel.querySelector('[data-store-threshold]');
+        if (thresholdForm) {
+            const input = thresholdForm.elements.namedItem('threshold');
+            const output = thresholdForm.querySelector('[data-threshold-after]');
+            const updateThreshold = () => {
+                output.textContent = input.validity.valid ? input.valueAsNumber + '개 이하' : '—';
+            };
+            input.addEventListener('input', updateThreshold);
+            updateThreshold();
+            thresholdForm.querySelector('[data-threshold-preview]').hidden = false;
+        }
+
         const form = panel.querySelector('[data-stock-editor]');
         const summary = form.querySelector('[data-live-stock]');
         if (!summary) return;

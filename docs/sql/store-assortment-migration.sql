@@ -1,4 +1,6 @@
--- MySQL 8.0, run once after store-inventory-schema.sql with daisomall selected.
+-- MySQL 8.0. Run once only on legacy installations without store_inventory.is_carried.
+-- New installations using the current store-inventory-schema.sql already include this change.
+-- For existing databases, apply this before store-inventory-threshold-migration.sql.
 -- Back up the target database and apply before publishing the new administrator views.
 -- The two ALTER statements commit individually. If only one succeeds, inspect SHOW CREATE TABLE
 -- and run only the remaining statement after fixing the cause. No seed rerun is needed.

@@ -1,0 +1,39 @@
+.shop-toast-stack {
+    position: fixed;
+    z-index: 110;
+    inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: 390px;
+    margin-inline: auto;
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.shop-toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    background: #353535;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.5;
+    pointer-events: auto;
+}
+
+.shop-toast a {
+    flex: none;
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.shop-toast a:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 4px;
+}
