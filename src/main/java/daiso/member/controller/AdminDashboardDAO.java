@@ -35,7 +35,9 @@ public class AdminDashboardDAO {
                 + " WHERE p.status = 'APPROVED' "
                 + " AND o.status IN ('PAID', 'PREPARING') "
                 + " AND o.canceled_at IS NULL) AS awaiting_shipment_count, "
-                + "(SELECT COUNT(*) FROM products WHERE stock_quantity = 0) AS online_sold_out_count";
+                + "(SELECT COUNT(*) FROM products WHERE stock_quantity = 0) AS online_sold_out_count, "
+                + "(SELECT COUNT(*) FROM order_returns WHERE status = 'REQUESTED') AS pending_return_count";
+        
 
         DataSource dataSource = InitialContext.doLookup("java:comp/env/jdbc/mysqlDB");
 
@@ -52,7 +54,8 @@ public class AdminDashboardDAO {
                     result.getLong("order_count"),
                     result.getBigDecimal("paid_amount"),
                     result.getLong("awaiting_shipment_count"),
-                    result.getLong("online_sold_out_count")
+                    result.getLong("online_sold_out_count"),
+                    result.getLong("pending_return_count")
             );
         }
     }
@@ -64,16 +67,18 @@ public class AdminDashboardDAO {
         public final BigDecimal paidAmount;
         public final long awaitingShipmentCount;
         public final long onlineSoldOutCount;
+        public final long pendingReturnCount;
 
         private Summary(long productCount, long categoryCount,
                         long orderCount, BigDecimal paidAmount,
-                        long awaitingShipmentCount, long onlineSoldOutCount) {
+                        long awaitingShipmentCount, long onlineSoldOutCount, long pendingReturnCount) {
             this.productCount = productCount;
             this.categoryCount = categoryCount;
             this.orderCount = orderCount;
             this.paidAmount = paidAmount;
             this.awaitingShipmentCount = awaitingShipmentCount;
             this.onlineSoldOutCount = onlineSoldOutCount;
+            this.pendingReturnCount = pendingReturnCount;
         }
     }
 }
