@@ -127,6 +127,158 @@
         updatePriceFeedback();
     }
 
+    function bindBulk(form) {
+        const root = form.closest('[data-admin-query]');
+        const checkboxes = [...form.elements].filter(input => input.name === 'selectedProduct');
+        const selectAll = root.querySelector('[data-bulk-select-all]');
+        const count = form.querySelector('[data-bulk-count]');
+        const clear = form.querySelector('[data-batch-clear]');
+        const status = form.querySelector('[data-product-bulk-error]');
+        const opener = form.querySelector('button[type="submit"]');
+        const dialog = root.querySelector('#product-bulk-dialog');
+        const type = form.elements.bulkType;
+        const targets = { STATUS: 'targetStatus', PRICE: 'targetPrice', CATEGORY: 'targetCategory' };
+        let pending;
+        let invalidField;
+        form.noValidate = true;
+        selectAll.hidden = clear.hidden = false;
+        root.querySelector('[data-bulk-select-heading]').hidden = true;
+
+        function refreshSelection() {
+            const total = checkboxes.filter(input => input.checked).length;
+            count.textContent = '상품 ' + total + '개 선택';
+            form.hidden = total === 0;
+            selectAll.checked = total === checkboxes.length;
+            selectAll.indeterminate = total > 0 && total < checkboxes.length;
+            for (const box of checkboxes) box.closest('tr').toggleAttribute('data-batch-selected', box.checked);
+        }
+
+        function updateType() {
+            for (const field of form.querySelectorAll('[data-bulk-field]')) {
+                field.hidden = field.dataset.bulkField !== type.value;
+                field.querySelector('select, input').disabled = field.hidden;
+            }
+        }
+
+        function clearError() {
+            invalidField?.removeAttribute('aria-invalid');
+            invalidField?.removeAttribute('aria-errormessage');
+            form.querySelector('.batch-field-error')?.remove();
+            status.hidden = true;
+            invalidField = undefined;
+        }
+
+        function showError(name, message) {
+            clearError();
+            const field = name === 'selectedProduct' ? selectAll : form.elements.namedItem(name);
+            if (field?.closest('.field')) {
+                const error = document.createElement('span');
+                error.id = 'product-bulk-field-error';
+                error.className = 'batch-field-error';
+                error.setAttribute('role', 'alert');
+                error.textContent = message;
+                field.closest('.field').append(error);
+                field.setAttribute('aria-invalid', 'true');
+                field.setAttribute('aria-errormessage', error.id);
+                invalidField = field;
+            } else {
+                status.hidden = false;
+                status.textContent = message;
+            }
+            (field || status).focus();
+        }
+
+        function edited() {
+            pending?.abort();
+            clearError();
+        }
+
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(box => { box.checked = selectAll.checked; });
+            edited();
+            refreshSelection();
+        });
+        checkboxes.forEach(box => box.addEventListener('change', () => { edited(); refreshSelection(); }));
+        clear.addEventListener('click', () => {
+            checkboxes.forEach(box => { box.checked = false; });
+            form.reset();
+            edited();
+            updateType();
+            refreshSelection();
+            selectAll.focus();
+        });
+        form.addEventListener('input', edited);
+        type.addEventListener('change', () => { edited(); updateType(); });
+
+        function validate() {
+            if (!checkboxes.some(box => box.checked)) return ['selectedProduct', '변경할 상품을 선택해 주세요.'];
+            const name = targets[type.value];
+            if (!name) return ['bulkType', '일괄 변경 항목을 선택해 주세요.'];
+            const field = form.elements.namedItem(name);
+            if (name === 'targetPrice') {
+                if (!field.value && !field.validity.badInput) return [name, '변경할 가격을 입력해 주세요.'];
+                if (!Number.isInteger(field.valueAsNumber) || !field.validity.valid) {
+                    return [name, '1,000원부터 5,000원까지 정수로 입력해 주세요.'];
+                }
+            } else if (!field.value || field.selectedOptions[0]?.disabled) {
+                return [name, name === 'targetStatus' ? '변경할 판매 상태를 선택해 주세요.' : '변경할 카테고리를 선택해 주세요.'];
+            }
+            return null;
+        }
+
+        function discard(confirmation) {
+            const body = new URLSearchParams(new FormData(confirmation));
+            body.set('bulkAction', 'cancel');
+            fetch(confirmation.action, { method: 'POST', body, keepalive: true }).catch(() => {});
+        }
+
+        form.addEventListener('submit', async event => {
+            clearError();
+            const issue = validate();
+            if (issue) {
+                event.preventDefault();
+                showError(...issue);
+                return;
+            }
+            if (typeof dialog.showModal !== 'function') {
+                form.dataset.nativeSubmit = 'true';
+                return;
+            }
+            event.preventDefault();
+            if (pending || root.querySelector('[data-admin-query-content][aria-busy="true"]')) return;
+            const attempt = new AbortController();
+            pending = attempt;
+            opener.disabled = true;
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST', body: new URLSearchParams(new FormData(form)),
+                    cache: 'no-store', signal: attempt.signal
+                });
+                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+                const preview = html.querySelector('[data-batch-preview]');
+                if (!form.isConnected || attempt.signal.aborted) return;
+                if (response.ok && preview) {
+                    root.dispatchEvent(new CustomEvent('admin-batch-preview', {
+                        detail: { dialog, preview, opener, noticeId: 'product-bulk-result',
+                            receiptParameter: 'productBulkSaved', refreshLabel: '최신 상품 목록 보기', discard }
+                    }));
+                } else {
+                    const error = html.querySelector('[data-batch-server-error]');
+                    showError(error?.dataset.field, error?.textContent.trim()
+                        || (response.status === 403 ? '관리자 로그인과 요청 확인 정보를 확인해 주세요.'
+                            : '미리보기를 불러오지 못했습니다. 다시 시도해 주세요.'));
+                }
+            } catch {
+                if (!attempt.signal.aborted) showError(null, '미리보기에 연결하지 못했습니다. 다시 시도해 주세요.');
+            } finally {
+                pending = undefined;
+                opener.disabled = false;
+            }
+        });
+        refreshSelection();
+        updateType();
+    }
+
     function bindList() {
         const stockFilter = document.querySelector('[name="filterStock"]');
         if (stockFilter) {
@@ -143,43 +295,7 @@
         }
 
         const bulk = document.querySelector('#product-bulk');
-        if (bulk) {
-            // 상품 체크박스는 표 안에 있으며 form 속성으로 일괄 변경 폼에 연결된다.
-            const checkboxes = Array.from(bulk.elements).filter(input => input.name === 'selectedProduct');
-            const selectAll = document.querySelector('[data-bulk-select-all]');
-            const heading = document.querySelector('[data-bulk-select-heading]');
-            const count = bulk.querySelector('[data-bulk-count]');
-            const submit = bulk.querySelector('button[type="submit"]');
-            const selectedCount = () => checkboxes.filter(input => input.checked).length;
-            const updateSelection = () => {
-                const total = selectedCount();
-                count.textContent = '현재 페이지 ' + total + '개 선택';
-                selectAll.checked = total === checkboxes.length;
-                selectAll.indeterminate = total > 0 && total < checkboxes.length;
-                submit.disabled = total === 0;
-            };
-            selectAll.hidden = false;
-            heading.hidden = true;
-            selectAll.addEventListener('change', () => {
-                checkboxes.forEach(input => { input.checked = selectAll.checked; });
-                updateSelection();
-            });
-            checkboxes.forEach(input => input.addEventListener('change', updateSelection));
-            updateSelection();
-
-            const type = bulk.elements.bulkType;
-            const updateBulkType = () => {
-                bulk.querySelectorAll('[data-bulk-field]').forEach(field => {
-                    const enabled = field.dataset.bulkField === type.value;
-                    field.hidden = !enabled;
-                    const input = field.querySelector('select, input');
-                    input.disabled = !enabled;
-                    input.required = enabled;
-                });
-            };
-            type.addEventListener('change', updateBulkType);
-            updateBulkType();
-        }
+        if (bulk) bindBulk(bulk);
 
     }
     bindList();

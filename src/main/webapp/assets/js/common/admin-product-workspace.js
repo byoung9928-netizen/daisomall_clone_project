@@ -12,8 +12,8 @@
         if (form) dirtyForm = form;
     });
     function hasDraft() {
-        return dirtyForm?.isConnected || (root.querySelector('[data-batch-product]:checked')
-            && !root.querySelector('[data-batch-form][data-native-submit]'));
+        return dirtyForm?.isConnected || (root.querySelector('[data-batch-product]:checked, input[form="product-bulk"]:checked')
+            && !root.querySelector('[data-batch-form][data-native-submit], #product-bulk[data-native-submit]'));
     }
 
     window.addEventListener('beforeunload', event => {
@@ -36,16 +36,79 @@
         document.dispatchEvent(new Event('admin-query-render'));
     }
 
-    root.addEventListener('admin-inventory-batch-saved', event => {
-        const { next, destination } = event.detail;
-        pending?.controller.abort();
-        pending = undefined;
-        content.removeAttribute('aria-busy');
-        history.replaceState(null, '', destination);
-        render(next, destination);
-        const notice = root.querySelector('#inventory-batch-result');
-        notice.focus({ preventScroll: true });
-        notice.scrollIntoView({ block: 'nearest' });
+    root.addEventListener('admin-batch-preview', event => {
+        const { dialog, preview, opener, noticeId, receiptParameter, refreshLabel, discard } = event.detail;
+        dialog.replaceChildren(document.importNode(preview, true));
+        const close = dialog.querySelector('[data-batch-close]');
+        const revise = dialog.querySelector('[data-batch-revise]');
+        const confirmation = dialog.querySelector('[data-batch-confirm]');
+        const warning = dialog.querySelector('[data-batch-confirm-error]');
+        let saving = false;
+        let attempted = false;
+        const preventDismiss = event => { if (saving) event.preventDefault(); };
+        dialog.addEventListener('cancel', preventDismiss);
+        dialog.addEventListener('close', () => {
+            dialog.removeEventListener('cancel', preventDismiss);
+            if (!attempted && discard) discard(confirmation);
+            dialog.replaceChildren();
+            if (opener.isConnected) opener.focus({ preventScroll: true });
+        }, { once: true });
+        close.hidden = false;
+        close.addEventListener('click', () => dialog.close());
+        revise.addEventListener('click', event => {
+            event.preventDefault();
+            if (!saving) dialog.close();
+        });
+        confirmation.addEventListener('submit', async event => {
+            event.preventDefault();
+            const accept = confirmation.querySelector('button[type="submit"]');
+            if (attempted) return;
+            saving = attempted = true;
+            accept.disabled = close.disabled = true;
+            revise.setAttribute('aria-disabled', 'true');
+            try {
+                const response = await fetch(confirmation.action, {
+                    method: 'POST', body: new URLSearchParams(new FormData(confirmation)), cache: 'no-store'
+                });
+                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+                const next = html.querySelector('[data-admin-query-content]');
+                const destination = new URL(response.url);
+                if (response.ok && response.redirected && destination.origin === location.origin
+                        && destination.pathname === location.pathname
+                        && html.querySelector('[data-admin-query]')?.dataset.adminQuery === root.dataset.adminQuery
+                        && next?.querySelector('#' + noticeId)) {
+                    destination.searchParams.delete(receiptParameter);
+                    dialog.close();
+                    pending?.controller.abort();
+                    pending = undefined;
+                    content.removeAttribute('aria-busy');
+                    history.replaceState(null, '', destination);
+                    render(next, destination);
+                    const notice = root.querySelector('#' + noticeId);
+                    notice.focus({ preventScroll: true });
+                    notice.scrollIntoView({ block: 'nearest' });
+                    return;
+                }
+                warning.textContent = html.querySelector('[data-batch-server-error]')?.textContent.trim()
+                    || (response.status === 403 ? '관리자 로그인과 요청 확인 정보를 확인해 주세요.'
+                        : '저장 결과를 확인할 수 없습니다. 목록에서 최신 값을 확인해 주세요.');
+            } catch {
+                warning.textContent = '연결이 끊겨 저장 결과를 확인할 수 없습니다. 목록에서 최신 값을 확인해 주세요.';
+            } finally {
+                saving = false;
+                close.disabled = false;
+                revise.removeAttribute('aria-disabled');
+            }
+            warning.hidden = false;
+            warning.focus();
+            const refreshLink = document.createElement('a');
+            refreshLink.className = 'button secondary';
+            refreshLink.href = revise.href;
+            refreshLink.textContent = refreshLabel;
+            confirmation.prepend(refreshLink);
+        });
+        dialog.showModal();
+        dialog.querySelector('h1').focus();
     });
 
     async function navigate(url, restore = false, filterForm) {

@@ -23,8 +23,8 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-reviews.css?v=4">
-    <script defer src="${pageContext.request.contextPath}/assets/js/common/admin-reviews.js?v=4"></script>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-reviews.css?v=5">
+    <script defer src="${pageContext.request.contextPath}/assets/js/common/admin-reviews.js?v=5"></script>
 </head>
 <body class="admin-body">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
@@ -71,6 +71,7 @@
                 <p class="admin-review-scope">요약은 검색 조건과 조회 기간을 기준으로 집계하며, 처리 완료에는 기각 건도 포함됩니다. 표의 신고 건수와 신고 정렬은 리뷰별 전체 신고 이력을 기준으로 합니다.</p>
 
                 <form id="admin-review-filters" class="admin-review-filters" action="<%= ProductView.escape(route) %>" method="get">
+                    <h2 class="admin-review-group-title">리뷰 검색 및 필터</h2>
                     <div class="admin-review-fields">
                         <label class="field">리뷰 검색
                             <input type="search" name="query" maxlength="120" placeholder="상품명, 품번, 작성자 또는 리뷰 내용"
@@ -102,10 +103,6 @@
                                 </select>
                             </label>
                         <% } %>
-                    </div>
-                    <div class="admin-review-fields">
-                        <label class="field">상품 리뷰 분석 <input name="analysisProduct" type="search" maxlength="100"
-                                value="<%= ProductView.escape(filter.analysisProduct) %>" placeholder="상품 ID 또는 품번"></label>
                         <% if (results.reportsAvailable) { %>
                             <label class="field">신고 사유 <select name="reason"><option value="">전체</option>
                                 <% for (Reason reason : Reason.values()) { %>
@@ -122,6 +119,7 @@
                     </div>
                     <fieldset class="admin-review-period">
                         <legend class="visually-hidden">조회 기간</legend>
+                        <h2 class="admin-review-group-title">조회 기간</h2>
                         <div class="admin-review-dates">
                             <label class="field">조회 기준
                                 <select name="dateField">
@@ -132,7 +130,7 @@
                                 </select>
                             </label>
                             <div class="admin-review-preset-field">
-                                <span id="admin-review-period-label">조회 기간</span>
+                                <span id="admin-review-period-label">빠른 기간</span>
                                 <div class="admin-review-presets" role="group" aria-labelledby="admin-review-period-label">
                                 <% for (Period value : Period.values()) {
                                        LocalDate preset = value.start(reviewToday); %>
@@ -159,7 +157,39 @@
                         <a class="button secondary" href="<%= ProductView.escape(route) %>" data-review-reset>초기화</a>
                     </div>
                 </form>
+                <section class="admin-review-analysis" aria-labelledby="review-analysis-title">
+                    <h2 id="review-analysis-title" class="admin-review-group-title">상품별 리뷰 분석</h2>
+                    <form id="admin-review-analysis" method="get" action="<%= ProductView.escape(route) %>">
+                        <% for (Map.Entry<String, String> entry : reportViewBase.entrySet()) {
+                               if ("analysisProduct".equals(entry.getKey())) continue; %>
+                            <input type="hidden" name="<%= ProductView.escape(entry.getKey()) %>" value="<%= ProductView.escape(entry.getValue()) %>">
+                        <% } %>
+                        <label class="field">상품 ID 또는 품번
+                            <input name="analysisProduct" type="search" maxlength="100" required
+                                   value="<%= ProductView.escape(filter.analysisProduct) %>" placeholder="상품 ID 또는 품번">
+                        </label>
+                        <button class="button secondary" type="submit">분석하기</button>
+                        <p class="error-message" role="alert" data-review-analysis-error hidden></p>
+                    </form>
                 <% } %>
+                    <div data-review-analysis-result aria-live="polite">
+                    <% daiso.product.dao.AdminReviewDAO.Analysis analysis = (daiso.product.dao.AdminReviewDAO.Analysis) request.getAttribute("adminReviewAnalysis");
+                       if (analysis != null) { %>
+                        <section class="admin-panel">
+                            <h2><%= ProductView.escape(analysis.name) %> 리뷰 분석</h2>
+                            <p>공개 리뷰 <%= counts.format(analysis.total) %>개 · 평균 <%= analysis.average == null ? "—" : analysis.average.setScale(1, java.math.RoundingMode.HALF_UP) %>점
+                                · 사진 리뷰 <%= results.photosAvailable ? counts.format(analysis.photos) + "개" : "—" %>
+                                · 반응 <%= results.reactionsAvailable ? counts.format(analysis.reactions) + "건" : "—" %></p>
+                            <ul class="admin-review-stars">
+                                <% for (int n = 5; n > 0; n--) { %><li><%= n %>점 <strong><%= counts.format(analysis.stars[n - 1]) %>개</strong></li><% } %>
+                            </ul>
+                            <% if (results.reportsAvailable) { %><p>관리자 신고 집계 · 신고된 리뷰 <%= counts.format(analysis.reported) %>개 · 미처리 <%= counts.format(analysis.pending) %>건</p><% } %>
+                        </section>
+                    <% } else if (!filter.analysisProduct.isEmpty()) { %>
+                        <p class="admin-panel">분석할 상품 ID 또는 품번을 찾을 수 없습니다.</p>
+                    <% } %>
+                    </div>
+                <% if (!fragment) { %></section><% } %>
 
                 <section id="review-results" tabindex="-1" aria-label="리뷰 검색 결과"
                          data-review-url="<%= request.getAttribute("adminReviewUrl") %>"
@@ -185,21 +215,6 @@
                         <p class="admin-review-message admin-review-error" data-review-error role="alert" hidden></p>
                     <% } %>
                     <div data-review-list>
-                    <% daiso.product.dao.AdminReviewDAO.Analysis analysis = (daiso.product.dao.AdminReviewDAO.Analysis) request.getAttribute("adminReviewAnalysis");
-                       if (analysis != null) { %>
-                        <section class="admin-panel">
-                            <h2><%= ProductView.escape(analysis.name) %> 리뷰 분석</h2>
-                            <p>공개 리뷰 <%= counts.format(analysis.total) %>개 · 평균 <%= analysis.average == null ? "—" : analysis.average.setScale(1, java.math.RoundingMode.HALF_UP) %>점
-                                · 사진 리뷰 <%= results.photosAvailable ? counts.format(analysis.photos) + "개" : "—" %>
-                                · 반응 <%= results.reactionsAvailable ? counts.format(analysis.reactions) + "건" : "—" %></p>
-                            <ul class="admin-review-stars">
-                                <% for (int n = 5; n > 0; n--) { %><li><%= n %>점 <strong><%= counts.format(analysis.stars[n - 1]) %>개</strong></li><% } %>
-                            </ul>
-                            <% if (results.reportsAvailable) { %><p>관리자 신고 집계 · 신고된 리뷰 <%= counts.format(analysis.reported) %>개 · 미처리 <%= counts.format(analysis.pending) %>건</p><% } %>
-                        </section>
-                    <% } else if (!filter.analysisProduct.isEmpty()) { %>
-                        <p class="admin-panel">분석할 상품 ID 또는 품번을 찾을 수 없습니다.</p>
-                    <% } %>
                     <% if (results.items.isEmpty()) { %>
                         <p class="admin-panel">조건에 맞는 리뷰가 없습니다.</p>
                     <% } else { %>

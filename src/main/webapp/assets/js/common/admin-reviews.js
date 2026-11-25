@@ -8,7 +8,11 @@
     const list = results.querySelector('[data-review-list]');
     const loading = results.querySelector('[data-review-loading]');
     const error = results.querySelector('[data-review-error]');
-    const { query, start, end, period, analysisProduct } = filters.elements;
+    const analysisForm = document.querySelector('#admin-review-analysis');
+    const analysisProduct = analysisForm.elements.analysisProduct;
+    const analysisResult = document.querySelector('[data-review-analysis-result]');
+    const analysisError = analysisForm.querySelector('[data-review-analysis-error]');
+    const { query, start, end, period } = filters.elements;
     const defaults = { query: '', rating: '', state: 'ALL', reports: 'ALL',
         dateField: 'REVIEW', period: 'ALL', start: '', end: '', sort: 'NEWEST', page: '1', detail: '', reason: '', withPhoto: '', withReaction: '', analysisProduct: '' };
     let committed = new URL(results.dataset.reviewUrl, location.origin);
@@ -32,11 +36,12 @@
     }
 
     function syncFields(preserveKeyword) {
-        for (const name of ['query', 'rating', 'state', 'reports', 'dateField', 'period', 'sort', 'reason', 'withPhoto', 'withReaction', 'analysisProduct']) {
-            if ((name === 'query' || name === 'analysisProduct') && preserveKeyword) continue;
+        for (const name of ['query', 'rating', 'state', 'reports', 'dateField', 'period', 'sort', 'reason', 'withPhoto', 'withReaction']) {
+            if (name === 'query' && preserveKeyword) continue;
             const field = filters.elements.namedItem(name);
             if (field) field.value = committed.searchParams.get(name) || defaults[name];
         }
+        if (!preserveKeyword) analysisProduct.value = committed.searchParams.get('analysisProduct') || '';
         start.value = committedDates.start;
         end.value = committedDates.end;
         validateDates();
@@ -47,7 +52,7 @@
         const values = new FormData(filters);
         const activeUrl = pending?.url || committed;
         values.set('query', useKeyword ? query.value.trim() : activeUrl.searchParams.get('query') || '');
-        values.set('analysisProduct', useKeyword ? analysisProduct.value.trim() : activeUrl.searchParams.get('analysisProduct') || '');
+        values.set('analysisProduct', activeUrl.searchParams.get('analysisProduct') || '');
         if (period.value !== 'CUSTOM') {
             values.delete('start');
             values.delete('end');
@@ -78,7 +83,8 @@
         }
     }
 
-    async function load(url, { scroll, fromHistory = false, preserveKeyword = true } = {}) {
+    async function load(url, { scroll, fromHistory = false, preserveKeyword = true, errorElement = error } = {}) {
+        analysisError.hidden = true;
         const key = requestKey(url);
         if (pending?.key === key) return;
         if (requestKey(committed) === key) {
@@ -115,10 +121,11 @@
             const page = new DOMParser().parseFromString(await response.text(), 'text/html');
             if (pending !== request) return;
             const nextMetrics = page.querySelector('[data-review-metrics]');
+            const nextAnalysis = page.querySelector('[data-review-analysis-result]');
             const nextResults = page.querySelector('#review-results');
             const nextCount = nextResults?.querySelector('[data-review-count]');
             const nextList = nextResults?.querySelector('[data-review-list]');
-            if (!nextMetrics || !nextCount || !nextList || !nextResults.dataset.reviewUrl) throw new Error();
+            if (!nextMetrics || !nextAnalysis || !nextCount || !nextList || !nextResults.dataset.reviewUrl) throw new Error();
 
             const currentY = window.scrollY;
             const tableX = list.querySelector('.admin-table-scroll')?.scrollLeft || 0;
@@ -133,6 +140,7 @@
             metrics.replaceChildren(...nextMetrics.childNodes);
             count.replaceChildren(...nextCount.childNodes);
             list.replaceChildren(...nextList.childNodes);
+            analysisResult.replaceChildren(...nextAnalysis.childNodes);
             const table = list.querySelector('.admin-table-scroll');
             if (table) table.scrollLeft = tableX;
             syncFields(preserveKeyword);
@@ -144,9 +152,9 @@
             else if (!fromHistory) window.scrollTo({ top: currentY, behavior: 'instant' });
         } catch (failure) {
             if (pending !== request) return;
-            error.textContent = failure.message.startsWith('관리자') ? failure.message
+            errorElement.textContent = failure.message.startsWith('관리자') ? failure.message
                 : '리뷰를 불러오지 못했습니다. 현재 목록을 유지합니다. 다시 시도해 주세요.';
-            error.hidden = false;
+            errorElement.hidden = false;
             syncFields(preserveKeyword);
             if (fromHistory) history.replaceState(null, '', committed);
         } finally {
@@ -192,6 +200,17 @@
         if (event.target === filters) {
             event.preventDefault();
             applyFilters(true);
+        } else if (event.target === analysisForm) {
+            event.preventDefault();
+            const value = analysisProduct.value.trim();
+            if (!value) {
+                analysisProduct.focus();
+                return;
+            }
+            analysisError.hidden = true;
+            const url = new URL(pending?.url || committed);
+            url.searchParams.set('analysisProduct', value);
+            load(url, { errorElement: analysisError });
         } else if (event.target.matches('[data-admin-review-action]')) {
             const message = event.submitter?.dataset.confirm;
             if (message && !window.confirm(message)) event.preventDefault();

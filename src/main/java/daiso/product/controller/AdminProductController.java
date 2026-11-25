@@ -55,6 +55,14 @@ public final class AdminProductController {
         Object notice = session.getAttribute(NOTICE);
         session.removeAttribute(NOTICE);
         request.setAttribute(NOTICE, notice);
+        synchronized (session) {
+            BulkSession state = (BulkSession) session.getAttribute(BULK + ".drafts");
+            String receipt = request.getParameter("productBulkSaved");
+            if (state != null && receipt != null && receipt.length() == 36) {
+                request.setAttribute("adminBulkNotice", state.notices.remove(receipt));
+                response.setHeader("Cache-Control", "private, no-store");
+            }
+        }
         return show(request, response, session, null);
     }
 
@@ -277,64 +285,113 @@ public final class AdminProductController {
     }
 
     @DaisoPostMapping(ROUTE + "/bulk-status")
-    public String bulkStatus(HttpServletRequest request, HttpServletResponse response)
-            throws java.io.UnsupportedEncodingException {
+    public String bulkStatus(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
+        response.setHeader("Cache-Control", "private, no-store");
         HttpSession session = adminSession(request);
         if (session == null) return denied(request, response, "관리자 계정으로 로그인해 주세요.");
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
         try {
             String receipt = ProductQueries.text(request, "bulkReceipt", 36);
+            if ("cancel".equals(request.getParameter("bulkAction"))) {
+                synchronized (session) {
+                    bulkSession(session).previews.remove(receipt);
+                }
+                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                response.flushBuffer();
+                return null;
+            }
             if (receipt.isEmpty()) {
                 BulkPreview preview = previewBulk(request);
-                synchronized (session) { session.setAttribute(BULK, preview); }
+                synchronized (session) {
+                    Map<String, BulkPreview> previews = bulkSession(session).previews;
+                    previews.values().removeIf(saved -> saved.expires < System.currentTimeMillis());
+                    rememberBulk(previews, preview.receipt, preview);
+                }
+                request.removeAttribute("adminBulkErrorField");
                 request.setAttribute("productBulkPreview", preview);
                 return show(request, response, session, null);
             }
             BulkPreview preview;
             synchronized (session) {
-                Object value = session.getAttribute(BULK);
-                if (!(value instanceof BulkPreview) || !((BulkPreview) value).receipt.equals(receipt)
-                        || ((BulkPreview) value).expires < System.currentTimeMillis()) {
-                    throw new IllegalArgumentException("미리보기가 만료됐습니다. 다시 조회해 주세요.");
-                }
-                preview = (BulkPreview) value;
-                session.removeAttribute(BULK);
+                preview = bulkSession(session).previews.remove(receipt);
+            }
+            if (preview == null || preview.expires < System.currentTimeMillis()) {
+                throw new IllegalArgumentException("미리보기가 만료되었거나 이미 처리되었습니다. 다시 미리보기를 만들어 주세요.");
             }
             int updated = write(conn -> applyBulk(conn, request, administrator(session), preview));
-            session.setAttribute(NOTICE, preview.items.size() + "개 선택 · " + updated + "개 상품을 변경했습니다.");
-            return redirectToList(request);
+            String message = updated == 0 ? "선택한 상품이 모두 이미 같은 값입니다."
+                    : "선택한 상품 " + updated + "개의 " + preview.fieldLabel
+                            + ("PRICE".equals(preview.type) ? "을" : "를") + " 변경했습니다.";
+            synchronized (session) {
+                rememberBulk(bulkSession(session).notices, receipt, message);
+            }
+            return "redirect:" + ProductView.rawUrl("", ROUTE,
+                    ProductView.with(preview.filters, "productBulkSaved", receipt)) + "#product-bulk-result";
         } catch (IllegalArgumentException error) {
+            request.setAttribute("adminBulkError", true);
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
         }
     }
 
+    private static BulkSession bulkSession(HttpSession session) {
+        BulkSession state = (BulkSession) session.getAttribute(BULK + ".drafts");
+        if (state == null) {
+            state = new BulkSession();
+            session.setAttribute(BULK + ".drafts", state);
+        }
+        return state;
+    }
+
+    private static <T> void rememberBulk(Map<String, T> values, String receipt, T value) {
+        if (values.size() >= 8) values.remove(values.keySet().iterator().next());
+        values.put(receipt, value);
+    }
+
+    private static final class BulkSession {
+        private final Map<String, BulkPreview> previews = new LinkedHashMap<>();
+        private final Map<String, String> notices = new LinkedHashMap<>();
+    }
+
     private BulkPreview previewBulk(HttpServletRequest request) throws SQLException, NamingException {
         String type = ProductQueries.text(request, "bulkType", 12);
-        if (type.isEmpty()) type = "STATUS";
+        request.setAttribute("adminBulkErrorField", "bulkType");
         String target;
         switch (type) {
             case "STATUS":
+                request.setAttribute("adminBulkErrorField", "targetStatus");
                 target = ProductQueries.text(request, "targetStatus", 20);
                 if (!STATUSES.containsKey(target)) throw new IllegalArgumentException("변경할 판매 상태를 선택해 주세요.");
                 break;
             case "PRICE":
-                int price = number(ProductQueries.text(request, "targetPrice", 10), "가격");
+                request.setAttribute("adminBulkErrorField", "targetPrice");
+                String submitted = ProductQueries.text(request, "targetPrice", 10);
+                if (submitted.isEmpty()) throw new IllegalArgumentException("변경할 가격을 입력해 주세요.");
+                int price = number(submitted, "가격");
                 if (price < MIN_PRICE || price > MAX_PRICE) throw new IllegalArgumentException(PRICE_RANGE);
                 target = Integer.toString(price);
                 break;
             case "CATEGORY":
+                request.setAttribute("adminBulkErrorField", "targetCategory");
                 target = ProductQueries.text(request, "targetCategory", 100);
                 break;
             default: throw new IllegalArgumentException("일괄 변경 항목을 확인해 주세요.");
         }
+        request.setAttribute("adminBulkErrorField", "selectedProduct");
         SortedSet<String> ids = selectedIds(request.getParameterValues("selectedProduct"));
+        request.removeAttribute("adminBulkErrorField");
+        Map<String, String> returnFilters = AdminProductFilter.read(request, STATUSES).parameters(
+                ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE));
         try (Connection conn = ProductQueries.connect()) {
             Map<String, String> categories = "CATEGORY".equals(type) ? dao.findAdminCategories(conn, true) : Map.of();
-            if ("CATEGORY".equals(type) && (!changes.categoryAuditReady(conn) || !categories.containsKey(target))) {
-                throw new IllegalArgumentException("카테고리 변경 이력 SQL과 최하위 카테고리를 확인해 주세요.");
+            if ("CATEGORY".equals(type)) {
+                if (!changes.categoryAuditReady(conn)) throw new IllegalArgumentException("카테고리 변경 이력 SQL을 확인해 주세요.");
+                if (!categories.containsKey(target)) {
+                    request.setAttribute("adminBulkErrorField", "targetCategory");
+                    throw new IllegalArgumentException("변경할 최하위 카테고리를 선택해 주세요.");
+                }
             }
             List<BulkItem> items = new java.util.ArrayList<>();
             for (String id : ids) {
@@ -342,12 +399,17 @@ public final class AdminProductController {
                 if (product == null || !id.equals(product.getProductId())) {
                     throw new IllegalArgumentException("선택 목록에 찾을 수 없는 상품이 있습니다.");
                 }
-                if ("STATUS".equals(type)) verifyDiscontinuation(request, target, product);
+                if ("STATUS".equals(type)) {
+                    request.setAttribute("adminBulkErrorField", "targetStatus");
+                    verifyDiscontinuation(request, target, product);
+                    request.removeAttribute("adminBulkErrorField");
+                }
                 String old = bulkValue(type, product);
-                items.add(new BulkItem(id, product.getName(), old, bulkLabel(type, old, categories)));
+                items.add(new BulkItem(id, product.getName(), product.getProductCode(), old, bulkLabel(type, old, categories),
+                        !target.equals(old)));
             }
             conn.commit();
-            return new BulkPreview(type, target, bulkLabel(type, target, categories), items);
+            return new BulkPreview(type, target, bulkLabel(type, target, categories), items, returnFilters);
         }
     }
 
@@ -397,30 +459,39 @@ public final class AdminProductController {
     public static final class BulkPreview {
         public final String receipt = UUID.randomUUID().toString();
         public final String targetLabel;
+        public final String fieldLabel;
         public final List<BulkItem> items;
+        private final Map<String, String> filters;
         private final long expires = System.currentTimeMillis() + 600_000;
         private final String type;
         private final String target;
 
-        BulkPreview(String type, String target, String targetLabel, List<BulkItem> items) {
+        BulkPreview(String type, String target, String targetLabel, List<BulkItem> items,
+                Map<String, String> filters) {
             this.type = type;
             this.target = target;
             this.targetLabel = targetLabel;
+            this.fieldLabel = "PRICE".equals(type) ? "가격" : "CATEGORY".equals(type) ? "카테고리" : "판매 상태";
             this.items = List.copyOf(items);
+            this.filters = Map.copyOf(filters);
         }
     }
 
     public static final class BulkItem {
         public final String name;
         public final String previousLabel;
+        public final String code;
+        public final boolean changed;
         private final String id;
         private final String previous;
 
-        BulkItem(String id, String name, String previous, String previousLabel) {
+        BulkItem(String id, String name, String code, String previous, String previousLabel, boolean changed) {
             this.id = id;
             this.name = name;
             this.previous = previous;
             this.previousLabel = previousLabel;
+            this.code = code;
+            this.changed = changed;
         }
     }
 

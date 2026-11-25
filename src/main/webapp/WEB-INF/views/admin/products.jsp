@@ -58,7 +58,9 @@
                 <% } %>
             <% } else { %>
                 <% if (productForm == null && request.getAttribute("adminProductError") != null) { %>
-                    <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
+                    <p class="error-message" role="alert"
+                       <%= Boolean.TRUE.equals(request.getAttribute("adminBulkError")) ? "data-batch-server-error" : "" %>
+                       data-field="<%= ProductView.escape(request.getAttribute("adminBulkErrorField")) %>"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
                     <% if (request.getAttribute("adminProductStatusLink") != null) { %>
                         <p><a class="button secondary" href="<%= request.getAttribute("adminProductStatusLink") %>#product-status">이 상품의 판매 상태 변경</a></p>
                     <% } %>
@@ -66,7 +68,15 @@
                 <% if (request.getAttribute("adminProductNotice") != null) { %>
                     <p class="form-status" role="status"><%= ProductView.escape(request.getAttribute("adminProductNotice")) %></p>
                 <% } %>
+                <% if (request.getAttribute("adminBulkNotice") != null) { %>
+                    <p class="inventory-success" id="product-bulk-result" role="status" tabindex="-1"><%= ProductView.escape(request.getAttribute("adminBulkNotice")) %></p>
+                <% } %>
                 <% Map<String, Long> statusSummary = (Map<String, Long>) request.getAttribute("adminProductStatusSummary"); %>
+                    <nav class="admin-product-actions admin-product-toolbar-actions" aria-label="상품 관리 작업">
+                        <a class="button secondary" href="<%= request.getAttribute("adminProductCsv") %>">검색 결과 CSV</a>
+                        <a class="button secondary" href="<%= request.getAttribute("adminProductHistory") %>#product-history">전체 변경 이력</a>
+                        <a class="button primary" href="<%= request.getAttribute("adminProductNew") %>#product-editor">상품 등록</a>
+                    </nav>
                 <nav class="store-metrics" aria-label="검색 범위의 상품 판매 상태">
                     <% for (String metric : java.util.List.of("", "AVAILABLE", "SOLD_OUT", "SCHEDULED", "DISCONTINUED")) {
                            String metricUrl = ProductView.url(request.getContextPath(), "/app/admin/products",
@@ -79,17 +89,6 @@
                 </nav>
                 <div class="admin-product-toolbar">
                     <form class="admin-product-filters" data-admin-query-form method="get" action="${pageContext.request.contextPath}/app/admin/products">
-                        <label class="field admin-product-filter-row"><span>상품 정렬</span>
-                            <select name="sort">
-                                <% for (String[] option : new String[][] {
-                                    {"NEWEST", "최신 등록순"}, {"UPDATED", "최근 수정순"}, {"NAME", "상품명순"},
-                                    {"PRICE_DESC", "가격 높은순"}, {"PRICE_ASC", "가격 낮은순"}, {"STOCK_DESC", "재고 많은순"},
-                                    {"STOCK_ASC", "재고 적은순"}, {"SALES", "판매량 높은순"}, {"REVIEWS", "리뷰 많은순"}
-                                }) { %>
-                                    <option value="<%= option[0] %>" <%= option[0].equals(activeSort) ? "selected" : "" %>><%= option[1] %></option>
-                                <% } %>
-                            </select>
-                        </label>
                         <label class="field admin-product-filter-row">
                             <span>상품 검색</span>
                             <input name="query" type="search" maxlength="120" placeholder="상품명, 품번, 브랜드 또는 ID"
@@ -128,16 +127,23 @@
                                 </label>
                             </div>
                         </div>
+                        <label class="field admin-product-filter-row"><span>상품 정렬</span>
+                            <select name="sort">
+                                <% for (String[] option : new String[][] {
+                                    {"NEWEST", "최신 등록순"}, {"UPDATED", "최근 수정순"}, {"NAME", "상품명순"},
+                                    {"PRICE_DESC", "가격 높은순"}, {"PRICE_ASC", "가격 낮은순"}, {"STOCK_DESC", "재고 많은순"},
+                                    {"STOCK_ASC", "재고 적은순"}, {"SALES", "판매량 높은순"}, {"REVIEWS", "리뷰 많은순"}
+                                }) { %>
+                                    <option value="<%= option[0] %>" <%= option[0].equals(activeSort) ? "selected" : "" %>><%= option[1] %></option>
+                                <% } %>
+                            </select>
+                        </label>
                         <div class="admin-product-actions admin-product-filter-actions inventory-filter-actions">
                             <button class="button primary" type="submit">검색</button>
                             <a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products" data-admin-query-link>초기화</a>
                         </div>
                     </form>
-                    <div class="admin-product-actions admin-product-toolbar-actions">
-                        <a class="button secondary" href="<%= request.getAttribute("adminProductCsv") %>">검색 결과 CSV</a>
-                        <a class="button secondary" href="<%= request.getAttribute("adminProductHistory") %>#product-history">전체 변경 이력</a>
-                        <a class="button primary" href="<%= request.getAttribute("adminProductNew") %>#product-editor">상품 등록</a>
-                    </div>
+
                 </div>
 
                 <%@ include file="product-history.jspf" %>
@@ -319,37 +325,60 @@
                        (daiso.product.controller.AdminProductController.BulkPreview) request.getAttribute("productBulkPreview");
                    Map<String, String> bulkCategories = (Map<String, String>) request.getAttribute("adminBulkCategories"); %>
                 <% if (bulkPreview != null) { %>
-                    <section class="admin-panel" aria-labelledby="product-bulk-title">
-                        <h2 id="product-bulk-title">일괄 변경 미리보기</h2>
-                        <p><%= bulkPreview.items.size() %>개 선택 · 변경 값 <strong><%= ProductView.escape(bulkPreview.targetLabel) %></strong></p>
-                        <ul><% for (daiso.product.controller.AdminProductController.BulkItem item : bulkPreview.items) { %>
-                            <li><%= ProductView.escape(item.name) %> · 기존 <%= ProductView.escape(item.previousLabel) %></li>
-                        <% } %></ul>
-                        <form method="post" action="<%= request.getAttribute("adminProductBulk") %>" class="admin-product-actions">
+                    <section class="admin-panel inventory-batch-preview" data-batch-preview>
+                        <header class="inventory-batch-heading">
+                            <h1 class="page-title" id="product-bulk-title" tabindex="-1">상품 <%= bulkPreview.fieldLabel %> 일괄 변경</h1>
+                            <button class="button secondary" type="button" data-batch-close hidden aria-label="미리보기 닫기">×</button>
+                        </header>
+                        <p>선택한 상품 <strong><%= bulkPreview.items.size() %>개</strong> · 변경 항목 <strong><%= bulkPreview.fieldLabel %></strong></p>
+                        <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품별 변경 전후 비교">
+                            <table class="admin-table">
+                                <thead><tr><th scope="col">상품명·품번</th><th scope="col">기존 값</th><th scope="col">변경 후 값</th></tr></thead>
+                                <tbody>
+                                    <% for (daiso.product.controller.AdminProductController.BulkItem item : bulkPreview.items) { %>
+                                        <tr>
+                                            <td><%= ProductView.escape(item.name) %><small>품번 <%= ProductView.escape(item.code) %></small></td>
+                                            <td><%= ProductView.escape(item.previousLabel) %></td>
+                                            <td><% if (item.changed) { %><strong class="product-bulk-change"><%= ProductView.escape(bulkPreview.targetLabel) %></strong>
+                                                <% } else { %><%= ProductView.escape(bulkPreview.targetLabel) %><small>변경 없음</small><% } %></td>
+                                        </tr>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="error-message" role="alert" data-batch-confirm-error hidden tabindex="-1"></p>
+                        <form method="post" action="<%= request.getAttribute("adminProductBulk") %>" class="inventory-batch-confirm" data-batch-confirm>
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
                             <input type="hidden" name="bulkReceipt" value="<%= bulkPreview.receipt %>">
-                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
-                            <button class="button primary" type="submit">일괄 변경 확정</button>
+                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>" data-batch-revise>다시 작성</a>
+                            <button class="button primary" type="submit">변경 확정</button>
                         </form>
                     </section>
                 <% } %>
                 <div class="admin-product-results-bar">
                     <p class="admin-count" role="status"><%= request.getAttribute("adminProductCount") %>개 상품
                         <% if (!productRows.isEmpty()) { %> · <%= request.getAttribute("adminProductFirst") %>–<%= request.getAttribute("adminProductLast") %>번째 표시<% } %></p>
+                </div>
                     <% if (!productRows.isEmpty()) { %>
-                        <form class="admin-product-bulk" id="product-bulk"
+                        <form class="admin-panel inventory-batch-panel product-bulk-panel" id="product-bulk"
                               method="post" action="<%= request.getAttribute("adminProductBulk") %>">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
-                            <output data-bulk-count aria-live="polite">현재 페이지 상품 선택</output>
+                            <header class="inventory-batch-heading">
+                                <h3>상품 일괄 변경</h3>
+                                <output data-bulk-count aria-live="polite">현재 페이지 상품 선택</output>
+                                <button class="button secondary" type="button" data-batch-clear hidden>선택 해제</button>
+                            </header>
+                            <div class="inventory-batch-fields">
                             <label class="field"><span>일괄 변경 항목</span>
                                 <select name="bulkType">
+                                    <option value="">변경 항목 선택</option>
                                     <option value="STATUS">판매 상태</option>
                                     <option value="PRICE">가격</option>
                                     <% if (bulkCategories != null) { %><option value="CATEGORY">카테고리</option><% } %>
                                 </select>
                             </label>
                             <label class="field admin-product-bulk-status" data-bulk-field="STATUS">
-                                <span class="visually-hidden">선택한 상품의 판매 상태</span>
+                                <span>변경할 판매 상태</span>
                                 <select name="targetStatus">
                                     <option value="">변경할 상태 선택</option>
                                     <% for (String status : statusKeys) { %>
@@ -357,7 +386,7 @@
                                     <% } %>
                                 </select>
                             </label>
-                            <label class="field" data-bulk-field="PRICE"><span>새 가격</span>
+                            <label class="field" data-bulk-field="PRICE"><span>변경할 가격 (원)</span>
                                 <input name="targetPrice" type="number" min="1000" max="5000" step="1">
                             </label>
                             <% if (bulkCategories != null) { %>
@@ -370,10 +399,12 @@
                                     </select>
                                 </label>
                             <% } %>
-                            <button class="button secondary" type="submit">일괄 변경 미리보기</button>
+                            </div>
+                            <p class="error-message" role="alert" data-product-bulk-error hidden tabindex="-1"></p>
+                            <button class="button primary" type="submit">미리보기</button>
                         </form>
+                        <dialog class="inventory-batch-dialog product-bulk-dialog" id="product-bulk-dialog" aria-labelledby="product-bulk-title"></dialog>
                     <% } %>
-                </div>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
                     <table class="admin-table store-stock-table">
                         <caption class="visually-hidden">상품 관리</caption>

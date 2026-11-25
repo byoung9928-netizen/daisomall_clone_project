@@ -31,7 +31,6 @@
         const { operation, amountMode, amount, reason, destination } = form.elements;
         const drafts = new Map();
         let pendingPreview;
-        let saving = false;
         let currentOperation = operation.value;
 
         const checked = () => boxes.filter(box => box.checked);
@@ -202,71 +201,11 @@
             form.requestSubmit(previewButton);
         }
 
-        dialog.addEventListener('cancel', event => {
-            if (saving) event.preventDefault();
-        });
-        dialog.addEventListener('close', () => {
-            dialog.replaceChildren();
-            if (previewButton.isConnected) previewButton.focus({ preventScroll: true });
-        });
-
         function showPreview(preview) {
-            dialog.replaceChildren(document.importNode(preview, true));
-            const close = dialog.querySelector('[data-batch-close]');
-            const revise = dialog.querySelector('[data-batch-revise]');
-            const confirmation = dialog.querySelector('[data-batch-confirm]');
-            close.hidden = false;
-            close.addEventListener('click', () => dialog.close());
-            revise.addEventListener('click', event => {
-                event.preventDefault();
-                if (!saving) dialog.close();
-            });
-            confirmation.addEventListener('submit', async event => {
-                event.preventDefault();
-                const accept = event.submitter || confirmation.querySelector('button[type="submit"]');
-                if (saving || accept.disabled) return;
-                saving = true;
-                accept.disabled = true;
-                close.disabled = true;
-                revise.setAttribute('aria-disabled', 'true');
-                const warning = dialog.querySelector('[data-batch-confirm-error]');
-                try {
-                    const response = await fetch(confirmation.action, {
-                        method: 'POST', body: new URLSearchParams(new FormData(confirmation)), cache: 'no-store'
-                    });
-                    const html = new DOMParser().parseFromString(await response.text(), 'text/html');
-                    const next = html.querySelector('[data-admin-query-content]');
-                    const destinationUrl = new URL(response.url);
-                    if (response.ok && response.redirected && destinationUrl.origin === location.origin
-                            && destinationUrl.pathname === location.pathname
-                            && html.querySelector('[data-admin-query]')?.dataset.adminQuery === root.dataset.adminQuery
-                            && next?.querySelector('#inventory-batch-result')) {
-                        destinationUrl.searchParams.delete('batchSaved');
-                        dialog.close();
-                        root.dispatchEvent(new CustomEvent('admin-inventory-batch-saved', {
-                            detail: { next, destination: destinationUrl }
-                        }));
-                        return;
-                    }
-                    warning.textContent = html.querySelector('[data-batch-server-error]')?.textContent.trim()
-                        || '저장 결과를 확인하지 못했습니다. 목록의 최신 재고를 확인해 주세요.';
-                } catch {
-                    warning.textContent = '연결이 끊겨 저장 결과를 확인할 수 없습니다. 최신 재고를 확인해 주세요.';
-                } finally {
-                    saving = false;
-                    close.disabled = false;
-                    revise.removeAttribute('aria-disabled');
-                }
-                warning.hidden = false;
-                warning.focus();
-                const refreshLink = document.createElement('a');
-                refreshLink.className = 'button secondary';
-                refreshLink.href = revise.href;
-                refreshLink.textContent = '최신 재고 보기';
-                confirmation.prepend(refreshLink);
-            });
-            dialog.showModal();
-            dialog.querySelector('h1').focus();
+            root.dispatchEvent(new CustomEvent('admin-batch-preview', {
+                detail: { dialog, preview, opener: previewButton, noticeId: 'inventory-batch-result',
+                    receiptParameter: 'batchSaved', refreshLabel: '최신 재고 보기' }
+            }));
         }
 
         form.addEventListener('submit', async event => {
