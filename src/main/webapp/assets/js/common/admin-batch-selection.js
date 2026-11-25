@@ -109,6 +109,7 @@
         });
         details.addEventListener('toggle', () => { if (details.isConnected) expanded = details.open; });
         refresh();
+        panel.setAttribute('data-batch-managed', '');
 
         return {
             draft,

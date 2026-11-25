@@ -25,9 +25,9 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css?v=batch-selection-1">
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css?v=batch-selection-2">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-selection-1" defer></script>
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-batch-selection.js?v=batch-selection-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-batch-selection.js?v=batch-selection-2" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js?v=batch-selection-1" defer></script>
