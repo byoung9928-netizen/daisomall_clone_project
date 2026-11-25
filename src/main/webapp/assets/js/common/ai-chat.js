@@ -51,7 +51,7 @@
             const answer = (await response.text()).trim();
             addBubble(answer || '답변이 비어 있어요. 다시 질문해 주세요.', false);
 
-            if (response.ok && answer) {
+            if (response.ok && answer && response.headers.get('X-Daiso-Chat-Private') !== 'true') {
                 history.push('사용자: ' + question + '\nAI: ' + answer);
                 if (history.length > 3) history.shift();
             }
