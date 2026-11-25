@@ -200,6 +200,9 @@ public class UserController {
             if ("ADMIN".equalsIgnoreCase(member.getRole())) {
                 return "redirect:/admin/dashboard";
             }
+            if ("STORE_MANAGER".equalsIgnoreCase(member.getRole())) {
+                return "redirect:/store-manager/inventory";
+            }
             return "redirect:/home";
 
         } catch (IllegalArgumentException e) {

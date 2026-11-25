@@ -95,7 +95,16 @@
 .product-admin-ux .store-stock-table td { font-size: .90625rem; line-height: 1.45; }
 .product-admin-ux .store-stock-product small { font-size: .875rem; }
 .inventory-stock-number { display: block; margin-block-start: .25rem; }
-.inventory-filter-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+.store-admin-filters.admin-search { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.store-admin-filters.admin-search > .field { flex: 1 1 9rem; width: auto; }
+.store-admin-filters.admin-search > .field:has(input[name="q"]) { flex-basis: 12rem; }
+.store-admin-filters .inventory-filter-actions {
+    display: flex; flex: 0 0 auto; flex-wrap: nowrap; gap: .5rem; align-items: flex-end;
+}
+.store-admin-filters .inventory-filter-actions .button {
+    box-sizing: border-box; min-height: 44px; margin: 0; white-space: nowrap;
+}
+.store-admin-filters > .field > :is(input:not([type="hidden"]), select) { box-sizing: border-box; height: 44px; }
 .inventory-range { margin-block: .5rem 1rem; }
 .store-metrics a { border-inline-start-width: 4px; text-decoration: underline; text-underline-offset: .18em; }
 .store-metrics a[data-stock-state="LOW"] { border-inline-start-color: #a25d00; color: #794800; background: #fff9eb; }
@@ -180,7 +189,8 @@
     .product-admin-menu-toggle:not([hidden])[aria-expanded="false"] + .admin-sidebar { display: none; }
     .product-admin-ux .admin-sidebar { flex-wrap: wrap; overflow-x: visible; }
     .product-admin-ux .admin-sidebar [aria-current="page"] { order: -1; }
-    .store-admin-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .store-admin-filters.admin-search { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .store-admin-filters .inventory-filter-actions { justify-content: flex-start; }
     .store-drawer:modal { width: 100%; }
     .store-stock-actions { min-width: 6rem; }
 }

@@ -21,14 +21,32 @@
                 <a href="<%= restockLink %>&amp;kind=open-run" <%= openRun ? "aria-current=\"page\"" : "" %>>오픈런</a>
             <% } %>
         </nav>
-        <div class="product-restock-empty">
-            <span aria-hidden="true">!</span>
-            <p>신청 내역이 없습니다.</p>
-        </div>
-        <section class="product-restock-guide">
-            <h2><%= stores ? "매장 재입고 알림 안내" : openRun ? "오픈런 알림 안내" : "다이소몰 재입고 알림 안내" %></h2>
-            <p>아직 알림 신청을 받지 않습니다.</p>
-        </section>
+        <% if (!stores && !openRun) { %>
+            <div id="product-online-restock">
+                <p><a href="<%= myContext %>/app/products/restock">내 다이소몰 재입고 알림 보기</a></p>
+            </div>
+            <script>
+                (function () {
+                    var target = document.getElementById('product-online-restock');
+                    var link = target.querySelector('a');
+                    fetch(link.href + '?partial=1', {headers: {'Accept': 'text/html'}})
+                        .then(function (response) { return response.ok ? response.text() : ''; })
+                        .then(function (html) {
+                            var result = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-restock-notices]');
+                            if (result) target.replaceWith(result);
+                        }).catch(function () {});
+                })();
+            </script>
+        <% } else { %>
+            <div class="product-restock-empty">
+                <span aria-hidden="true">!</span>
+                <p>신청 내역이 없습니다.</p>
+            </div>
+            <section class="product-restock-guide">
+                <h2><%= stores ? "매장 재입고 알림 안내" : "오픈런 알림 안내" %></h2>
+                <p>아직 알림 신청을 받지 않습니다.</p>
+            </section>
+        <% } %>
     </section>
 <% } else {
     boolean activitySummaryMode = productActivity.isEmpty();

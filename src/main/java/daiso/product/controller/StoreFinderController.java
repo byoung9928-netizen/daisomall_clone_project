@@ -17,6 +17,7 @@ import daiso.product.controller.ProductDAO.CatalogPage;
 import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.Location;
 import daiso.product.dao.StoreInventoryDAO.StockAvailability;
+import daiso.order.db.OrderDAO;
 
 @DaisoController
 public final class StoreFinderController {
@@ -138,6 +139,40 @@ public final class StoreFinderController {
         }
 
         try {
+        	String normalizedQuestion = question.replaceAll("[\\s?!.,？]+", "");
+
+        	boolean orderQuestion = List.of(
+        	        "내최근주문상태알려줘",
+        	        "내주문상태알려줘",
+        	        "내최근주문지금어디까지왔어",
+        	        "내배송상태알려줘"
+        	).contains(normalizedQuestion);
+
+        	boolean returnQuestion = List.of(
+        	        "내최근반품상태알려줘",
+        	        "내반품승인됐어",
+        	        "내환불상태알려줘"
+        	).contains(normalizedQuestion);
+
+        	if (orderQuestion || returnQuestion) {
+        	    response.setHeader("X-Daiso-Chat-Private", "true");
+        	    String memberId = (String) session.getAttribute("member_id");
+
+        	    try {
+        	        String status = new OrderDAO().findLatestChatStatus(memberId, returnQuestion);
+        	        if (status == null) {
+        	            return returnQuestion ? "조회할 반품 내역이 없어요." : "조회할 주문 내역이 없어요.";
+        	        }
+
+        	        String label = chatOrderStatusLabel(status);
+        	        return (returnQuestion ? "최근 반품 상태는 " : "최근 주문 상태는 ")
+        	                + "[" + label + "]예요. 자세한 내용은 마이페이지 주문내역에서 확인해 주세요.";
+        	    } catch (SQLException e) {
+        	        request.getServletContext().log("챗봇 주문 상태 조회 실패", e);
+        	        response.setStatus(503);
+        	        return "지금은 주문·반품 상태를 조회할 수 없어요. 잠시 후 다시 시도해 주세요.";
+        	    }
+        	}
         	String history = request.getParameter("history");
         	if (history != null && history.length() > 1600) {
         	    return "대화가 너무 길어요. 페이지를 새로 열고 다시 질문해 주세요.";
@@ -146,9 +181,71 @@ public final class StoreFinderController {
         	com.google.gson.JsonObject terms =
         			new GeminiStockQuestionClient().parseQuestion(question, history);
 
+        	String kind = terms.get("kind").getAsString();
+
+        	if ("shipping_policy".equals(kind)) {
+        	    return "택배 배송비는 상품 합계가 30,000원 미만이면 3,000원이고, "
+        	            + "30,000원 이상이면 무료예요. 매장픽업 수수료는 200원이에요.";
+        	}
+
+        	if ("return_policy".equals(kind)) {
+        	    return "마이페이지 → 주문내역에서 해당 주문을 열고 [반품 신청]을 눌러 주세요. "
+        	            + "배송이 완료되고 결제가 승인된 본인 주문에서 신청할 수 있어요.";
+        	}
+        	
         	if ("general".equals(terms.get("kind").getAsString())) {
         	    String answer = terms.get("answer").getAsString().strip();
         	    return answer.isEmpty() ? "답변을 만들지 못했어요. 다르게 질문해 주세요." : answer;
+        	}
+        	boolean pickupStoresQuestion = "pickup_stores".equals(terms.get("kind").getAsString());
+        	if ("product".equals(terms.get("kind").getAsString()) || pickupStoresQuestion) {
+        	    String keyword = terms.get("product").getAsString().strip();
+        	    if (keyword.isEmpty() || keyword.length() > 100) {
+        	        return "조회할 상품명이나 품번을 알려주세요.";
+        	    }
+
+        	    try (Connection connection = ProductQueries.connect()) {
+        	        CatalogFilter filter = new CatalogFilter();
+        	        filter.keyword = keyword;
+        	        filter.limit = 5;
+
+        	        CatalogPage found = products.findCatalog(connection, filter);
+
+        	        if (found.products.isEmpty()) {
+        	            return "일치하는 상품을 찾지 못했어요. 상품명이나 품번을 확인해 주세요.";
+        	        }
+
+        	        if (found.total > 1) {
+        	            return "어느 상품을 찾으시나요? 아래 후보의 품번을 알려주세요.\n"
+        	                    + found.products.stream()
+        	                            .map(product -> "• " + product.getName()
+        	                                    + " (품번 " + product.getProductCode() + ")")
+        	                            .collect(Collectors.joining("\n"));
+        	        }
+
+        	        ProductDTO product = found.products.get(0);
+        	        if (pickupStoresQuestion) {
+        	            List<StoreInventoryDAO.PickupStore> availableStores =
+        	                    stores.pickupStores(connection, product.getProductId());
+        	            connection.commit();
+
+        	            if (availableStores.isEmpty()) {
+        	                return product.getName() + "은 현재 픽업 가능한 매장이 없어요.";
+        	            }
+
+        	            String storeNames = availableStores.stream()
+        	                    .map(store -> "• " + store.location.name + " (" + store.quantity + "개)")
+        	                    .collect(Collectors.joining("\n"));
+
+        	            return product.getName() + "의 픽업 가능 매장이에요.\n" + storeNames;
+        	        }
+
+        	        connection.commit();
+        	        return product.getName() + "의 온라인 표시 가격은 "
+        	                + java.text.NumberFormat.getIntegerInstance(Locale.KOREA)
+        	                        .format(product.getPrice())
+        	                + "원이에요.";
+        	    }
         	}
             String storeQuery = terms.get("store").getAsString().strip();
             String productQuery = terms.get("product").getAsString().strip();
@@ -207,7 +304,26 @@ public final class StoreFinderController {
             return "지금은 재고를 조회할 수 없어요. 잠시 후 다시 시도해 주세요.";
         }
     }
-    
+    private static String chatOrderStatusLabel(String status) {
+        switch (status) {
+            case "PENDING": return "결제 대기";
+            case "PAID": return "결제 완료";
+            case "PREPARING": return "상품 준비 중";
+            case "SHIPPED": return "배송 중";
+            case "DELIVERED": return "배송 완료";
+            case "CANCELLING": return "주문 취소 처리 중";
+            case "CANCELLED": return "주문 취소";
+            case "FAILED":
+            case "PAYMENT_FAILED": return "결제 실패";
+            case "REQUESTED": return "반품 접수";
+            case "APPROVED": return "반품 승인";
+            case "RECEIVED": return "회수 완료";
+            case "REJECTED": return "반품 반려";
+            case "REFUNDING": return "환불 처리 중";
+            case "REFUNDED": return "환불 완료";
+            default: return "상태 확인 필요";
+        }
+    }
     private static List<Location> matches(List<Location> locations, String keyword) {
         String[] terms = keyword.toLowerCase(Locale.ROOT).split("\\s+");
         return locations.stream().filter(store -> {

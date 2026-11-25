@@ -12,7 +12,9 @@
                 ? request.getContextPath() + "/app/admin/users"
                 : "product-reviews".equals(entry[0])
                     ? request.getContextPath() + "/app/admin/products/reviews"
-                    : request.getContextPath() + "/admin/?view=" + entry[0];
+                    : entry[0].matches("products|inventory|stores|categories")
+                        ? request.getContextPath() + "/app/admin/" + entry[0]
+                        : request.getContextPath() + "/admin/?view=" + entry[0];
     %>
         <a href="<%= adminHref %>" data-admin-link="<%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("adminSection"))) { %> aria-current="page"<% } %>><%= entry[1] %></a>
     <% } %>

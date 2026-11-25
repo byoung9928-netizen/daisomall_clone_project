@@ -48,7 +48,8 @@ public final class AdminReviewDAO {
         NEWEST("최신 작성순", ""), OLDEST("오래된 작성순", ""),
         HIGHEST("별점 높은순", "r.rating DESC, "), LOWEST("별점 낮은순", "r.rating ASC, "),
         MOST_REPORTED("신고 많은순", "COALESCE(%s.total, 0) DESC, "),
-        MOST_PENDING("미처리 신고 우선순", "COALESCE(%s.pending, 0) DESC, ");
+        MOST_PENDING("미처리 신고 우선순", "COALESCE(%s.pending, 0) DESC, "),
+        MOST_REACTED("반응 많은순", "COALESCE(reactions.total, 0) DESC, ");
 
         public final String label;
         private final String order;
@@ -76,9 +77,14 @@ public final class AdminReviewDAO {
         public final LocalDateTime start;
         public final LocalDateTime endExclusive;
         public final Sort sort;
+        public final String reason;
+        public final boolean photo;
+        public final boolean reaction;
+        public final String analysisProduct;
 
         public Filter(String keyword, int rating, State state, ReportFilter reports, DateField dateField,
-                LocalDateTime start, LocalDateTime endExclusive, Sort sort) {
+                LocalDateTime start, LocalDateTime endExclusive, Sort sort, String reason,
+                boolean photo, boolean reaction, String analysisProduct) {
             this.keyword = keyword;
             this.rating = rating;
             this.state = state;
@@ -87,6 +93,10 @@ public final class AdminReviewDAO {
             this.start = start;
             this.endExclusive = endExclusive;
             this.sort = sort;
+            this.reason = reason;
+            this.photo = photo;
+            this.reaction = reaction;
+            this.analysisProduct = analysisProduct;
         }
     }
 
@@ -120,10 +130,13 @@ public final class AdminReviewDAO {
     public Page list(Connection connection, Filter filter, int requestedPage, long selectedReview) throws SQLException {
         boolean reportsAvailable = feedback.reportsAvailable(connection);
         boolean reportDate = filter.dateField != DateField.REVIEW;
-        boolean scopedReports = reportDate && (filter.start != null || filter.dateField == DateField.PROCESSED);
+        boolean dateScoped = reportDate && (filter.start != null || filter.dateField == DateField.PROCESSED);
+        boolean scopedReports = dateScoped || !filter.reason.isEmpty();
+        boolean photosReady = tableReady(connection, "product_review_photos");
+        boolean reactionsReady = tableReady(connection, "product_review_reactions");
         String reportWhere = "";
         List<Object> dates = new ArrayList<>();
-        if (scopedReports) {
+        if (dateScoped) {
             if (filter.start != null) {
                 reportWhere = " WHERE " + filter.dateField.column + " >= ? AND " + filter.dateField.column + " < ? ";
                 dates.add(filter.start);
@@ -132,11 +145,21 @@ public final class AdminReviewDAO {
                 reportWhere = " WHERE rr.processed_at IS NOT NULL ";
             }
         }
+        if (!filter.reason.isEmpty()) {
+            reportWhere += reportWhere.isEmpty() ? " WHERE rr.reason_code = ? " : " AND rr.reason_code = ? ";
+            dates.add(filter.reason);
+        }
         String scopedJoin = reportsAvailable ? reportJoin("scoped", reportWhere) : "";
         String membership = filter.reports == ReportFilter.ALL ? "TRUE"
                 : reportsAvailable ? filter.reports.match : "FALSE";
         List<Object> parameters = new ArrayList<>();
         String baseWhere = reviewWhere(filter, reportDate, reportsAvailable, parameters);
+        if (!reportDate && !filter.reason.isEmpty()) baseWhere += reportsAvailable
+                ? " AND scoped.review_id IS NOT NULL" : " AND FALSE";
+        if (filter.photo) baseWhere += photosReady
+                ? " AND EXISTS (SELECT 1 FROM product_review_photos ph WHERE ph.review_id = r.review_id)" : " AND FALSE";
+        if (filter.reaction) baseWhere += reactionsReady
+                ? " AND EXISTS (SELECT 1 FROM product_review_reactions rea WHERE rea.review_id = r.review_id)" : " AND FALSE";
 
         String aggregates = reportsAvailable ? "COUNT(scoped.review_id), "
                 + "COALESCE(SUM(scoped.pending), 0), COALESCE(SUM(scoped.completed), 0)" : "0, 0, 0";
@@ -161,12 +184,17 @@ public final class AdminReviewDAO {
         int page = Math.min(requestedPage, pages);
         List<Row> items = new ArrayList<>();
         if (total > 0) {
-            boolean needsScope = reportsAvailable && (reportDate || filter.reports != ReportFilter.ALL);
+            boolean needsScope = reportsAvailable && (reportDate || !filter.reason.isEmpty() || filter.reports != ReportFilter.ALL);
             boolean needsTotals = reportsAvailable && filter.sort.usesReports() && (!needsScope || scopedReports);
+            boolean reactionSort = filter.sort == Sort.MOST_REACTED && reactionsReady;
+            Sort sort = filter.sort == Sort.MOST_REACTED && !reactionSort ? Sort.NEWEST : filter.sort;
             String listSql = REVIEW_COLUMNS + REVIEW_SOURCE + SEARCH_JOINS + MODERATION_JOIN
                     + (needsScope ? scopedJoin : "")
-                    + (needsTotals ? reportJoin("lifetime", "") : "") + baseWhere + " AND " + membership
-                    + " ORDER BY " + filter.sort.orderBy(needsTotals ? "lifetime" : "scoped", reportsAvailable)
+                    + (needsTotals ? reportJoin("lifetime", "") : "")
+                    + (reactionSort ? " LEFT JOIN (SELECT review_id, COUNT(*) AS total FROM product_review_reactions "
+                            + "GROUP BY review_id) reactions ON reactions.review_id = r.review_id " : "")
+                    + baseWhere + " AND " + membership
+                    + " ORDER BY " + sort.orderBy(needsTotals ? "lifetime" : "scoped", reportsAvailable)
                     + " LIMIT ? OFFSET ?";
             List<Object> listParameters = datesFor(needsScope, dates, parameters);
             try (PreparedStatement query = connection.prepareStatement(listSql)) {
@@ -184,7 +212,118 @@ public final class AdminReviewDAO {
         return new Page(items, total, page, pages, summary,
                 attachmentsAvailable ? extras.answers(connection, detail) : Map.of(),
                 attachmentsAvailable ? extras.photos(connection, detail) : Map.of(), reportsAvailable,
-                reportsAvailable ? feedback.reportCounts(connection, ids) : Map.of());
+                reportsAvailable ? feedback.reportCounts(connection, ids) : Map.of(),
+                photosReady, reactionsReady);
+    }
+
+    public boolean tableReady(Connection connection, String table) throws SQLException {
+        String sql = "SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, table);
+            try (ResultSet rows = query.executeQuery()) { return rows.next(); }
+        }
+    }
+
+    public Analysis analysis(Connection connection, String id, Page page) throws SQLException {
+        String sql = "WITH target AS (SELECT product_id, name FROM products WHERE product_id = ? OR product_code = ? "
+                + "ORDER BY product_id = ? DESC, product_id LIMIT 1), published AS ("
+                + "SELECT rv.review_id, rv.rating FROM product_reviews rv JOIN target t ON t.product_id = rv.product_id "
+                + "WHERE rv.deleted_at IS NULL" + ReviewVisibility.PUBLISHED + "), "
+                + "summary AS (SELECT COUNT(*) total, AVG(rating) average, SUM(rating=1) star1, SUM(rating=2) star2, "
+                + "SUM(rating=3) star3, SUM(rating=4) star4, SUM(rating=5) star5 FROM published) "
+                + "SELECT t.name, summary.*, "
+                + (page.photosAvailable ? "(SELECT COUNT(DISTINCT ph.review_id) FROM product_review_photos ph JOIN published p "
+                        + "ON p.review_id=ph.review_id)" : "0") + " photos, "
+                + (page.reactionsAvailable ? "(SELECT COUNT(*) FROM product_review_reactions rea JOIN published p "
+                        + "ON p.review_id=rea.review_id)" : "0") + " reactions, "
+                + (page.reportsAvailable ? "(SELECT COUNT(DISTINCT rr.review_id) FROM product_review_reports rr JOIN product_reviews r "
+                        + "ON r.review_id=rr.review_id WHERE r.product_id=t.product_id)" : "0") + " reported, "
+                + (page.reportsAvailable ? "(SELECT COUNT(*) FROM product_review_reports rr JOIN product_reviews r ON r.review_id=rr.review_id "
+                        + "WHERE r.product_id=t.product_id AND rr.status='PENDING')" : "0") + " pending "
+                + "FROM target t CROSS JOIN summary";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, id);
+            query.setString(2, id);
+            query.setString(3, id);
+            try (ResultSet rows = query.executeQuery()) { return rows.next() ? new Analysis(rows) : null; }
+        }
+    }
+
+    public String lockDecisionState(Connection connection, long reviewId) throws SQLException {
+        String sql = "SELECT IF(r.deleted_at IS NULL, COALESCE(rm.moderation_state, 'PUBLISHED'), 'AUTHOR_DELETED')"
+                + REVIEW_SOURCE + MODERATION_JOIN + " WHERE r.review_id=? FOR UPDATE";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setLong(1, reviewId);
+            try (ResultSet rows = query.executeQuery()) { return rows.next() ? rows.getString(1) : null; }
+        }
+    }
+
+    public void recordDecision(Connection connection, long reviewId, String manager, String action,
+            String before, String after, String reason) throws SQLException {
+        String sql = "INSERT INTO product_review_admin_decisions "
+                + "(review_id, admin_member_id, action, before_state, after_state, reason) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setLong(1, reviewId);
+            query.setString(2, manager);
+            query.setString(3, action);
+            query.setString(4, before);
+            query.setString(5, after);
+            query.setString(6, reason);
+            query.executeUpdate();
+        }
+    }
+
+    public List<Decision> decisions(Connection connection, long reviewId) throws SQLException {
+        String sql = "SELECT admin_member_id, action, before_state, after_state, reason, created_at "
+                + "FROM product_review_admin_decisions WHERE review_id=? ORDER BY decision_id DESC LIMIT 30";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setLong(1, reviewId);
+            try (ResultSet rows = query.executeQuery()) {
+                List<Decision> result = new ArrayList<>();
+                while (rows.next()) result.add(new Decision(rows));
+                return result;
+            }
+        }
+    }
+
+    public static final class Analysis {
+        public final String name;
+        public final long total;
+        public final java.math.BigDecimal average;
+        public final long[] stars = new long[5];
+        public final long photos;
+        public final long reactions;
+        public final long reported;
+        public final long pending;
+
+        Analysis(ResultSet rows) throws SQLException {
+            name = rows.getString("name");
+            total = rows.getLong("total");
+            average = rows.getBigDecimal("average");
+            for (int i = 0; i < stars.length; i++) stars[i] = rows.getLong("star" + (i + 1));
+            photos = rows.getLong("photos");
+            reactions = rows.getLong("reactions");
+            reported = rows.getLong("reported");
+            pending = rows.getLong("pending");
+        }
+    }
+
+    public static final class Decision {
+        public final String manager;
+        public final String action;
+        public final String before;
+        public final String after;
+        public final String reason;
+        public final LocalDateTime date;
+
+        Decision(ResultSet rows) throws SQLException {
+            manager = rows.getString(1);
+            action = rows.getString(2);
+            before = rows.getString(3);
+            after = rows.getString(4);
+            reason = rows.getString(5);
+            date = rows.getObject(6, LocalDateTime.class);
+        }
     }
 
     private static String reportJoin(String alias, String where) {
@@ -288,11 +427,13 @@ public final class AdminReviewDAO {
         public final Map<Long, List<Answer>> answers;
         public final Map<Long, List<Long>> photos;
         public final boolean reportsAvailable;
+        public final boolean photosAvailable;
+        public final boolean reactionsAvailable;
         public final Map<Long, ReportCounts> reports;
 
         Page(List<Row> items, long total, int number, int pages, Map<ReportFilter, Long> summary,
                 Map<Long, List<Answer>> answers,
-                Map<Long, List<Long>> photos, boolean reportsAvailable, Map<Long, ReportCounts> reports) {
+                Map<Long, List<Long>> photos, boolean reportsAvailable, Map<Long, ReportCounts> reports, boolean photosAvailable, boolean reactionsAvailable) {
             this.items = List.copyOf(items);
             this.total = total;
             this.number = number;
@@ -302,6 +443,8 @@ public final class AdminReviewDAO {
             this.photos = photos;
             this.reportsAvailable = reportsAvailable;
             this.reports = reports;
+            this.photosAvailable = photosAvailable;
+            this.reactionsAvailable = reactionsAvailable;
         }
     }
 
