@@ -127,78 +127,72 @@
         updatePriceFeedback();
     }
 
-    const stockFilter = document.querySelector('[name="filterStock"]');
-    if (stockFilter) {
-        const quantity = stockFilter.form.elements.stockQuantity;
-        const quantityField = quantity.closest('[data-stock-quantity]');
-        const updateStockFilter = () => {
-            const needsQuantity = stockFilter.value === 'AT_LEAST' || stockFilter.value === 'AT_MOST';
-            quantityField.hidden = !needsQuantity;
-            quantity.disabled = !needsQuantity;
-            quantity.required = needsQuantity;
-        };
-        stockFilter.addEventListener('change', updateStockFilter);
-        updateStockFilter();
-    }
+    function bindList() {
+        const stockFilter = document.querySelector('[name="filterStock"]');
+        if (stockFilter) {
+            const quantity = stockFilter.form.elements.stockQuantity;
+            const quantityField = quantity.closest('[data-stock-quantity]');
+            const updateStockFilter = () => {
+                const needsQuantity = stockFilter.value === 'AT_LEAST' || stockFilter.value === 'AT_MOST';
+                quantityField.hidden = !needsQuantity;
+                quantity.disabled = !needsQuantity;
+                quantity.required = needsQuantity;
+            };
+            stockFilter.addEventListener('change', updateStockFilter);
+            updateStockFilter();
+        }
 
-    const bulk = document.querySelector('#product-bulk');
-    if (bulk) {
-        // 상품 체크박스는 표 안에 있으며 form 속성으로 일괄 변경 폼에 연결된다.
-        const checkboxes = Array.from(bulk.elements).filter(input => input.name === 'selectedProduct');
-        const selectAll = document.querySelector('[data-bulk-select-all]');
-        const heading = document.querySelector('[data-bulk-select-heading]');
-        const count = bulk.querySelector('[data-bulk-count]');
-        const submit = bulk.querySelector('button[type="submit"]');
-        const confirmDialog = document.querySelector('#product-bulk-confirm');
-        const selectedCount = () => checkboxes.filter(input => input.checked).length;
-        const updateSelection = () => {
-            const total = selectedCount();
-            count.textContent = total + '개 선택';
-            selectAll.checked = total === checkboxes.length;
-            selectAll.indeterminate = total > 0 && total < checkboxes.length;
-            submit.disabled = total === 0;
-        };
-        selectAll.hidden = false;
-        heading.hidden = true;
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(input => { input.checked = selectAll.checked; });
+        const bulk = document.querySelector('#product-bulk');
+        if (bulk) {
+            // 상품 체크박스는 표 안에 있으며 form 속성으로 일괄 변경 폼에 연결된다.
+            const checkboxes = Array.from(bulk.elements).filter(input => input.name === 'selectedProduct');
+            const selectAll = document.querySelector('[data-bulk-select-all]');
+            const heading = document.querySelector('[data-bulk-select-heading]');
+            const count = bulk.querySelector('[data-bulk-count]');
+            const submit = bulk.querySelector('button[type="submit"]');
+            const selectedCount = () => checkboxes.filter(input => input.checked).length;
+            const updateSelection = () => {
+                const total = selectedCount();
+                count.textContent = '현재 페이지 ' + total + '개 선택';
+                selectAll.checked = total === checkboxes.length;
+                selectAll.indeterminate = total > 0 && total < checkboxes.length;
+                submit.disabled = total === 0;
+            };
+            selectAll.hidden = false;
+            heading.hidden = true;
+            selectAll.addEventListener('change', () => {
+                checkboxes.forEach(input => { input.checked = selectAll.checked; });
+                updateSelection();
+            });
+            checkboxes.forEach(input => input.addEventListener('change', updateSelection));
             updateSelection();
-        });
-        checkboxes.forEach(input => input.addEventListener('change', updateSelection));
-        updateSelection();
 
-        let confirmed = false;
-        bulk.addEventListener('submit', (event) => {
-            if (confirmed) {
-                confirmed = false;
-                return;
-            }
-            const status = bulk.elements.targetStatus.selectedOptions[0].textContent;
-            const message = selectedCount() + '개 상품의 판매 상태를 ‘' + status + '’(으)로 변경할까요?';
-            if (typeof confirmDialog.showModal !== 'function') {
-                if (!window.confirm(message)) event.preventDefault();
-                return;
-            }
-            event.preventDefault();
-            confirmDialog.querySelector('[data-bulk-message]').textContent = message;
-            confirmDialog.returnValue = '';
-            confirmDialog.showModal();
-        });
-        confirmDialog.addEventListener('close', () => {
-            if (confirmDialog.returnValue === 'apply') {
-                confirmed = true;
-                bulk.requestSubmit(submit);
-            }
-        });
+            const type = bulk.elements.bulkType;
+            const updateBulkType = () => {
+                bulk.querySelectorAll('[data-bulk-field]').forEach(field => {
+                    const enabled = field.dataset.bulkField === type.value;
+                    field.hidden = !enabled;
+                    const input = field.querySelector('select, input');
+                    input.disabled = !enabled;
+                    input.required = enabled;
+                });
+            };
+            type.addEventListener('change', updateBulkType);
+            updateBulkType();
+        }
+
     }
-
-    const dialog = document.querySelector('#product-delete-dialog');
-    if (typeof dialog?.showModal !== 'function') return;
-
-    const name = dialog.querySelector('[data-delete-product-name]');
-    const id = dialog.querySelector('input[name="id"]');
-    dialog.querySelector('[data-delete-cancel]').addEventListener('click', () => dialog.close());
+    bindList();
+    document.addEventListener('admin-query-render', bindList);
     document.querySelector('[data-admin-page="products"]').addEventListener('click', (event) => {
+        const dialog = document.querySelector('#product-delete-dialog');
+        if (typeof dialog?.showModal !== 'function') return;
+        const name = dialog.querySelector('[data-delete-product-name]');
+        const id = dialog.querySelector('input[name="id"]');
+        if (event.target.closest('[data-delete-cancel]') && dialog.open) {
+            dialog.close();
+            return;
+        }
         const link = event.target.closest('[data-delete-id]');
         if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

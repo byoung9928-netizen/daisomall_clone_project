@@ -27,22 +27,25 @@ public final class StoreInventoryDAO {
     private static final String PICKUP_IN_STOCK = " AND i.is_carried = 1 AND i.quantity > 0";
 
     private final boolean thresholdsEnabled;
+    private final boolean transferEnabled;
 
     public StoreInventoryDAO() {
-        this(false);
+        this(false, false);
     }
 
-    private StoreInventoryDAO(boolean thresholdsEnabled) {
+    private StoreInventoryDAO(boolean thresholdsEnabled, boolean transferEnabled) {
         this.thresholdsEnabled = thresholdsEnabled;
+        this.transferEnabled = transferEnabled;
     }
 
     public static StoreInventoryDAO forInventory(Connection connection) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND "
+        String sql = "SELECT SUM(COLUMN_NAME <> 'transfer_id'), SUM(COLUMN_NAME = 'transfer_id') "
+                + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND "
                 + "((TABLE_NAME = 'store_inventory' AND COLUMN_NAME = 'low_stock_threshold') "
-                + "OR (TABLE_NAME = 'store_inventory_history' AND COLUMN_NAME IN ('before_threshold','after_threshold')))";
+                + "OR (TABLE_NAME = 'store_inventory_history' AND COLUMN_NAME IN ('before_threshold','after_threshold','transfer_id')))";
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet row = statement.executeQuery()) {
             row.next();
-            return new StoreInventoryDAO(row.getInt(1) == 3);
+            return new StoreInventoryDAO(row.getInt(1) == 3, row.getInt(2) == 1);
         }
     }
 
@@ -159,7 +162,12 @@ public final class StoreInventoryDAO {
 
     public List<Stock> inventory(Connection connection, String store, String keyword, State state, int limit, int offset)
             throws SQLException {
-        return stockPage(connection, inventoryScope(state), store, keyword, limit, offset);
+        return inventory(connection, store, keyword, state, Sort.NAME, limit, offset);
+    }
+
+    public List<Stock> inventory(Connection connection, String store, String keyword, State state,
+            Sort sort, int limit, int offset) throws SQLException {
+        return stockPage(connection, inventoryScope(state), store, keyword, sort, limit, offset);
     }
 
     public long countInventory(Connection connection, String store, String keyword, State state) throws SQLException {
@@ -188,7 +196,7 @@ public final class StoreInventoryDAO {
     public List<Stock> assortment(Connection connection, String store, String keyword, AssortmentFilter filter,
             int limit, int offset)
             throws SQLException {
-        return stockPage(connection, assortmentScope(filter), store, keyword, limit, offset);
+        return stockPage(connection, assortmentScope(filter), store, keyword, Sort.NAME, limit, offset);
     }
 
     public long countAssortment(Connection connection, String store, String keyword, AssortmentFilter filter)
@@ -202,8 +210,8 @@ public final class StoreInventoryDAO {
     }
 
     private List<Stock> stockPage(Connection connection, String scope, String store, String keyword,
-            int limit, int offset) throws SQLException {
-        String sql = stockFields() + scope + " ORDER BY p.name, p.product_id LIMIT ? OFFSET ?";
+            Sort sort, int limit, int offset) throws SQLException {
+        String sql = stockFields() + scope + " ORDER BY " + sort.order + ", p.product_id LIMIT ? OFFSET ?";
         List<Stock> result = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bindPage(statement, store, keyword, limit, offset);
@@ -212,6 +220,76 @@ public final class StoreInventoryDAO {
             }
         }
         return result;
+    }
+
+    public enum Sort {
+        NAME("상품명순", "p.name"), HIGH("재고 많은순", "i.quantity DESC"),
+        LOW("재고 적은순", "i.quantity"), SHORTAGE("부족 기준 대비 적은순", "CAST(i.quantity AS SIGNED) - low_stock_threshold"),
+        REGION("지역순", "p.name");
+
+        public final String label;
+        private final String order;
+
+        Sort(String label, String order) { this.label = label; this.order = order; }
+    }
+
+    public List<Stock> compareCandidates(Connection connection, String keyword) throws SQLException {
+        String sql = "SELECT p.product_id, p.name, p.image_url, COALESCE(p.product_code,'') AS product_code, "
+                + "0 AS quantity, -1 AS version, 0 AS is_carried, " + DEFAULT_THRESHOLD + " AS low_stock_threshold "
+                + "FROM products p WHERE LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
+                + "ORDER BY p.name, p.product_id LIMIT 25";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, keyword);
+            query.setString(2, keyword);
+            try (ResultSet rows = query.executeQuery()) {
+                List<Stock> results = new ArrayList<>();
+                while (rows.next()) results.add(readStock(rows));
+                return results;
+            }
+        }
+    }
+
+    public List<ComparedStock> compare(Connection connection, String product, String city, Sort sort) throws SQLException {
+        String order;
+        switch (sort) {
+            case HIGH: order = "i.quantity DESC"; break;
+            case LOW: order = "i.quantity"; break;
+            case SHORTAGE: order = "CAST(i.quantity AS SIGNED) - threshold"; break;
+            default: order = "s.city, s.store_name";
+        }
+        String threshold = thresholdsEnabled ? "i.low_stock_threshold" : Integer.toString(DEFAULT_THRESHOLD);
+        String sql = "SELECT s.store_id, s.store_name, s.city, i.quantity, " + threshold + " AS threshold "
+                + "FROM store_locations s JOIN products p ON p.product_id = ? LEFT JOIN store_inventory i "
+                + "ON i.store_id = s.store_id AND i.product_id = p.product_id AND i.is_carried = 1 "
+                + "WHERE (? = '' OR s.city = ?) ORDER BY i.quantity IS NULL, " + order + ", s.store_id";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, product);
+            query.setString(2, city);
+            query.setString(3, city);
+            try (ResultSet rows = query.executeQuery()) {
+                List<ComparedStock> result = new ArrayList<>();
+                while (rows.next()) result.add(new ComparedStock(rows));
+                return result;
+            }
+        }
+    }
+
+    public static final class ComparedStock {
+        public final String store;
+        public final String name;
+        public final String city;
+        public final Integer quantity;
+        public final int threshold;
+
+        ComparedStock(ResultSet rows) throws SQLException {
+            store = rows.getString(1);
+            name = rows.getString(2);
+            city = rows.getString(3);
+            quantity = rows.getObject("quantity", Integer.class);
+            threshold = rows.getInt("threshold");
+        }
+
+        public State state() { return quantity == null ? null : State.ofQuantity(quantity, threshold); }
     }
 
     public Summary summary(Connection connection, String store) throws SQLException {
@@ -229,25 +307,68 @@ public final class StoreInventoryDAO {
         }
     }
 
-    public List<History> history(Connection connection, String store, String keyword, int limit, int offset)
+    public static final class HistoryFilter {
+        public final LocalDateTime start;
+        public final LocalDateTime end;
+        public final String type;
+        public final String actor;
+        public final String reference;
+        public final boolean oldest;
+
+        public HistoryFilter(LocalDateTime start, LocalDateTime end, String type, String actor, String reference, boolean oldest) {
+            this.start = start;
+            this.end = end;
+            this.type = type;
+            this.actor = actor;
+            this.reference = reference;
+            this.oldest = oldest;
+        }
+
+        String scope(boolean transfers) {
+            return HISTORY_SCOPE + (start == null ? "" : " AND changed_at >= ? AND changed_at < ?")
+                    + (type.isEmpty() ? "" : "TRANSFER".equals(type)
+                            ? (transfers ? " AND transfer_id IS NOT NULL" : " AND FALSE") : " AND change_type = ?")
+                    + (actor.isEmpty() ? "" : " AND administrator_id = ?")
+                    + (reference.isEmpty() ? "" : transfers ? " AND transfer_id = ?" : " AND FALSE");
+        }
+
+        int bind(PreparedStatement query, String store, String keyword, boolean transfers) throws SQLException {
+            bindScope(query, store, keyword);
+            int i = 4;
+            if (start != null) { query.setObject(i++, start); query.setObject(i++, end); }
+            if (!type.isEmpty() && !"TRANSFER".equals(type)) query.setString(i++, type);
+            if (!actor.isEmpty()) query.setString(i++, actor);
+            if (!reference.isEmpty() && transfers) query.setString(i++, reference);
+            return i;
+        }
+    }
+
+    public List<History> history(Connection connection, String store, String keyword, HistoryFilter filter, int limit, int offset)
             throws SQLException {
         String thresholdFields = thresholdsEnabled ? "before_threshold, after_threshold"
                 : "NULL AS before_threshold, NULL AS after_threshold";
         String sql = "SELECT product_name, product_code, product_reference, change_type, before_quantity, "
-                + "after_quantity, reason, administrator_id, changed_at, " + thresholdFields + HISTORY_SCOPE
-                + " ORDER BY changed_at DESC, history_id DESC LIMIT ? OFFSET ?";
+                + "after_quantity, reason, administrator_id, changed_at, " + thresholdFields
+                + (transferEnabled ? ", transfer_id" : ", NULL AS transfer_id") + filter.scope(transferEnabled)
+                + (filter.oldest ? " ORDER BY changed_at ASC, history_id ASC" : " ORDER BY changed_at DESC, history_id DESC")
+                + " LIMIT ? OFFSET ?";
         List<History> result = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bindPage(statement, store, keyword, limit, offset);
-            try (ResultSet rows = statement.executeQuery()) {
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            int index = filter.bind(query, store, keyword, transferEnabled);
+            query.setInt(index, limit);
+            query.setInt(index + 1, offset);
+            try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) result.add(new History(rows));
             }
         }
         return result;
     }
 
-    public long countHistory(Connection connection, String store, String keyword) throws SQLException {
-        return count(connection, HISTORY_SCOPE, store, keyword);
+    public long countHistory(Connection connection, String store, String keyword, HistoryFilter filter) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("SELECT COUNT(*)" + filter.scope(transferEnabled))) {
+            filter.bind(query, store, keyword, transferEnabled);
+            try (ResultSet row = query.executeQuery()) { row.next(); return row.getLong(1); }
+        }
     }
 
     private static long count(Connection connection, String scope, String store, String keyword) throws SQLException {
@@ -311,6 +432,11 @@ public final class StoreInventoryDAO {
 
     public void update(Connection connection, String store, Stock before, int after, Change change, String reason,
             String administrator) throws SQLException {
+        update(connection, store, before, after, change, reason, administrator, null);
+    }
+
+    public void update(Connection connection, String store, Stock before, int after, Change change, String reason,
+            String administrator, String transferId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("UPDATE store_inventory "
                 + "SET quantity = ?, version = version + 1 "
                 + "WHERE store_id = ? AND product_id = ? AND version = ? AND is_carried = 1")) {
@@ -320,11 +446,16 @@ public final class StoreInventoryDAO {
             statement.setLong(4, before.version);
             if (statement.executeUpdate() != 1) throw new SQLException("Store inventory row could not be updated");
         }
-        recordChange(connection, store, before, after, change.name(), reason, administrator);
+        recordChange(connection, store, before, after, change.name(), reason, administrator, null, transferId);
     }
 
     public void updateThreshold(Connection connection, String store, Stock before, int threshold,
             String administrator) throws SQLException {
+        updateThreshold(connection, store, before, threshold, administrator, "부족 기준 변경");
+    }
+
+    public void updateThreshold(Connection connection, String store, Stock before, int threshold,
+            String administrator, String reason) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("UPDATE store_inventory "
                 + "SET low_stock_threshold = ?, version = version + 1 "
                 + "WHERE store_id = ? AND product_id = ? AND version = ? AND is_carried = 1")) {
@@ -334,7 +465,7 @@ public final class StoreInventoryDAO {
             statement.setLong(4, before.version);
             if (statement.executeUpdate() != 1) throw new SQLException("Store threshold row could not be updated");
         }
-        recordChange(connection, store, before, before.quantity, "THRESHOLD", "부족 기준 변경", administrator, threshold);
+        recordChange(connection, store, before, before.quantity, "THRESHOLD", reason, administrator, threshold, null);
     }
 
     public boolean lockStore(Connection connection, String store, String city) throws SQLException {
@@ -380,17 +511,19 @@ public final class StoreInventoryDAO {
 
     private void recordChange(Connection connection, String store, Stock before, int after, String type,
             String reason, String administrator) throws SQLException {
-        recordChange(connection, store, before, after, type, reason, administrator, null);
+        recordChange(connection, store, before, after, type, reason, administrator, null, null);
     }
 
     private void recordChange(Connection connection, String store, Stock before, int after, String type,
-            String reason, String administrator, Integer threshold) throws SQLException {
+            String reason, String administrator, Integer threshold, String transferId) throws SQLException {
         String thresholdColumns = threshold == null ? "" : ", before_threshold, after_threshold";
         String thresholdValues = threshold == null ? "" : ", ?, ?";
         try (PreparedStatement statement = connection.prepareStatement("INSERT INTO store_inventory_history "
                 + "(store_id, product_id, product_reference, product_name, product_code, change_type, "
                 + "before_quantity, after_quantity, reason, administrator_id" + thresholdColumns
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?" + thresholdValues + ")")) {
+                + (transferId == null ? "" : ", transfer_id")
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?" + thresholdValues
+                + (transferId == null ? "" : ", ?") + ")")) {
             statement.setString(1, store);
             statement.setString(2, before.id);
             statement.setString(3, before.id);
@@ -405,6 +538,7 @@ public final class StoreInventoryDAO {
                 statement.setInt(11, before.threshold);
                 statement.setInt(12, threshold);
             }
+            if (transferId != null) statement.setString(11, transferId);
             statement.executeUpdate();
         }
     }
@@ -513,6 +647,7 @@ public final class StoreInventoryDAO {
         public final String reason;
         public final String administrator;
         public final LocalDateTime date;
+        public final String transferId;
 
         private History(ResultSet row) throws SQLException {
             name = row.getString("product_name");
@@ -534,6 +669,7 @@ public final class StoreInventoryDAO {
             reason = row.getString("reason");
             administrator = row.getString("administrator_id");
             date = row.getObject("changed_at", LocalDateTime.class);
+            transferId = row.getString("transfer_id");
         }
     }
 }

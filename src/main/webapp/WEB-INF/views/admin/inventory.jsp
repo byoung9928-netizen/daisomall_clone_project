@@ -12,6 +12,8 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
 </head>
 <body class="admin-body product-admin-ux">
@@ -19,8 +21,10 @@
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main id="admin-content" class="admin-content store-admin" tabindex="-1">
+        <main id="admin-content" class="admin-content store-admin" tabindex="-1" data-admin-query="inventory">
             <h1 class="page-title">온라인 재고 관리</h1>
+            <p class="error-message" role="alert" data-admin-query-error hidden></p>
+            <div data-admin-query-content>
             <% if (request.getAttribute("onlineInventorySaved") != null) { %>
                 <p class="inventory-success" role="status"><%= ProductView.escape(request.getAttribute("onlineInventorySaved")) %></p>
             <% } %>
@@ -38,7 +42,28 @@
                     <% } %>
                 </div>
                 <%@ include file="online-stock-editor.jspf" %>
-                <form class="admin-search store-admin-filters" method="get" action="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">
+                <% ProductDTO trendProduct = (ProductDTO) request.getAttribute("stockTrendProduct");
+                   if (trendProduct != null) { %>
+                    <section class="admin-panel" id="online-stock-trend">
+                        <h2><%= ProductView.escape(trendProduct.getName()) %> 재고 및 판매량</h2>
+                        <form class="inventory-batch-form" data-admin-query-form method="get" action="<%= inventoryContext + OnlineInventoryController.ROUTE %>#online-stock-trend">
+                            <% for (Map.Entry<String, String> filterEntry : online.filters.entrySet()) { %>
+                                <input type="hidden" name="<%= filterEntry.getKey() %>" value="<%= ProductView.escape(filterEntry.getValue()) %>">
+                            <% } %>
+                            <input type="hidden" name="trendId" value="<%= ProductView.escape(trendProduct.getProductId()) %>">
+                            <label class="field">조회 기간
+                                <select name="trendDays">
+                                    <% for (String days : java.util.List.of("7", "30", "90")) { %>
+                                        <option value="<%= days %>" <%= days.equals(request.getParameter("trendDays")) || ("30".equals(days) && request.getParameter("trendDays") == null) ? "selected" : "" %>>최근 <%= days %>일</option>
+                                    <% } %>
+                                </select>
+                            </label>
+                            <button class="button secondary" type="submit">조회</button>
+                        </form>
+                        <%@ include file="stock-trend.jspf" %>
+                    </section>
+                <% } %>
+                <form class="admin-search store-admin-filters" data-admin-query-form method="get" action="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">
                     <label class="field">상품명·품번
                         <input name="q" type="search" maxlength="120" value="<%= ProductView.escape(online.keyword) %>">
                     </label>
@@ -66,21 +91,29 @@
                     </label>
                     <div class="inventory-filter-actions">
                         <button class="button primary" type="submit">검색</button>
-                        <a class="button secondary" href="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>">초기화</a>
+                        <a class="button secondary" href="<%= ProductView.escape(inventoryContext + OnlineInventoryController.ROUTE) %>" data-admin-query-link>초기화</a>
                     </div>
                 </form>
                 <p class="inventory-range" role="status">전체 <strong><%= online.total %></strong>종
                     <% if (online.total > 0) { %><span> · <%= online.first %>–<%= online.last %>번째 상품 표시</span><% } %></p>
+                <% boolean storeBatch = false;
+                       Map<String, String> batchFilters = online.filters;
+                       String batchCsrf = String.valueOf(request.getAttribute("onlineStockCsrf")); %>
+                <%@ include file="inventory-batch-form.jspf" %>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="온라인 재고 상품 표">
                     <table class="admin-table store-stock-table">
                         <thead><tr>
-                            <th scope="col">상품</th><th scope="col">온라인 재고</th><th scope="col">재고 상태</th><th scope="col">부족 기준</th><th scope="col">관리</th>
+                            <th scope="col">선택·개별값</th><th scope="col">상품</th><th scope="col">온라인 재고</th><th scope="col">재고 상태</th><th scope="col">부족 기준</th><th scope="col">관리</th>
                         </tr></thead>
                         <tbody>
                             <% for (ProductDTO item : online.products) {
                                    OnlineStockState state = OnlineStockState.of(item); %>
                                 <tr>
-                                    <td><div class="store-stock-product">
+                                    <td class="admin-batch-choice"><input type="checkbox" name="batchProduct" form="inventory-batch-form"
+                    value="<%= ProductView.escape(item.getProductId()) %>" aria-label="<%= ProductView.escape(item.getName()) %> 선택">
+                <input name="amount.<%= ProductView.escape(item.getProductId()) %>" form="inventory-batch-form" type="number" min="1"
+                       placeholder="공통값 사용" aria-label="<%= ProductView.escape(item.getName()) %> 개별 수량 또는 기준"></td>
+                <td><div class="store-stock-product">
                                         <img src="<%= ProductView.image(inventoryContext, item) %>" width="48" height="52" loading="lazy" alt="">
                                         <div><strong><%= ProductView.escape(item.getName()) %></strong><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>
                                     </div></td>
@@ -90,15 +123,21 @@
                                             <small class="inventory-stock-number">판매 상태 · <%= "SOLD_OUT".equals(item.getStatus()) ? "품절" : ProductView.status(item) %></small>
                                         <% } %>
                                     </td>
-                                    <td><%= item.getLowStockThreshold() %>개 이하</td>
+                                    <td><%= item.getLowStockThreshold() %>개 이하
+                                        <% if (state == OnlineStockState.LOW || state == OnlineStockState.SOLD_OUT) { %>
+                                            <small class="inventory-stock-number">최소 입고 <%= (long) item.getLowStockThreshold() + 1 - item.getStockQuantity() %>개</small>
+                                        <% } %>
+                                    </td>
                                     <td><div class="store-stock-actions">
                                         <a class="button secondary" href="<%= online.editUrl(inventoryContext, item.getProductId()) %>#online-stock-editor">재고·기준 조정</a>
+                                        <a class="text-button" data-admin-query-link href="<%= ProductView.url(inventoryContext, OnlineInventoryController.ROUTE,
+                                                ProductView.with(online.filters, "trendId", item.getProductId())) %>#online-stock-trend">재고 분석</a>
                                         <a class="text-button" href="<%= ProductView.url(inventoryContext, "/app/admin/products",
                                                 Map.of("history", "1", "historyId", item.getProductId())) %>#product-history">변경 이력</a>
                                     </div></td>
                                 </tr>
                             <% } %>
-                            <% if (online.products.isEmpty()) { %><tr><td colspan="5">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                            <% if (online.products.isEmpty()) { %><tr><td colspan="6">조건에 맞는 상품이 없습니다.</td></tr><% } %>
                         </tbody>
                     </table>
                 </div>
@@ -107,6 +146,7 @@
                     <%@ include file="inventory-pagination.jspf" %>
                 <% } %>
             <% } %>
+            </div>
         </main>
     </div>
 </body>

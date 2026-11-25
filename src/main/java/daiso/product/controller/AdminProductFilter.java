@@ -108,6 +108,9 @@ final class AdminProductFilter {
 
     enum Sort {
         NEWEST("p.created_at DESC"),
+        UPDATED("p.updated_at DESC"),
+        SALES("COALESCE(admin_sales.units, 0) DESC"),
+        REVIEWS("COALESCE(review_stats.review_count, 0) DESC"),
         NAME("p.name"),
         STOCK_ASC("p.stock_quantity"),
         STOCK_DESC("p.stock_quantity DESC"),

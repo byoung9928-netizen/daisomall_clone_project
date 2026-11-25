@@ -10,6 +10,24 @@ import java.util.List;
 import java.util.Map;
 
 public final class AdminCategoryDAO {
+    public long recentSales(Connection connection, String id, java.time.LocalDate through) throws SQLException {
+        String sql = "WITH RECURSIVE branch AS (SELECT category_id FROM categories WHERE category_id = ? "
+                + "UNION ALL SELECT c.category_id FROM categories c JOIN branch b ON c.parent_id = b.category_id) "
+                + "SELECT COALESCE(SUM(i.quantity), 0) FROM branch b JOIN products pr ON pr.category_id = b.category_id "
+                + "JOIN order_items i ON i.product_id = pr.product_id JOIN orders o ON o.order_id = i.order_id "
+                + "WHERE o.canceled_at IS NULL AND EXISTS (SELECT 1 FROM payment_attempts p WHERE p.order_id = o.order_id "
+                + "AND p.status IN ('APPROVED','REFUNDING') AND p.approved_at >= ? AND p.approved_at < ?)";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, id);
+            query.setObject(2, through.minusDays(29).atStartOfDay());
+            query.setObject(3, through.plusDays(1).atStartOfDay());
+            try (ResultSet row = query.executeQuery()) {
+                row.next();
+                return row.getLong(1);
+            }
+        }
+    }
+
     private static final String FIELDS = "c.category_id, c.parent_id, c.name, c.level, c.display_order, c.is_leaf, c.is_visible";
 
     public List<Row> list(Connection connection) throws SQLException {

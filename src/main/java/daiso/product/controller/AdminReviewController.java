@@ -32,6 +32,7 @@ import javax.servlet.http.HttpSession;
 public final class AdminReviewController {
     private static final String PATH = "/admin/products/reviews";
     private static final String VIEW = "admin/product-reviews";
+    private static final String DECISIONS = "product_review_admin_decisions";
     private static final String NOTICE = "adminReviewNotice";
     private static final String RESULTS_ANCHOR = "#review-results";
     private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Seoul");
@@ -58,6 +59,8 @@ public final class AdminReviewController {
     @DaisoGetMapping(PATH)
     public String list(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "private, no-store");
+        boolean fragment = "1".equals(request.getHeader("X-Review-Fragment"));
+        response.setHeader("Vary", "X-Review-Fragment");
         HttpSession session = AdminProductController.adminSession(request);
         if (session == null) {
             return problem(request, response, 403, "관리자 계정으로 로그인해 주세요.");
@@ -89,6 +92,12 @@ public final class AdminReviewController {
                 request.setAttribute("adminReportReasons", entries.stream().collect(
                         Collectors.groupingBy(entry -> entry.reason, Collectors.counting())));
             }
+            boolean auditReady = reviews.tableReady(connection, DECISIONS);
+            request.setAttribute("adminReviewAuditReady", auditReady);
+            if (detailVisible && auditReady) request.setAttribute("adminReviewDecisions", reviews.decisions(connection, selectedReview));
+            if (!filter.analysisProduct.isEmpty()) {
+                request.setAttribute("adminReviewAnalysis", reviews.analysis(connection, filter.analysisProduct, results));
+            }
             connection.commit();
             request.setAttribute("adminReviews", results);
             request.setAttribute("adminReviewFilter", filter);
@@ -97,13 +106,18 @@ public final class AdminReviewController {
             request.setAttribute("adminSelectedDetail", detailVisible ? selectedReview : 0L);
             request.setAttribute("adminMissingDetail", selectedReview != 0 && !detailVisible);
             request.setAttribute("adminReviewCsrf", AdminProductController.token(session));
-            request.setAttribute(NOTICE, session.getAttribute(NOTICE));
-            session.removeAttribute(NOTICE);
+            request.setAttribute("adminReviewFragment", fragment);
+            if (!fragment) {
+                request.setAttribute(NOTICE, session.getAttribute(NOTICE));
+                session.removeAttribute(NOTICE);
+            }
 
             Map<String, String> filters = filters(filter, period);
             Map<String, String> current = ProductView.with(filters, "page", Integer.toString(results.number));
             String context = request.getContextPath();
             request.setAttribute("adminReportViewBase", current);
+            request.setAttribute("adminReviewUrl", ProductView.url(context, "/app" + PATH,
+                    detailVisible ? ProductView.with(current, "detail", Long.toString(selectedReview)) : current));
             request.setAttribute("adminReviewModerate", ProductView.url(context, "/app" + PATH + "/moderate", current));
             request.setAttribute("adminReviewPagination", new InventoryPagination(results.number, results.pages,
                     number -> ProductView.url(context, "/app" + PATH,
@@ -139,6 +153,7 @@ public final class AdminReviewController {
         long version;
         Moderation next;
         boolean dismiss;
+        String reason;
         Map<String, String> returnFilters;
         try {
             id = Long.parseLong(ProductQueries.text(request, "reviewId", 19));
@@ -146,6 +161,7 @@ public final class AdminReviewController {
             if (id < 1 || version < 0) throw new IllegalArgumentException();
             String action = ProductQueries.text(request, "moderation", 12);
             dismiss = "DISMISS".equals(action);
+            reason = ProductQueries.text(request, "moderationReason", 255);
             next = dismiss ? null : Moderation.valueOf(action);
             Period period = choice(request, "period", Period.ALL);
             Filter filter = readFilter(request, period, LocalDate.now(STORE_ZONE));
@@ -158,8 +174,15 @@ public final class AdminReviewController {
         try (Connection connection = ProductQueries.connect()) {
             try {
                 String admin = session.getAttribute("member_id").toString();
+                boolean auditReady = reviews.tableReady(connection, DECISIONS);
+                if (auditReady && reason.isEmpty()) {
+                    return problem(request, response, 400, "처리 사유를 입력해 주세요.");
+                }
+                String before = auditReady ? reviews.lockDecisionState(connection, id) : "";
                 boolean changed = dismiss ? reviews.dismissReports(connection, id, version, admin)
                         : reviews.moderate(connection, id, version, admin, next);
+                if (changed && auditReady) reviews.recordDecision(connection, id, admin, dismiss ? "DISMISS" : next.name(),
+                        before, dismiss ? before : next.name(), reason);
                 connection.commit();
                 if (!changed) return problem(request, response, 409,
                         "이미 처리됐거나 리뷰 상태가 바뀌었습니다. 목록을 다시 열어 주세요.");
@@ -186,11 +209,15 @@ public final class AdminReviewController {
         LocalDate start = period == Period.CUSTOM ? date(request, "start") : period.start(today);
         LocalDate end = period == Period.CUSTOM ? date(request, "end") : today;
         if (start != null && start.isAfter(end)) throw new IllegalArgumentException();
+        String reason = ProductQueries.text(request, "reason", 24);
+        if (!reason.isEmpty()) daiso.product.dto.ReviewFeedback.Reason.valueOf(reason);
         return new Filter(ProductQueries.text(request, "query", 120),
                 ProductQueries.integer(request, "rating", 0, 0, 5), choice(request, "state", State.ALL),
                 choice(request, "reports", ReportFilter.ALL), choice(request, "dateField", DateField.REVIEW),
                 start == null ? null : start.atStartOfDay(), start == null ? null : end.plusDays(1).atStartOfDay(),
-                choice(request, "sort", Sort.NEWEST));
+                choice(request, "sort", Sort.NEWEST), reason,
+                "1".equals(request.getParameter("withPhoto")), "1".equals(request.getParameter("withReaction")),
+                ProductQueries.text(request, "analysisProduct", 100));
     }
 
     private static LocalDate date(HttpServletRequest request, String name) {
@@ -210,11 +237,16 @@ public final class AdminReviewController {
 
     private static Map<String, String> filters(Filter filter, Period period) {
         boolean custom = period == Period.CUSTOM;
-        return Map.of("query", filter.keyword, "rating", filter.rating == 0 ? "" : Integer.toString(filter.rating),
+        Map<String, String> values = new java.util.LinkedHashMap<>(Map.of("query", filter.keyword, "rating", filter.rating == 0 ? "" : Integer.toString(filter.rating),
                 "state", filter.state.name(), "reports", filter.reports.name(), "dateField", filter.dateField.name(),
                 "period", period.name(), "start", custom ? filter.start.toLocalDate().toString() : "",
                 "end", custom ? filter.endExclusive.toLocalDate().minusDays(1).toString() : "",
-                "sort", filter.sort.name());
+                "sort", filter.sort.name()));
+        values.put("reason", filter.reason);
+        values.put("withPhoto", filter.photo ? "1" : "");
+        values.put("withReaction", filter.reaction ? "1" : "");
+        values.put("analysisProduct", filter.analysisProduct);
+        return values;
     }
 
     private static String problem(HttpServletRequest request, HttpServletResponse response, int status, String message) {

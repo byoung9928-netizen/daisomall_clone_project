@@ -25,6 +25,8 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js" defer></script>
@@ -35,8 +37,13 @@
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1">
+        <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1" data-admin-query="products">
             <h1 class="page-title">상품 관리</h1>
+        <% if (daiso.product.controller.ProductController.recommendationDiagnosticsEnabled()) { %>
+            <p><a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products/recommendation">시연 회원 추천 분석</a></p>
+        <% } %>
+            <p class="error-message" role="alert" data-admin-query-error hidden></p>
+            <div data-admin-query-content>
             <% if (filters != null && !filters.getOrDefault("filterCategory", "").isEmpty()) { %>
                 <p><a href="<%= ProductView.url(request.getContextPath(), "/app/admin/categories",
                         Map.of("edit", filters.get("filterCategory"))) %>#category-detail">선택한 카테고리 관리로 돌아가기</a></p>
@@ -59,9 +66,30 @@
                 <% if (request.getAttribute("adminProductNotice") != null) { %>
                     <p class="form-status" role="status"><%= ProductView.escape(request.getAttribute("adminProductNotice")) %></p>
                 <% } %>
+                <% Map<String, Long> statusSummary = (Map<String, Long>) request.getAttribute("adminProductStatusSummary"); %>
+                <nav class="store-metrics" aria-label="검색 범위의 상품 판매 상태">
+                    <% for (String metric : java.util.List.of("", "AVAILABLE", "SOLD_OUT", "SCHEDULED", "DISCONTINUED")) {
+                           String metricUrl = ProductView.url(request.getContextPath(), "/app/admin/products",
+                                   ProductView.with(ProductView.with(filters, "filterStatus", metric), "page", "")); %>
+                        <a data-admin-query-link href="<%= metricUrl %>" <%= metric.equals(filters.get("filterStatus")) ? "aria-current=\"page\"" : "" %>>
+                            <span><%= metric.isEmpty() ? "전체 상품" : statuses.get(metric) %></span>
+                            <strong><%= statusSummary.getOrDefault(metric, 0L) %>종</strong>
+                        </a>
+                    <% } %>
+                </nav>
                 <div class="admin-product-toolbar">
-                    <form class="admin-product-filters" method="get" action="${pageContext.request.contextPath}/app/admin/products">
-                        <input type="hidden" name="sort" value="<%= ProductView.escape(activeSort) %>">
+                    <form class="admin-product-filters" data-admin-query-form method="get" action="${pageContext.request.contextPath}/app/admin/products">
+                        <label class="field admin-product-filter-row"><span>상품 정렬</span>
+                            <select name="sort">
+                                <% for (String[] option : new String[][] {
+                                    {"NEWEST", "최신 등록순"}, {"UPDATED", "최근 수정순"}, {"NAME", "상품명순"},
+                                    {"PRICE_DESC", "가격 높은순"}, {"PRICE_ASC", "가격 낮은순"}, {"STOCK_DESC", "재고 많은순"},
+                                    {"STOCK_ASC", "재고 적은순"}, {"SALES", "판매량 높은순"}, {"REVIEWS", "리뷰 많은순"}
+                                }) { %>
+                                    <option value="<%= option[0] %>" <%= option[0].equals(activeSort) ? "selected" : "" %>><%= option[1] %></option>
+                                <% } %>
+                            </select>
+                        </label>
                         <label class="field admin-product-filter-row">
                             <span>상품 검색</span>
                             <input name="query" type="search" maxlength="120" placeholder="상품명, 품번, 브랜드 또는 ID"
@@ -102,10 +130,11 @@
                         </div>
                         <div class="admin-product-actions admin-product-filter-actions inventory-filter-actions">
                             <button class="button primary" type="submit">검색</button>
-                            <a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products">초기화</a>
+                            <a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products" data-admin-query-link>초기화</a>
                         </div>
                     </form>
                     <div class="admin-product-actions admin-product-toolbar-actions">
+                        <a class="button secondary" href="<%= request.getAttribute("adminProductCsv") %>">검색 결과 CSV</a>
                         <a class="button secondary" href="<%= request.getAttribute("adminProductHistory") %>#product-history">전체 변경 이력</a>
                         <a class="button primary" href="<%= request.getAttribute("adminProductNew") %>#product-editor">상품 등록</a>
                     </div>
@@ -123,7 +152,7 @@
                             <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("adminProductError")) %></p>
                         <% } %>
                         <form class="admin-editor-form" method="post" enctype="multipart/form-data" action="<%= request.getAttribute("adminProductSave") %>"
-                              data-code-check="${pageContext.request.contextPath}/app/admin/products/check-code">
+                              data-admin-draft data-code-check="${pageContext.request.contextPath}/app/admin/products/check-code">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
                             <input type="hidden" name="id" value="<%= ProductView.escape(productForm.get("id")) %>">
                             <input type="hidden" name="previewConfirmed" value="0">
@@ -286,44 +315,73 @@
                     </section>
                 <% } %>
 
+                <% daiso.product.controller.AdminProductController.BulkPreview bulkPreview =
+                       (daiso.product.controller.AdminProductController.BulkPreview) request.getAttribute("productBulkPreview");
+                   Map<String, String> bulkCategories = (Map<String, String>) request.getAttribute("adminBulkCategories"); %>
+                <% if (bulkPreview != null) { %>
+                    <section class="admin-panel" aria-labelledby="product-bulk-title">
+                        <h2 id="product-bulk-title">일괄 변경 미리보기</h2>
+                        <p><%= bulkPreview.items.size() %>개 선택 · 변경 값 <strong><%= ProductView.escape(bulkPreview.targetLabel) %></strong></p>
+                        <ul><% for (daiso.product.controller.AdminProductController.BulkItem item : bulkPreview.items) { %>
+                            <li><%= ProductView.escape(item.name) %> · 기존 <%= ProductView.escape(item.previousLabel) %></li>
+                        <% } %></ul>
+                        <form method="post" action="<%= request.getAttribute("adminProductBulk") %>" class="admin-product-actions">
+                            <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
+                            <input type="hidden" name="bulkReceipt" value="<%= bulkPreview.receipt %>">
+                            <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">취소</a>
+                            <button class="button primary" type="submit">일괄 변경 확정</button>
+                        </form>
+                    </section>
+                <% } %>
                 <div class="admin-product-results-bar">
-                    <p class="admin-count" role="status"><%= request.getAttribute("adminProductCount") %>개 상품</p>
+                    <p class="admin-count" role="status"><%= request.getAttribute("adminProductCount") %>개 상품
+                        <% if (!productRows.isEmpty()) { %> · <%= request.getAttribute("adminProductFirst") %>–<%= request.getAttribute("adminProductLast") %>번째 표시<% } %></p>
                     <% if (!productRows.isEmpty()) { %>
                         <form class="admin-product-bulk" id="product-bulk"
                               method="post" action="<%= request.getAttribute("adminProductBulk") %>">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
-                            <output data-bulk-count aria-live="polite"></output>
-                            <label class="field admin-product-bulk-status">
+                            <output data-bulk-count aria-live="polite">현재 페이지 상품 선택</output>
+                            <label class="field"><span>일괄 변경 항목</span>
+                                <select name="bulkType">
+                                    <option value="STATUS">판매 상태</option>
+                                    <option value="PRICE">가격</option>
+                                    <% if (bulkCategories != null) { %><option value="CATEGORY">카테고리</option><% } %>
+                                </select>
+                            </label>
+                            <label class="field admin-product-bulk-status" data-bulk-field="STATUS">
                                 <span class="visually-hidden">선택한 상품의 판매 상태</span>
-                                <select name="targetStatus" required>
+                                <select name="targetStatus">
                                     <option value="">변경할 상태 선택</option>
                                     <% for (String status : statusKeys) { %>
                                         <option value="<%= status %>" <%= !discontinuationEnabled && "DISCONTINUED".equals(status) ? "disabled" : "" %>><%= statuses.get(status) %></option>
                                     <% } %>
                                 </select>
                             </label>
-                            <button class="button secondary" type="submit">일괄 변경</button>
+                            <label class="field" data-bulk-field="PRICE"><span>새 가격</span>
+                                <input name="targetPrice" type="number" min="1000" max="5000" step="1">
+                            </label>
+                            <% if (bulkCategories != null) { %>
+                                <label class="field" data-bulk-field="CATEGORY"><span>새 카테고리</span>
+                                    <select name="targetCategory">
+                                        <option value="">최하위 카테고리 선택</option>
+                                        <% for (Map.Entry<String, String> option : bulkCategories.entrySet()) { %>
+                                            <option value="<%= ProductView.escape(option.getKey()) %>"><%= ProductView.escape(option.getValue()) %></option>
+                                        <% } %>
+                                    </select>
+                                </label>
+                            <% } %>
+                            <button class="button secondary" type="submit">일괄 변경 미리보기</button>
                         </form>
                     <% } %>
                 </div>
-                <% if (!productRows.isEmpty()) { %>
-                    <dialog class="product-delete-dialog" id="product-bulk-confirm" aria-labelledby="product-bulk-title">
-                        <h2 id="product-bulk-title">판매 상태 일괄 변경</h2>
-                        <p data-bulk-message></p>
-                        <form method="dialog">
-                            <button class="button secondary" value="cancel" autofocus>취소</button>
-                            <button class="button primary" value="apply">변경하기</button>
-                        </form>
-                    </dialog>
-                <% } %>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
                     <table class="admin-table store-stock-table">
                         <caption class="visually-hidden">상품 관리</caption>
                         <thead><tr>
                             <th scope="col"><span data-bulk-select-heading>선택</span><input type="checkbox" data-bulk-select-all hidden aria-label="현재 페이지 상품 모두 선택"></th>
-                            <th scope="col">상품 ID</th><th scope="col">상품명·품번</th>
+                            <th scope="col">상품 ID</th><th scope="col">상품명·품번</th><th scope="col">카테고리</th>
                             <th scope="col"<%= priceAscending ? " aria-sort=\"ascending\"" : priceDescending ? " aria-sort=\"descending\"" : "" %>>
-                                <a class="admin-price-sort" href="<%= request.getAttribute("adminPriceSortLink") %>"
+                                <a class="admin-price-sort" href="<%= request.getAttribute("adminPriceSortLink") %>" data-admin-query-link
                                    aria-label="가격 <%= priceAscending ? "내림차순" : "오름차순" %>으로 정렬">
                                     가격
                                     <span class="admin-price-sort-arrows" aria-hidden="true">
@@ -343,9 +401,11 @@
                                                aria-label="<%= ProductView.escape(item.getName()) %> 선택"></td>
                                     <td><%= ProductView.escape(item.getProductId()) %></td>
                                     <td><div class="store-stock-product">
-                                        <img src="<%= ProductView.image(request.getContextPath(), item) %>" width="44" height="48" loading="lazy" alt="">
-                                        <div><strong><%= ProductView.escape(item.getName()) %></strong><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>
+                                        <% String detailUrl = ProductView.url(request.getContextPath(), "/product.jsp", Map.of("id", item.getProductId())); %>
+                                        <a href="<%= detailUrl %>" tabindex="-1" aria-hidden="true"><img src="<%= ProductView.image(request.getContextPath(), item) %>" width="44" height="48" decoding="async" loading="lazy" alt=""></a>
+                                        <div><a href="<%= detailUrl %>" class="admin-workspace-ellipsis"><strong><%= ProductView.escape(item.getName()) %></strong></a><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>
                                     </div></td>
+                                    <td><%= ProductView.escape(categoryFilters.getOrDefault(item.getCategoryId(), item.getCategoryId())) %></td>
                                     <td><%= ProductView.money(item.getPrice()) %></td>
                                     <td><%= ProductView.escape(statuses.getOrDefault(item.getStatus(), item.getStatus())) %></td>
                                     <% State quantityState = State.ofQuantity(item.getStockQuantity()); %>
@@ -362,7 +422,7 @@
                                     </div></td>
                                 </tr>
                             <% } %>
-                            <% if (productRows.isEmpty()) { %><tr><td colspan="7">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                            <% if (productRows.isEmpty()) { %><tr><td colspan="8">조건에 맞는 상품이 없습니다.</td></tr><% } %>
                         </tbody>
                     </table>
                 </div>
@@ -396,6 +456,7 @@
                     </form>
                 </dialog>
             <% } %>
+            </div>
         </main>
     </div>
 </body>

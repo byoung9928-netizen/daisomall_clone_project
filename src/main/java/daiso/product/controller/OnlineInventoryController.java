@@ -43,6 +43,7 @@ public final class OnlineInventoryController {
         if (session == null) {
             return problem(request, response, 403, "관리자 권한이 필요합니다.");
         }
+        request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(session, MAPPING));
         return show(request, response, session);
     }
 
@@ -162,12 +163,21 @@ public final class OnlineInventoryController {
             request.setAttribute("onlineInventoryPage",
                     new Page(request.getContextPath(), result, keyword, category, categories, state, page, pages, sort,
                             dao.onlineSummary(connection)));
+            request.setAttribute("onlineStockCsrf", AdminProductController.token(session));
             String edit = ProductQueries.text(request, "edit", 100);
             if (!edit.isEmpty()) {
                 ProductDTO product = dao.findOnlineProduct(connection, edit, false);
                 if (product == null) request.setAttribute("onlineInventoryError", "상품을 찾을 수 없습니다.");
                 request.setAttribute("onlineStockProduct", product);
-                request.setAttribute("onlineStockCsrf", AdminProductController.token(session));
+            }
+            String trendId = ProductQueries.text(request, "trendId", 100);
+            if (!trendId.isEmpty()) {
+                int days = ProductQueries.integer(request, "trendDays", 30, 1, 90);
+                ProductDTO product = dao.findOnlineProduct(connection, trendId, false);
+                if (product != null) {
+                    request.setAttribute("stockTrendProduct", product);
+                    request.setAttribute("stockTrend", AdminStockTrends.load(connection, trendId, "", days));
+                }
             }
             connection.commit();
             synchronized (session) {

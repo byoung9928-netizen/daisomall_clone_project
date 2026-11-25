@@ -1,0 +1,23 @@
+[data-admin-query-content] { opacity: 1; transition: opacity 120ms ease-out; }
+[data-admin-query-content][aria-busy="true"] { opacity: .6; transition: none; }
+[data-admin-query] :is(.admin-search, .admin-product-filters) :is(select, input:not([type="hidden"])),
+[data-admin-query] .category-search input { min-height: 44px; }
+[data-admin-query] .admin-table-scroll { max-height: 65vh; }
+[data-admin-query] .admin-table { font-size: .875rem; }
+[data-admin-query] .admin-table thead th { position: sticky; top: 0; z-index: 1; }
+[data-admin-query] .admin-table td { padding-block: .55rem; }
+@media(prefers-reduced-motion: reduce) {
+    [data-admin-query-content] { transition: none; }
+}
+[data-admin-query] .store-metrics a[aria-current="page"] { border-color: var(--admin-red-strong); }
+[data-admin-query] .admin-workspace-ellipsis { display: block; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-admin-query] .category-search-match { text-decoration: underline; text-decoration-color: var(--admin-red-strong); text-decoration-thickness: 2px; }
+[data-admin-query] [data-category-expand-controls]:not([hidden]) { margin-top: .5rem; }
+[data-admin-query] [data-bulk-field][hidden] { display: none; }
+[data-admin-query] .inventory-batch-form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
+[data-admin-query] .inventory-batch-form .field { flex: 1 1 135px; margin: 0; }
+[data-admin-query] .admin-batch-choice input[type="number"] { display: block; width: 106px; min-height: 28px; }
+
+.admin-stock-chart { display: grid; gap: .35rem; margin: .5rem 0; padding: 0; list-style: none; }
+.admin-stock-chart li { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }
+.admin-stock-chart meter { width: 100px; }

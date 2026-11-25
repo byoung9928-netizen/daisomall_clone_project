@@ -13,6 +13,8 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-categories.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-categories.js" defer></script>
@@ -22,8 +24,10 @@
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main class="admin-content category-admin" id="admin-content" tabindex="-1">
+        <main class="admin-content category-admin" id="admin-content" tabindex="-1" data-admin-query="categories">
             <h1 class="page-title">카테고리 관리</h1>
+            <p class="error-message" role="alert" data-admin-query-error hidden></p>
+            <div data-admin-query-content>
             <% if (request.getAttribute("categorySaved") != null) { %>
                 <p class="inventory-success" role="status" data-category-saved><%= ProductView.escape(request.getAttribute("categorySaved")) %></p>
             <% } %>
@@ -43,13 +47,22 @@
                                 <a class="button secondary" href="<%= categoryPage.allHistoryUrl %>#category-detail" data-category-nav>전체 카테고리 변경 이력</a>
                             </div>
                         </div>
-                        <form class="category-search" method="get" action="<%= categoryRoute %>" role="search" aria-label="카테고리 검색">
+                        <form class="category-search" data-admin-query-form method="get" action="<%= categoryRoute %>" role="search" aria-label="카테고리 검색">
                             <label class="visually-hidden" for="category-search">카테고리명 또는 ID</label>
                             <input id="category-search" name="q" type="search" maxlength="120" placeholder="카테고리명·ID"
                                    value="<%= ProductView.escape(categoryPage.keyword) %>">
+                            <select name="scope" aria-label="카테고리 범위">
+                                <% for (daiso.product.controller.AdminCategoryModel.Scope scope : daiso.product.controller.AdminCategoryModel.Scope.values()) { %>
+                                    <option value="<%= scope.name() %>" <%= scope == categoryPage.scope ? "selected" : "" %>><%= scope.label %></option>
+                                <% } %>
+                            </select>
                             <button class="button primary" type="submit">검색</button>
-                            <% if (!categoryPage.keyword.isEmpty()) { %><a href="<%= categoryRoute %>">초기화</a><% } %>
+                            <% if (!categoryPage.keyword.isEmpty() || categoryPage.scope != daiso.product.controller.AdminCategoryModel.Scope.ALL) { %><a href="<%= categoryRoute %>" data-admin-query-link>초기화</a><% } %>
                         </form>
+                        <div class="category-actions" data-category-expand-controls hidden>
+                            <button type="button" class="button secondary" data-category-expand="true">전체 펼치기</button>
+                            <button type="button" class="button secondary" data-category-expand="false">전체 접기</button>
+                        </div>
                         <p class="category-tree-note">상품 수는 하위 분류를 포함합니다.</p>
                         <% if (categoryPage.tree.isEmpty()) { %><p class="empty-state">조건에 맞는 카테고리가 없습니다.</p><% } %>
                         <ul class="category-tree" data-category-tree>
@@ -61,7 +74,7 @@
                                 <li>
                                     <div class="category-tree-row">
                                         <div class="category-tree-links">
-                                            <a class="category-tree-select" href="<%= categoryPage.editUrl(node.row.id) %>#category-detail" data-category-nav data-category-id="<%= ProductView.escape(node.row.id) %>"
+                                            <a class="category-tree-select<%= item.matches ? " category-search-match" : "" %>" href="<%= categoryPage.editUrl(node.row.id) %>#category-detail" data-category-nav data-category-id="<%= ProductView.escape(node.row.id) %>"
                                                <%= active ? "aria-current=\"true\"" : "" %>>
                                                 <strong><%= ProductView.escape(node.row.name) %></strong>
                                                 <span class="category-tree-count"><%= node.subtreeProducts %>개</span>
@@ -115,6 +128,9 @@
                                     <div><dt>표시 순서</dt><dd><%= selected.row.order %></dd></div>
                                     <div><dt>직접 등록 상품</dt><dd><%= selected.row.products %>개</dd></div>
                                     <div><dt>하위 포함 상품</dt><dd><%= selected.subtreeProducts %>개</dd></div>
+                                    <% if (request.getAttribute("categoryRecentSales") != null) { %>
+                                        <div><dt>최근 30일 판매량 (하위 포함)</dt><dd><%= request.getAttribute("categoryRecentSales") %>개</dd></div>
+                                    <% } %>
                                     <div><dt>노출 설정</dt><dd><%= selected.row.visible ? "노출" : "비노출" %></dd></div>
                                     <div><dt>고객 화면</dt><dd><%= selected.effectiveVisible ? "표시" : selected.row.visible ? "상위 비노출" : "숨김" %></dd></div>
                                 </dl>
@@ -138,7 +154,7 @@
                                 <% } %>
                             <% } %>
                             <% if (deleteToken == null && (categoryPage.create || selected != null)) { %>
-                                <form class="category-form" method="post" action="<%= categoryRoute %>/save">
+                                <form class="category-form" data-admin-draft method="post" action="<%= categoryRoute %>/save">
                                     <% if (!categoryPage.create && categoryPage.impact == null) { %><h3 class="category-form-title">카테고리 정보 수정</h3><% } %>
                                     <input type="hidden" name="csrf" value="<%= csrf %>">
                                     <input type="hidden" name="q" value="<%= keyword %>">
@@ -244,6 +260,7 @@
                 </div>
                 <p class="visually-hidden" role="status" data-category-status></p>
             <% } %>
+            </div>
         </main>
     </div>
 </body>

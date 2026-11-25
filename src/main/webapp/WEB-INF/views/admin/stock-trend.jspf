@@ -1,0 +1,19 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.AdminStockTrends.Trend,daiso.product.controller.AdminStockTrends.Day" %>
+<% Trend stockTrend = (Trend) request.getAttribute("stockTrend");
+   if (stockTrend != null) { %>
+    <p><%= stockTrend.from %> ~ <%= stockTrend.through %> · 판매량은 재고가 차감된 결제 주문을 기준으로 표시합니다.</p>
+    <% if (!stockTrend.salesReady) { %><p>매장 주문 정보가 아직 연결되지 않았습니다.</p><% } %>
+    <% if (stockTrend.series.isEmpty()) { %><p>조회 기간에 표시할 재고 변경 또는 판매 기록이 없습니다.</p><% } %>
+    <ul class="admin-stock-chart">
+        <% for (Day day : stockTrend.series) { %>
+            <li><time datetime="<%= day.date %>"><%= day.date %></time>
+                <span>재고 증가 <meter max="<%= stockTrend.maximum %>" value="<%= day.received %>" aria-label="재고 증가"></meter> <%= day.received %></span>
+                <span>재고 감소 <meter max="<%= stockTrend.maximum %>" value="<%= day.issued %>" aria-label="재고 감소"></meter> <%= day.issued %></span>
+                <% if (stockTrend.salesReady) { %>
+                    <span>판매량 <meter max="<%= stockTrend.maximum %>" value="<%= day.sold %>" aria-label="판매량"></meter> <%= day.sold %></span>
+                <% } %>
+            </li>
+        <% } %>
+    </ul>
+<% } %>

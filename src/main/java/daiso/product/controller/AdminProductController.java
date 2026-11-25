@@ -33,6 +33,7 @@ public final class AdminProductController {
     private static final String ROUTE = "/admin/products";
     private static final String VIEW = "admin/products";
     private static final String CSRF = "adminProductCsrf";
+    private static final String BULK = AdminProductController.class.getName() + ".bulk";
     private static final String NOTICE = "adminProductNotice";
     private static final int PAGE_SIZE = 30;
     private static final int PAGE_LINKS = 6;
@@ -55,6 +56,55 @@ public final class AdminProductController {
         session.removeAttribute(NOTICE);
         request.setAttribute(NOTICE, notice);
         return show(request, response, session, null);
+    }
+
+    @DaisoGetMapping(ROUTE + "/csv")
+    public String csv(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
+        if (adminSession(request) == null) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return null;
+        }
+        StringBuilder csv = new StringBuilder("\ufeff");
+        try (Connection conn = ProductQueries.connect()) {
+            AdminProductFilter filters = AdminProductFilter.read(request, STATUSES);
+            Map<String, String> categories = dao.findAdminCategories(conn, false);
+            csvRow(csv, "상품 ID", "품번", "상품명", "브랜드", "카테고리", "가격", "판매 상태",
+                    "온라인 재고", "등록일", "수정일");
+            for (ProductDTO product : dao.findAdminProductsForExport(conn, filters)) {
+                csvRow(csv, product.getProductId(), product.getProductCode(), product.getName(), product.getBrand(),
+                        categories.getOrDefault(product.getCategoryId(), product.getCategoryId()), product.getPrice(),
+                        STATUSES.getOrDefault(product.getStatus(), product.getStatus()), product.getStockQuantity(),
+                        product.adminCreatedAt, product.adminUpdatedAt);
+            }
+            conn.commit();
+        } catch (IllegalArgumentException error) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return null;
+        } catch (NamingException | SQLException error) {
+            request.getServletContext().log("상품 CSV 조회 실패", error);
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            return null;
+        }
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=products.csv");
+        response.setHeader("Cache-Control", "private, no-store");
+        response.getWriter().write(csv.toString());
+        response.flushBuffer();
+        return null;
+    }
+
+    private static void csvRow(StringBuilder output, Object... cells) {
+        for (int i = 0; i < cells.length; i++) {
+            if (i != 0) output.append(',');
+            String value = cells[i] == null ? "" : cells[i].toString();
+            String leading = value.stripLeading();
+            if (cells[i] instanceof String && (!leading.isEmpty() && "=+-@".indexOf(leading.charAt(0)) >= 0
+                    || value.startsWith("\t") || value.startsWith("\r") || value.startsWith("\n"))) {
+                value = "'" + value;
+            }
+            output.append('"').append(value.replace("\"", "\"\"")).append('"');
+        }
+        output.append("\r\n");
     }
 
     @DaisoGetMapping(ROUTE + "/check-code")
@@ -234,31 +284,143 @@ public final class AdminProductController {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
         try {
-            String status = ProductQueries.text(request, "targetStatus", 20);
-            if (!STATUSES.containsKey(status)) throw new IllegalArgumentException("변경할 판매 상태를 선택해 주세요.");
-            SortedSet<String> ids = selectedIds(request.getParameterValues("selectedProduct"));
-            int updated = write(conn -> {
-                int count = 0;
-                for (String id : ids) {
-                    ProductDTO before = dao.lockAdminProduct(conn, id);
-                    if (before == null || !before.getProductId().equals(id)) {
-                        throw new IllegalArgumentException("선택 목록에 삭제됐거나 찾을 수 없는 상품이 있습니다.");
-                    }
-                    if (status.equals(before.getStatus())) continue;
-                    verifyDiscontinuation(request, status, before);
-                    dao.updateAdminStatus(conn, id, status);
-                    ProductDTO after = dao.lockAdminProduct(conn, id);
-                    changes.record(conn, administrator(session), Action.BULK_STATUS, before, after);
-                    count++;
+            String receipt = ProductQueries.text(request, "bulkReceipt", 36);
+            if (receipt.isEmpty()) {
+                BulkPreview preview = previewBulk(request);
+                synchronized (session) { session.setAttribute(BULK, preview); }
+                request.setAttribute("productBulkPreview", preview);
+                return show(request, response, session, null);
+            }
+            BulkPreview preview;
+            synchronized (session) {
+                Object value = session.getAttribute(BULK);
+                if (!(value instanceof BulkPreview) || !((BulkPreview) value).receipt.equals(receipt)
+                        || ((BulkPreview) value).expires < System.currentTimeMillis()) {
+                    throw new IllegalArgumentException("미리보기가 만료됐습니다. 다시 조회해 주세요.");
                 }
-                return count;
-            });
-            session.setAttribute(NOTICE, ids.size() + "개 선택 · " + updated + "개 상품의 판매 상태를 변경했습니다.");
+                preview = (BulkPreview) value;
+                session.removeAttribute(BULK);
+            }
+            int updated = write(conn -> applyBulk(conn, request, administrator(session), preview));
+            session.setAttribute(NOTICE, preview.items.size() + "개 선택 · " + updated + "개 상품을 변경했습니다.");
             return redirectToList(request);
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);
+        }
+    }
+
+    private BulkPreview previewBulk(HttpServletRequest request) throws SQLException, NamingException {
+        String type = ProductQueries.text(request, "bulkType", 12);
+        if (type.isEmpty()) type = "STATUS";
+        String target;
+        switch (type) {
+            case "STATUS":
+                target = ProductQueries.text(request, "targetStatus", 20);
+                if (!STATUSES.containsKey(target)) throw new IllegalArgumentException("변경할 판매 상태를 선택해 주세요.");
+                break;
+            case "PRICE":
+                int price = number(ProductQueries.text(request, "targetPrice", 10), "가격");
+                if (price < MIN_PRICE || price > MAX_PRICE) throw new IllegalArgumentException(PRICE_RANGE);
+                target = Integer.toString(price);
+                break;
+            case "CATEGORY":
+                target = ProductQueries.text(request, "targetCategory", 100);
+                break;
+            default: throw new IllegalArgumentException("일괄 변경 항목을 확인해 주세요.");
+        }
+        SortedSet<String> ids = selectedIds(request.getParameterValues("selectedProduct"));
+        try (Connection conn = ProductQueries.connect()) {
+            Map<String, String> categories = "CATEGORY".equals(type) ? dao.findAdminCategories(conn, true) : Map.of();
+            if ("CATEGORY".equals(type) && (!changes.categoryAuditReady(conn) || !categories.containsKey(target))) {
+                throw new IllegalArgumentException("카테고리 변경 이력 SQL과 최하위 카테고리를 확인해 주세요.");
+            }
+            List<BulkItem> items = new java.util.ArrayList<>();
+            for (String id : ids) {
+                ProductDTO product = dao.findById(conn, id);
+                if (product == null || !id.equals(product.getProductId())) {
+                    throw new IllegalArgumentException("선택 목록에 찾을 수 없는 상품이 있습니다.");
+                }
+                if ("STATUS".equals(type)) verifyDiscontinuation(request, target, product);
+                String old = bulkValue(type, product);
+                items.add(new BulkItem(id, product.getName(), old, bulkLabel(type, old, categories)));
+            }
+            conn.commit();
+            return new BulkPreview(type, target, bulkLabel(type, target, categories), items);
+        }
+    }
+
+    private int applyBulk(Connection conn, HttpServletRequest request, String administrator, BulkPreview preview)
+            throws SQLException {
+        if ("CATEGORY".equals(preview.type) && !dao.lockLeafCategory(conn, preview.target)) {
+            throw new IllegalArgumentException("대상은 유효한 최하위 카테고리여야 합니다.");
+        }
+        int updated = 0;
+        for (BulkItem item : preview.items) {
+            ProductDTO before = dao.lockAdminProduct(conn, item.id);
+            if (before == null || !item.previous.equals(bulkValue(preview.type, before))) {
+                throw new IllegalArgumentException("미리보기 이후 상품이 변경되었습니다. 다시 조회해 주세요.");
+            }
+            if (item.previous.equals(preview.target)) continue;
+            switch (preview.type) {
+                case "STATUS":
+                    verifyDiscontinuation(request, preview.target, before);
+                    dao.updateAdminStatus(conn, item.id, preview.target);
+                    changes.record(conn, administrator, Action.BULK_STATUS, before, dao.lockAdminProduct(conn, item.id));
+                    break;
+                case "PRICE":
+                    dao.updateAdminPrice(conn, item.id, Integer.parseInt(preview.target));
+                    changes.record(conn, administrator, Action.UPDATE, before, dao.lockAdminProduct(conn, item.id));
+                    break;
+                case "CATEGORY":
+                    dao.updateAdminCategory(conn, item.id, preview.target);
+                    changes.recordCategory(conn, administrator, before, preview.target);
+                    break;
+                default: throw new IllegalArgumentException("일괄 변경 항목을 확인해 주세요.");
+            }
+            updated++;
+        }
+        return updated;
+    }
+
+    private static String bulkValue(String type, ProductDTO product) {
+        if ("PRICE".equals(type)) return Integer.toString(product.getPrice());
+        return "CATEGORY".equals(type) ? product.getCategoryId() : product.getStatus();
+    }
+
+    private static String bulkLabel(String type, String value, Map<String, String> categories) {
+        if ("PRICE".equals(type)) return ProductView.money(Integer.parseInt(value));
+        return ("STATUS".equals(type) ? STATUSES : categories).getOrDefault(value, value);
+    }
+
+    public static final class BulkPreview {
+        public final String receipt = UUID.randomUUID().toString();
+        public final String targetLabel;
+        public final List<BulkItem> items;
+        private final long expires = System.currentTimeMillis() + 600_000;
+        private final String type;
+        private final String target;
+
+        BulkPreview(String type, String target, String targetLabel, List<BulkItem> items) {
+            this.type = type;
+            this.target = target;
+            this.targetLabel = targetLabel;
+            this.items = List.copyOf(items);
+        }
+    }
+
+    public static final class BulkItem {
+        public final String name;
+        public final String previousLabel;
+        private final String id;
+        private final String previous;
+
+        BulkItem(String id, String name, String previous, String previousLabel) {
+            this.id = id;
+            this.name = name;
+            this.previous = previous;
+            this.previousLabel = previousLabel;
         }
     }
 
@@ -352,11 +514,17 @@ public final class AdminProductController {
                 request.setAttribute("adminPriceRange", PRICE_RANGE);
             }
             request.setAttribute("adminCategoryFilters", dao.findAdminCategories(conn, false));
+            if (changes.categoryAuditReady(conn)) request.setAttribute("adminBulkCategories", dao.findAdminCategories(conn, true));
             request.setAttribute("adminStockFilters", AdminProductFilter.stockOptions());
             String context = request.getContextPath();
             String url = "/app" + ROUTE;
             Map<String, String> filters = filter.parameters(page);
             request.setAttribute("adminProductFilters", filters);
+            request.setAttribute("adminProductStatusSummary", dao.adminStatusSummary(conn, filter));
+            request.setAttribute("adminProductCsv", ProductView.url(context, url + "/csv", filter.parameters(1)));
+            request.setAttribute("adminProductFirst", result.total == 0 ? 0 : (page - 1) * PAGE_SIZE + 1);
+            request.setAttribute("adminProductLast", (page - 1) * PAGE_SIZE + result.products.size());
+
             AdminProductFilter.Sort nextPriceSort = filter.sort == AdminProductFilter.Sort.PRICE_ASC
                     ? AdminProductFilter.Sort.PRICE_DESC : AdminProductFilter.Sort.PRICE_ASC;
             request.setAttribute("adminPriceSortLink", ProductView.url(context, url,
@@ -378,12 +546,23 @@ public final class AdminProductController {
             request.setAttribute("adminProductDelete", ProductView.url(context, url + "/delete", filters));
             request.setAttribute("adminProductBulk", ProductView.url(context, url + "/bulk-status", filters));
             if (history) {
-                HistoryPage entries = changes.list(conn, historyId, historyBefore);
+                Map<String, String> historyQuery = new LinkedHashMap<>();
+                for (String key : List.of("historyQuery", "historyActor", "historyReference", "historyType", "historyPeriod",
+                        "historyStart", "historyEnd", "historyOrder")) {
+                    historyQuery.put(key, ProductQueries.text(request, key, 120));
+                }
+                HistoryPage entries = changes.list(conn, historyId, historyBefore, historyQuery,
+                        ProductQueries.integer(request, "historyPage", 1, 1, 1_000_000));
                 Map<String, String> scopedHistory = ProductView.with(historyFilters, "historyId", historyId);
+                scopedHistory.putAll(historyQuery);
+                if (historyBefore != null) scopedHistory.put("beforeChange", historyBefore.toString());
                 request.setAttribute("productHistory", entries.entries);
                 request.setAttribute("productHistoryId", historyId);
-                if (entries.next != null) request.setAttribute("productHistoryOlder", ProductView.url(context, url,
-                        ProductView.with(scopedHistory, "beforeChange", entries.next.toString())));
+                request.setAttribute("productHistoryQuery", historyQuery);
+                request.setAttribute("productHistoryBase", ProductView.with(historyFilters, "historyId", historyId));
+                request.setAttribute("productHistoryPagination", new InventoryPagination(entries.page, entries.pages,
+                        number -> ProductView.url(context, url,
+                                ProductView.with(scopedHistory, "historyPage", Integer.toString(number))) + "#product-history"));
             }
             String relatedId = (String) request.getAttribute("adminProductRelatedId");
             if (relatedId != null) {
@@ -417,6 +596,10 @@ public final class AdminProductController {
             request.setAttribute("productStatuses", STATUSES);
             request.setAttribute("productDiscontinuationEnabled", discontinuationEnabled(request));
             request.setAttribute(CSRF, token(session));
+            return VIEW;
+        } catch (IllegalArgumentException error) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            request.setAttribute("adminProductError", "이력 검색 조건을 확인해 주세요.");
             return VIEW;
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);

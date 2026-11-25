@@ -83,6 +83,17 @@
                         <p class="pd-product-code" data-product="id">품번 <%= ProductView.escape(product.getProductCode()) %></p>
                     </div>
                     <p class="stock-status" data-product="stock">온라인 <%= ProductView.status(product) %> · 재고 <%= product.getStockQuantity() %>개</p>
+                    <% if (Boolean.TRUE.equals(request.getAttribute("restockRequestAvailable"))) { %>
+                        <% if (Boolean.TRUE.equals(request.getAttribute("wishlistLoggedIn"))) { %>
+                            <form method="post" action="${pageContext.request.contextPath}/app/products/restock">
+                                <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("wishlistCsrf")) %>">
+                                <input type="hidden" name="productId" value="<%= ProductView.escape(product.getProductId()) %>">
+                                <button type="submit" class="button secondary">재입고 알림 신청</button>
+                            </form>
+                        <% } else { %>
+                            <a href="${pageContext.request.contextPath}/app/member/login">로그인 후 재입고 알림 신청</a>
+                        <% } %>
+                    <% } %>
                     <% if ("DISCONTINUED".equals(product.getStatus())) { %>
                         <p class="source-note">판매 종료된 상품입니다.</p>
                     <% } %>

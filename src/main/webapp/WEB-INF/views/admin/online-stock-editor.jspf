@@ -20,7 +20,7 @@
         <% if (request.getAttribute("onlineInventoryError") != null) { %>
             <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("onlineInventoryError")) %></p>
         <% } %>
-        <form method="post" action="<%= stockAction %>" data-stock-editor data-store-write data-before="<%= stockProduct.getStockQuantity() %>">
+        <form method="post" data-admin-draft action="<%= stockAction %>" data-stock-editor data-store-write data-before="<%= stockProduct.getStockQuantity() %>">
             <% for (Map.Entry<String, String> field : online.filters.entrySet()) { %>
                 <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
             <% } %>
