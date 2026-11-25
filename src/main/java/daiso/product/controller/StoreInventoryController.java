@@ -46,8 +46,7 @@ public final class StoreInventoryController {
         HttpSession session = AdminProductController.adminSession(request);
         if (session == null) return blocked(request, response, 403, "관리자 권한이 필요합니다.");
         try {
-            request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(session, MAPPING));
-        return show(request, response, session, new Filters(request), null);
+            return show(request, response, session, new Filters(request), null);
         } catch (IllegalArgumentException error) {
             return blocked(request, response, 400, "조회 조건을 확인해 주세요.");
         }
@@ -404,8 +403,11 @@ public final class StoreInventoryController {
                 String receipt = request.getParameter("saved");
                 boolean saved = receipt != null && receipt.matches("[0-9a-f-]{36}");
                 if (saved) params.put("saved", receipt);
+                String batchReceipt = AdminInventoryBatchController.savedReceipt(request);
+                if (batchReceipt != null) params.put(AdminInventoryBatchController.SAVED_PARAMETER, batchReceipt);
                 connection.commit();
-                return "redirect:" + ProductView.rawUrl("", MAPPING, params) + (saved ? "#store-inventory-table" : "");
+                String anchor = batchReceipt != null ? "#inventory-batch-result" : saved ? "#store-inventory-table" : "";
+                return "redirect:" + ProductView.rawUrl("", MAPPING, params) + anchor;
             }
             int offset = (page - 1) * PAGE_SIZE;
             Summary summary = selected == null ? null : dao.summary(connection, selectedId);
@@ -425,6 +427,7 @@ public final class StoreInventoryController {
             request.setAttribute("storeInventoryCsrf", AdminProductController.token(session));
             connection.commit();
             showSaved(request, response, session, selectedId, inventory);
+            request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(request, session, MAPPING));
             return VIEW;
         } catch (SQLException | NamingException error) {
             return unavailable(request, response, error);

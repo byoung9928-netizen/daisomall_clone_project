@@ -43,7 +43,6 @@ public final class OnlineInventoryController {
         if (session == null) {
             return problem(request, response, 403, "관리자 권한이 필요합니다.");
         }
-        request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(session, MAPPING));
         return show(request, response, session);
     }
 
@@ -180,6 +179,7 @@ public final class OnlineInventoryController {
                 }
             }
             connection.commit();
+            request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(request, session, MAPPING));
             synchronized (session) {
                 String receipt = request.getParameter("saved");
                 Object value = session.getAttribute(SAVED);

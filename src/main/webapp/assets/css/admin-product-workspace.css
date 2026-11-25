@@ -16,7 +16,38 @@
 [data-admin-query] [data-bulk-field][hidden] { display: none; }
 [data-admin-query] .inventory-batch-form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
 [data-admin-query] .inventory-batch-form .field { flex: 1 1 135px; margin: 0; }
-[data-admin-query] .admin-batch-choice input[type="number"] { display: block; width: 106px; min-height: 28px; }
+[data-batch-panel][hidden], [data-batch-panel] [hidden], [data-batch-select-all][hidden],
+[data-batch-preview] [hidden] { display: none; }
+[data-admin-query]:not(:has([data-batch-product]:checked)) [data-batch-panel] { display: none; }
+.inventory-batch-panel { margin-block: .75rem; }
+.inventory-batch-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.inventory-batch-heading :is(h1, h3) { margin: 0; }
+.inventory-batch-heading :is([data-batch-clear], [data-batch-close]) { margin-inline-start: auto; }
+.inventory-batch-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .75rem; margin-block-start: .75rem; }
+.inventory-batch-fields .field { min-width: 0; margin: 0; }
+.inventory-batch-fields :is(input, select), .inventory-batch-item input { width: 100%; min-height: 44px; box-sizing: border-box; }
+.admin-batch-choice { width: 4.5rem; text-align: center; white-space: nowrap; }
+.admin-batch-choice input { width: 18px; height: 18px; vertical-align: middle; accent-color: var(--admin-red-strong); }
+[data-batch-selected] > td { background: #fff0f3; }
+.inventory-batch-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 14rem); align-items: start; gap: .75rem; padding: .55rem 0; border-top: 1px solid var(--admin-line); }
+.inventory-batch-item strong { display: block; overflow-wrap: anywhere; }
+.inventory-batch-item .field { margin: 0; }
+.batch-field-error { display: block; color: #a30d32; font-size: .875rem; }
+[data-batch-form] [aria-invalid="true"], .admin-batch-choice [aria-invalid="true"] { outline: 2px solid #a30d32; }
+.inventory-batch-dialog { box-sizing: border-box; width: min(730px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; border: 0; border-radius: .75rem; padding: 0; }
+.inventory-batch-dialog::backdrop { background: #14182199; }
+.product-admin-ux:has(.inventory-batch-dialog:modal) { overflow: hidden; }
+.inventory-batch-dialog .inventory-batch-preview { margin: 0; padding: clamp(.9rem, 3vw, 1.5rem); border: 0; }
+.inventory-batch-preview .admin-table-scroll { max-height: 48vh; overflow: auto; }
+.inventory-batch-preview .admin-table thead th { position: sticky; top: 0; z-index: 1; }
+.inventory-batch-confirm { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; margin-block-start: 1rem; }
+@media(max-width: 480px) {
+    .inventory-batch-item { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+    .inventory-batch-preview .admin-table { width: 100%; min-width: 0; table-layout: fixed; }
+    .inventory-batch-preview .admin-table :is(th, td) { padding: .45rem .3rem; font-size: .8125rem; white-space: normal; overflow-wrap: anywhere; }
+    .inventory-batch-preview .admin-table th:first-child { width: 25%; }
+    .inventory-batch-preview .admin-table th:nth-child(2) { width: 20%; }
+}
 
 .admin-stock-chart { display: grid; gap: .35rem; margin: .5rem 0; padding: 0; list-style: none; }
 .admin-stock-chart li { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }

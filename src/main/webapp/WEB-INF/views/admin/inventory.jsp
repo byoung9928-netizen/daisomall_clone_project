@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory-batch.js" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
@@ -25,6 +26,9 @@
             <h1 class="page-title">온라인 재고 관리</h1>
             <p class="error-message" role="alert" data-admin-query-error hidden></p>
             <div data-admin-query-content>
+            <% if (request.getAttribute("inventoryBatchNotice") != null) { %>
+                <p id="inventory-batch-result" class="inventory-success" role="status" tabindex="-1"><%= ProductView.escape(request.getAttribute("inventoryBatchNotice")) %></p>
+            <% } %>
             <% if (request.getAttribute("onlineInventorySaved") != null) { %>
                 <p class="inventory-success" role="status"><%= ProductView.escape(request.getAttribute("onlineInventorySaved")) %></p>
             <% } %>
@@ -97,22 +101,24 @@
                 <p class="inventory-range" role="status">전체 <strong><%= online.total %></strong>종
                     <% if (online.total > 0) { %><span> · <%= online.first %>–<%= online.last %>번째 상품 표시</span><% } %></p>
                 <% boolean storeBatch = false;
+                       String batchStoreName = "";
                        Map<String, String> batchFilters = online.filters;
                        String batchCsrf = String.valueOf(request.getAttribute("onlineStockCsrf")); %>
                 <%@ include file="inventory-batch-form.jspf" %>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="온라인 재고 상품 표">
                     <table class="admin-table store-stock-table">
                         <thead><tr>
-                            <th scope="col">선택·개별값</th><th scope="col">상품</th><th scope="col">온라인 재고</th><th scope="col">재고 상태</th><th scope="col">부족 기준</th><th scope="col">관리</th>
+                            <th scope="col" class="admin-batch-choice">
+                            <span>선택</span>
+                            <input type="checkbox" data-batch-select-all hidden aria-label="현재 페이지 상품 전체 선택">
+                        </th><th scope="col">상품</th><th scope="col">온라인 재고</th><th scope="col">재고 상태</th><th scope="col">부족 기준</th><th scope="col">관리</th>
                         </tr></thead>
                         <tbody>
                             <% for (ProductDTO item : online.products) {
                                    OnlineStockState state = OnlineStockState.of(item); %>
                                 <tr>
-                                    <td class="admin-batch-choice"><input type="checkbox" name="batchProduct" form="inventory-batch-form"
-                    value="<%= ProductView.escape(item.getProductId()) %>" aria-label="<%= ProductView.escape(item.getName()) %> 선택">
-                <input name="amount.<%= ProductView.escape(item.getProductId()) %>" form="inventory-batch-form" type="number" min="1"
-                       placeholder="공통값 사용" aria-label="<%= ProductView.escape(item.getName()) %> 개별 수량 또는 기준"></td>
+                                    <td class="admin-batch-choice"><input type="checkbox" name="batchProduct" form="inventory-batch-form" data-batch-product
+                    value="<%= ProductView.escape(item.getProductId()) %>" aria-label="<%= ProductView.escape(item.getName()) %> 선택" data-name="<%= ProductView.escape(item.getName()) %>" data-stock="<%= item.getStockQuantity() %>" data-threshold="<%= item.getLowStockThreshold() %>"></td>
                 <td><div class="store-stock-product">
                                         <img src="<%= ProductView.image(inventoryContext, item) %>" width="48" height="52" loading="lazy" alt="">
                                         <div><strong><%= ProductView.escape(item.getName()) %></strong><small>품번 <%= ProductView.escape(item.getProductCode()) %></small></div>

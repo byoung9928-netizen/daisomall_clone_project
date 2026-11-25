@@ -16,7 +16,7 @@
 
     document.addEventListener('submit', event => {
         const form = event.target.closest('[data-store-write]');
-        if (!form) return;
+        if (!form || event.defaultPrevented) return;
         if (form.dataset.submitting === 'true') {
             event.preventDefault();
             return;

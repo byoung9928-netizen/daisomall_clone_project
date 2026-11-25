@@ -11,20 +11,48 @@
         const form = event.target.closest('[data-admin-draft]');
         if (form) dirtyForm = form;
     });
+    function hasDraft() {
+        return dirtyForm?.isConnected || (root.querySelector('[data-batch-product]:checked')
+            && !root.querySelector('[data-batch-form][data-native-submit]'));
+    }
+
     window.addEventListener('beforeunload', event => {
-        if (!dirtyForm?.isConnected) return;
+        if (!hasDraft()) return;
         event.preventDefault();
         event.returnValue = '';
     });
 
     function canLeave() {
-        return !dirtyForm?.isConnected || window.confirm('저장하지 않은 입력이 있습니다. 이동할까요?');
+        return !hasDraft() || window.confirm('이동하면 현재 선택과 저장하지 않은 입력이 사라집니다. 이동할까요?');
     }
 
-    async function navigate(url, restore = false) {
+    function render(next, destination) {
+        const scrollLeft = content.querySelector('.admin-table-scroll')?.scrollLeft || 0;
+        content.replaceChildren(...next.childNodes);
+        const table = content.querySelector('.admin-table-scroll');
+        if (table) table.scrollLeft = scrollLeft;
+        committed = destination;
+        dirtyForm = undefined;
+        document.dispatchEvent(new Event('admin-query-render'));
+    }
+
+    root.addEventListener('admin-inventory-batch-saved', event => {
+        const { next, destination } = event.detail;
+        pending?.controller.abort();
+        pending = undefined;
+        content.removeAttribute('aria-busy');
+        history.replaceState(null, '', destination);
+        render(next, destination);
+        const notice = root.querySelector('#inventory-batch-result');
+        notice.focus({ preventScroll: true });
+        notice.scrollIntoView({ block: 'nearest' });
+    });
+
+    async function navigate(url, restore = false, filterForm) {
         if (url.href === pending?.url.href || (!pending && url.href === committed.href)) return;
         if (!canLeave()) {
             if (restore) history.replaceState(null, '', committed);
+            filterForm?.reset();
             return;
         }
         pending?.controller.abort();
@@ -44,15 +72,9 @@
             const next = html.querySelector('[data-admin-query-content]');
             if (!next || html.querySelector('[data-admin-query]')?.dataset.adminQuery !== root.dataset.adminQuery) throw new Error();
 
-            const scrollLeft = content.querySelector('.admin-table-scroll')?.scrollLeft || 0;
-            content.replaceChildren(...next.childNodes);
-            const table = content.querySelector('.admin-table-scroll');
-            if (table) table.scrollLeft = scrollLeft;
-            committed = destination;
-            dirtyForm = undefined;
             if (!restore) history.pushState(null, '', destination);
             else if (destination.href !== url.href) history.replaceState(null, '', destination);
-            document.dispatchEvent(new Event('admin-query-render'));
+            render(next, destination);
             if (url.hash) {
                 let id = url.hash.slice(1);
                 try { id = decodeURIComponent(id); } catch { /* Keep malformed fragment literal. */ }
@@ -82,7 +104,7 @@
             event.preventDefault();
             const url = new URL(form.action);
             url.search = new URLSearchParams(new FormData(form));
-            navigate(url);
+            navigate(url, false, form);
         } else if (!event.defaultPrevented && form.method === 'post') {
             if (form.dataset.adminSubmitting === 'true') {
                 event.preventDefault();
@@ -110,5 +132,6 @@
     window.addEventListener('popstate', () => navigate(new URL(location.href), true));
     window.addEventListener('pageshow', () => {
         root.querySelectorAll('[data-admin-submitting]').forEach(form => delete form.dataset.adminSubmitting);
+        root.querySelectorAll('[data-native-submit]').forEach(form => delete form.dataset.nativeSubmit);
     });
 })();
