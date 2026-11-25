@@ -16,7 +16,7 @@
 
     document.addEventListener('submit', event => {
         const form = event.target.closest('[data-store-write]');
-        if (!form) return;
+        if (!form || event.defaultPrevented) return;
         if (form.dataset.submitting === 'true') {
             event.preventDefault();
             return;
@@ -31,13 +31,6 @@
             form.querySelector('[aria-disabled="true"]')?.removeAttribute('aria-disabled');
         });
     });
-
-    const filters = document.querySelector('[data-store-filters]');
-    if (filters) {
-        filters.querySelectorAll('select').forEach(field => {
-            field.addEventListener('change', () => filters.requestSubmit());
-        });
-    }
 
     const confirmation = document.querySelector('[data-unlist-confirm]');
     if (confirmation) confirmation.focus();
@@ -70,9 +63,10 @@
             const response = await fetch(opener.href, { cache: 'no-store', credentials: 'same-origin' });
             if (!response.ok || response.redirected) throw new Error('Store adjustment page unavailable');
             const source = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('.store-drawer');
-            if (!source || !inventory) throw new Error('Store adjustment dialog unavailable');
+            const table = document.getElementById('store-inventory-table');
+            if (!source || !table) throw new Error('Store adjustment dialog unavailable');
             const panel = document.importNode(source, true);
-            inventory.before(panel);
+            table.before(panel);
             openDrawer(panel, opener);
         } catch {
             location.assign(opener.href);

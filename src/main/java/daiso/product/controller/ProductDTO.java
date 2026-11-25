@@ -21,6 +21,8 @@ public class ProductDTO {
     int reviewCount;
     String sourceKind;
     String sourceNote;
+    java.time.LocalDateTime adminCreatedAt;
+    java.time.LocalDateTime adminUpdatedAt;
 
     // 상품번호
     public String getProductId() {

@@ -1,0 +1,72 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.dao.StoreInventoryDAO.ComparedStock,daiso.product.dao.StoreInventoryDAO.Sort" %>
+<% List<Stock> compareCandidates = (List<Stock>) request.getAttribute("storeCompareCandidates");
+   List<ComparedStock> compareRows = (List<ComparedStock>) request.getAttribute("storeCompareRows"); %>
+<section class="admin-panel" id="store-stock-comparison">
+    <h3>상품별 매장 재고 비교</h3>
+    <form class="inventory-batch-form" data-admin-query-form action="<%= ProductView.escape(storeRoute) %>#store-stock-comparison" method="get">
+        <% for (String key : List.of("store", "city", "mode", "assortment", "q", "state", "sort", "storeQuery")) { %>
+            <input type="hidden" name="<%= key %>" value="<%= ProductView.escape(inventoryPage.filters.get(key)) %>">
+        <% } %>
+        <label class="field">상품명·품번
+            <input type="search" name="compareQ" maxlength="100" value="<%= ProductView.escape(inventoryPage.filters.get("compareQ")) %>">
+        </label>
+        <% if (compareCandidates != null && !compareCandidates.isEmpty()) { %>
+            <label class="field">비교할 상품
+                <select name="compareProduct"><option value="">상품 선택</option>
+                    <% for (Stock candidate : compareCandidates) { %>
+                        <option value="<%= ProductView.escape(candidate.id) %>" <%= candidate.id.equals(inventoryPage.filters.get("compareProduct")) ? "selected" : "" %>>
+                            <%= ProductView.escape(candidate.name) %> · <%= ProductView.escape(candidate.code) %>
+                        </option>
+                    <% } %>
+                </select>
+            </label>
+        <% } %>
+        <label class="field">비교 지역
+            <select name="compareCity">
+                <% for (String region : List.of("", "서울", "부산")) { %>
+                    <option value="<%= region %>" <%= region.equals(inventoryPage.filters.get("compareCity")) ? "selected" : "" %>>
+                        <%= region.isEmpty() ? "전체 지역" : region %></option>
+                <% } %>
+            </select>
+        </label>
+        <label class="field">비교 정렬
+            <select name="compareSort">
+                <% for (Sort sort : List.of(Sort.REGION,Sort.HIGH,Sort.LOW,Sort.SHORTAGE)) { %>
+                    <option value="<%= sort.name() %>" <%= sort.name().equals(inventoryPage.filters.get("compareSort")) ? "selected" : "" %>><%= sort.label %></option>
+                <% } %>
+            </select>
+        </label>
+        <label class="field">재고 분석 기간
+            <select name="trendDays">
+                <% for (String days : List.of("7", "30", "90")) { %>
+                    <option value="<%= days %>" <%= days.equals(request.getParameter("trendDays")) || ("30".equals(days) && request.getParameter("trendDays") == null) ? "selected" : "" %>>최근 <%= days %>일</option>
+                <% } %>
+            </select>
+        </label>
+        <button class="button secondary" type="submit">검색</button>
+    </form>
+    <% if (compareCandidates != null && compareCandidates.isEmpty()) { %><p>조건에 맞는 상품이 없습니다.</p><% } %>
+    <% if (compareRows != null) { %>
+        <p>전체 <%= request.getAttribute("storeCompareTotal") %>개 매장 · 취급 <%= request.getAttribute("storeCompareCarried") %>곳 · 재고 보유 <%= request.getAttribute("storeCompareAvailable") %>곳 · 오프라인 재고 <%= request.getAttribute("storeCompareUnits") %>개</p>
+        <div class="admin-table-scroll"><table class="admin-table">
+            <thead><tr><th>매장</th><th>지역</th><th>재고</th><th>부족 기준</th><th>상태</th></tr></thead>
+            <tbody><% for (ComparedStock row : compareRows) { %>
+                <tr><td>
+                    <% if (row.quantity != null) { %>
+                    <a href="<%= ProductView.url(inventoryPage.context, storeRoute, Map.of("city", row.city, "store", row.store,
+                            "product", inventoryPage.filters.get("compareProduct"))) %>#<%= Page.rowAnchor(inventoryPage.filters.get("compareProduct")) %>">
+                        <%= ProductView.escape(row.name) %></a>
+                    <% } else { %><%= ProductView.escape(row.name) %><% } %>
+                    </td><td><%= ProductView.escape(row.city) %></td>
+                    <td><%= row.quantity == null ? "—" : row.quantity + "개" %></td>
+                    <td><%= row.quantity == null ? "—" : row.threshold + "개 이하" %></td>
+                    <td><%= row.state() == null ? "미취급" : row.state().label %></td></tr>
+            <% } %></tbody>
+        </table></div>
+    <% } %>
+    <% if (request.getAttribute("stockTrend") != null) { %>
+        <h4><%= ProductView.escape(inventoryPage.selected.name) %> 재고 및 판매량</h4>
+    <% } %>
+    <%@ include file="stock-trend.jspf" %>
+</section>

@@ -127,78 +127,155 @@
         updatePriceFeedback();
     }
 
-    const stockFilter = document.querySelector('[name="filterStock"]');
-    if (stockFilter) {
-        const quantity = stockFilter.form.elements.stockQuantity;
-        const quantityField = quantity.closest('[data-stock-quantity]');
-        const updateStockFilter = () => {
-            const needsQuantity = stockFilter.value === 'AT_LEAST' || stockFilter.value === 'AT_MOST';
-            quantityField.hidden = !needsQuantity;
-            quantity.disabled = !needsQuantity;
-            quantity.required = needsQuantity;
-        };
-        stockFilter.addEventListener('change', updateStockFilter);
-        updateStockFilter();
-    }
-
-    const bulk = document.querySelector('#product-bulk');
-    if (bulk) {
-        // 상품 체크박스는 표 안에 있으며 form 속성으로 일괄 변경 폼에 연결된다.
-        const checkboxes = Array.from(bulk.elements).filter(input => input.name === 'selectedProduct');
-        const selectAll = document.querySelector('[data-bulk-select-all]');
-        const heading = document.querySelector('[data-bulk-select-heading]');
-        const count = bulk.querySelector('[data-bulk-count]');
-        const submit = bulk.querySelector('button[type="submit"]');
-        const confirmDialog = document.querySelector('#product-bulk-confirm');
-        const selectedCount = () => checkboxes.filter(input => input.checked).length;
-        const updateSelection = () => {
-            const total = selectedCount();
-            count.textContent = total + '개 선택';
-            selectAll.checked = total === checkboxes.length;
-            selectAll.indeterminate = total > 0 && total < checkboxes.length;
-            submit.disabled = total === 0;
-        };
-        selectAll.hidden = false;
-        heading.hidden = true;
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(input => { input.checked = selectAll.checked; });
-            updateSelection();
+    function bindBulk(form) {
+        const root = form.closest('[data-admin-query]');
+        const checkboxes = [...form.elements].filter(input => input.name === 'selectedProduct');
+        const selectAll = root.querySelector('[data-bulk-select-all]');
+        const clear = form.querySelector('[data-batch-clear]');
+        const status = form.querySelector('[data-product-bulk-error]');
+        const opener = form.querySelector('button[type="submit"]');
+        const dialog = root.querySelector('#product-bulk-dialog');
+        const type = form.elements.bulkType;
+        const selection = window.DaisoAdminBatchSelection.bind({
+            form, panel: form, boxes: checkboxes, selectAll, onChange: edited
         });
-        checkboxes.forEach(input => input.addEventListener('change', updateSelection));
-        updateSelection();
+        const saved = selection.draft;
+        for (const [name, value] of Object.entries(saved)) form.elements.namedItem(name).value = value;
+        const targets = { STATUS: 'targetStatus', PRICE: 'targetPrice', CATEGORY: 'targetCategory' };
+        let invalidField;
+        form.noValidate = true;
+        clear.hidden = false;
+        root.querySelector('[data-bulk-select-heading]').hidden = checkboxes.length > 0;
 
-        let confirmed = false;
-        bulk.addEventListener('submit', (event) => {
-            if (confirmed) {
-                confirmed = false;
+        function updateType() {
+            for (const field of form.querySelectorAll('[data-bulk-field]')) {
+                field.hidden = field.dataset.bulkField !== type.value;
+                field.querySelector('select, input').disabled = field.hidden;
+            }
+        }
+
+        function clearError() {
+            invalidField?.removeAttribute('aria-invalid');
+            invalidField?.removeAttribute('aria-errormessage');
+            form.querySelector('.batch-field-error')?.remove();
+            status.hidden = true;
+            invalidField = undefined;
+        }
+
+        function showError(name, message) {
+            clearError();
+            const field = name === 'selectedProduct' ? selectAll : form.elements.namedItem(name);
+            if (field?.closest('.field')) {
+                const error = document.createElement('span');
+                error.id = 'product-bulk-field-error';
+                error.className = 'batch-field-error';
+                error.setAttribute('role', 'alert');
+                error.textContent = message;
+                field.closest('.field').append(error);
+                field.setAttribute('aria-invalid', 'true');
+                field.setAttribute('aria-errormessage', error.id);
+                invalidField = field;
+            } else {
+                status.hidden = false;
+                status.textContent = message;
+            }
+            (field || status).focus();
+        }
+
+        function edited() {
+            form.dispatchEvent(new Event('admin-batch-input-changed', { bubbles: true }));
+            clearError();
+        }
+
+        function resetSelection() {
+            for (const name of Object.keys(saved)) delete saved[name];
+            form.reset();
+            selection.clear();
+            updateType();
+        }
+        clear.addEventListener('click', () => {
+            resetSelection();
+            (selectAll.hidden ? root.querySelector('[data-admin-query-form] input[type="search"]') : selectAll)?.focus();
+        });
+        form.addEventListener('admin-batch-reset', resetSelection);
+        form.addEventListener('input', event => {
+            if (event.target.name === 'targetPrice') saved.targetPrice = event.target.value;
+            if (event.target.form === form) edited();
+        });
+        form.addEventListener('change', event => {
+            if (event.target.tagName !== 'SELECT') return;
+            saved[event.target.name] = event.target.value;
+            edited();
+            updateType();
+        });
+
+        function validate() {
+            if (!selection.size()) return ['selectedProduct', '변경할 상품을 선택해 주세요.'];
+            const name = targets[type.value];
+            if (!name) return ['bulkType', '일괄 변경 항목을 선택해 주세요.'];
+            const field = form.elements.namedItem(name);
+            if (name === 'targetPrice') {
+                if (!field.value && !field.validity.badInput) return [name, '변경할 가격을 입력해 주세요.'];
+                if (!Number.isInteger(field.valueAsNumber) || !field.validity.valid) {
+                    return [name, '1,000원부터 5,000원까지 정수로 입력해 주세요.'];
+                }
+            } else if (!field.value || field.selectedOptions[0]?.disabled) {
+                return [name, name === 'targetStatus' ? '변경할 판매 상태를 선택해 주세요.' : '변경할 카테고리를 선택해 주세요.'];
+            }
+            return null;
+        }
+
+        form.addEventListener('submit', event => {
+            clearError();
+            const issue = validate();
+            if (issue) {
+                event.preventDefault();
+                showError(...issue);
                 return;
             }
-            const status = bulk.elements.targetStatus.selectedOptions[0].textContent;
-            const message = selectedCount() + '개 상품의 판매 상태를 ‘' + status + '’(으)로 변경할까요?';
-            if (typeof confirmDialog.showModal !== 'function') {
-                if (!window.confirm(message)) event.preventDefault();
+            if (typeof dialog.showModal !== 'function') {
+                form.dataset.nativeSubmit = 'true';
                 return;
             }
             event.preventDefault();
-            confirmDialog.querySelector('[data-bulk-message]').textContent = message;
-            confirmDialog.returnValue = '';
-            confirmDialog.showModal();
+            form.dispatchEvent(new CustomEvent('admin-batch-request-preview', {
+                bubbles: true,
+                detail: { dialog, opener, showError, noticeId: 'product-bulk-result', refreshLabel: '최신 상품 목록 보기' }
+            }));
         });
-        confirmDialog.addEventListener('close', () => {
-            if (confirmDialog.returnValue === 'apply') {
-                confirmed = true;
-                bulk.requestSubmit(submit);
-            }
-        });
+        updateType();
     }
 
-    const dialog = document.querySelector('#product-delete-dialog');
-    if (typeof dialog?.showModal !== 'function') return;
+    function bindList() {
+        const stockFilter = document.querySelector('[name="filterStock"]');
+        if (stockFilter) {
+            const quantity = stockFilter.form.elements.stockQuantity;
+            const quantityField = quantity.closest('[data-stock-quantity]');
+            const updateStockFilter = () => {
+                const needsQuantity = stockFilter.value === 'AT_LEAST' || stockFilter.value === 'AT_MOST';
+                quantityField.hidden = !needsQuantity;
+                quantity.disabled = !needsQuantity;
+                quantity.required = needsQuantity;
+            };
+            stockFilter.addEventListener('change', updateStockFilter);
+            updateStockFilter();
+        }
 
-    const name = dialog.querySelector('[data-delete-product-name]');
-    const id = dialog.querySelector('input[name="id"]');
-    dialog.querySelector('[data-delete-cancel]').addEventListener('click', () => dialog.close());
+        const bulk = document.querySelector('#product-bulk');
+        if (bulk) bindBulk(bulk);
+
+    }
+    bindList();
+    document.addEventListener('admin-query-render', bindList);
     document.querySelector('[data-admin-page="products"]').addEventListener('click', (event) => {
+        const dialog = document.querySelector('#product-delete-dialog');
+        if (typeof dialog?.showModal !== 'function') return;
+        const name = dialog.querySelector('[data-delete-product-name]');
+        const id = dialog.querySelector('input[name="id"]');
+        if (event.target.closest('[data-delete-cancel]') && dialog.open) {
+            dialog.close();
+            return;
+        }
         const link = event.target.closest('[data-delete-id]');
         if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

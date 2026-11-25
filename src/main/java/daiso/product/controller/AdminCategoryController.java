@@ -304,6 +304,9 @@ public final class AdminCategoryController {
             boolean create = draft != null ? "1".equals(draft.get("create")) : "1".equals(request.getParameter("new"));
             String parent = create ? (draft != null ? draft.get("parent") : ProductQueries.text(request, "parent", 100)) : "";
             if (id.isEmpty() && !create) id = ProductQueries.text(request, "id", 100);
+            String scopeKey = ProductQueries.text(request, "scope", 10);
+            AdminCategoryModel.Scope scope = scopeKey.isEmpty() ? AdminCategoryModel.Scope.ALL
+                    : AdminCategoryModel.Scope.valueOf(scopeKey);
             AdminCategoryModel model = new AdminCategoryModel(dao.list(connection));
             Node selected = model.get(create ? parent : id);
             if (!create && !id.isEmpty() && selected == null && draft == null) {
@@ -331,11 +334,15 @@ public final class AdminCategoryController {
             List<Entry> entries = !allHistory && ready && selected != null
                     ? history.list(connection, selected.row.id, HISTORY_SIZE + 1, (page - 1) * HISTORY_SIZE) : List.of();
             Entry latest = null;
+            if (!allHistory && selected != null && !create && "GET".equals(request.getMethod())) {
+                request.setAttribute("categoryRecentSales", dao.recentSales(connection, selected.row.id,
+                        java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
+            }
             if (!allHistory && ready && selected != null) {
                 List<Entry> first = page == 1 ? entries : history.list(connection, selected.row.id, 1, 0);
                 if (!first.isEmpty()) latest = first.get(0);
             }
-            request.setAttribute("categoryPage", new Page(request.getContextPath(), keyword, model, selected, form,
+            request.setAttribute("categoryPage", new Page(request.getContextPath(), keyword, scope, model, selected, form,
                     create, ready, deleteReady, entries, latest, page, HISTORY_SIZE, preview == null ? null : preview.impact,
                     preview == null ? "" : preview.token));
             request.setAttribute("categoryCsrf", AdminProductController.token(session));
