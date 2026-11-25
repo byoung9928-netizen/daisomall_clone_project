@@ -19,7 +19,6 @@
         const panel = form.closest('[data-batch-panel]');
         const boxes = [...root.querySelectorAll('[data-batch-product]')];
         const clear = panel.querySelector('[data-batch-clear]');
-        const count = panel.querySelector('[data-batch-count]');
         const modeField = panel.querySelector('[data-batch-mode]');
         const sharedField = panel.querySelector('[data-batch-shared]');
         const individualFields = panel.querySelector('[data-batch-individual]');
@@ -29,15 +28,22 @@
         const dialog = panel.querySelector('[data-batch-dialog]');
         const previewButton = form.querySelector('button[type="submit"]');
         const { operation, amountMode, amount, reason, destination } = form.elements;
-        const drafts = new Map();
-        let pendingPreview;
+        const selection = window.DaisoAdminBatchSelection.bind({
+            form, panel, boxes, selectAll, onChange: () => { changed(); refresh(); }
+        });
+        const saved = selection.draft;
+        const drafts = saved.amounts ??= new Map();
+        if (saved.operation) operation.value = saved.operation;
+        if (saved.mode) amountMode.value = saved.mode;
+        reason.value = saved.reason || '';
+        if (destination) destination.value = saved.destination || '';
         let currentOperation = operation.value;
 
-        const checked = () => boxes.filter(box => box.checked);
         const draft = () => {
             if (!drafts.has(currentOperation)) drafts.set(currentOperation, { shared: '', individual: new Map() });
             return drafts.get(currentOperation);
         };
+        amount.value = draft().shared;
 
         form.noValidate = true;
         clear.hidden = false;
@@ -69,20 +75,14 @@
                 status.textContent = message;
                 status.hidden = false;
             }
-            (field || status).focus();
+            (field || status).focus({ preventScroll: true });
         }
 
         function refresh() {
-            const selected = checked();
+            const selected = selection.values();
             const transfer = operation.value === 'TRANSFER';
             const individual = !transfer && amountMode.value === 'INDIVIDUAL';
             const [amountLabel, reasonLabel, hint] = operations[operation.value];
-            panel.hidden = selected.length === 0;
-            count.textContent = '상품 ' + selected.length + '개 선택';
-            selectAll.checked = boxes.length > 0 && selected.length === boxes.length;
-            selectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
-            for (const box of boxes) box.closest('tr').toggleAttribute('data-batch-selected', box.checked);
-
             modeField.hidden = transfer;
             amountMode.disabled = transfer;
             sharedField.hidden = individual;
@@ -99,15 +99,15 @@
             individualFields.replaceChildren();
 
             if (!individual) return;
-            for (const box of selected) {
+            for (const product of selected) {
                 const line = document.createElement('div');
                 line.className = 'inventory-batch-item';
                 const item = document.createElement('div');
                 const name = document.createElement('strong');
-                name.textContent = box.dataset.name;
+                name.textContent = product.name;
                 const stock = document.createElement('small');
-                stock.textContent = '현재 재고 ' + box.dataset.stock + '개';
-                if (operation.value === 'THRESHOLD') stock.textContent += ' · 기존 부족 기준 ' + box.dataset.threshold + '개';
+                stock.textContent = (selection.isVisible(product.id) ? '현재 재고 ' : '마지막 조회 재고 ') + product.stock + '개';
+                if (operation.value === 'THRESHOLD') stock.textContent += ' · 기존 부족 기준 ' + product.threshold + '개';
                 item.append(name, stock);
                 const label = document.createElement('label');
                 label.className = 'field';
@@ -119,10 +119,10 @@
                 input.step = '1';
                 input.inputMode = 'numeric';
                 input.required = true;
-                input.name = 'amount.' + box.value;
-                input.value = draft().individual.get(box.value) || '';
-                input.setAttribute('aria-label', box.dataset.name + ' ' + amountLabel);
-                input.addEventListener('input', () => draft().individual.set(box.value, input.value));
+                input.name = 'amount.' + product.id;
+                input.value = draft().individual.get(product.id) || '';
+                input.setAttribute('aria-label', product.name + ' ' + amountLabel);
+                input.addEventListener('input', () => draft().individual.set(product.id, input.value));
                 label.append(input);
                 line.append(item, label);
                 individualFields.append(line);
@@ -130,52 +130,48 @@
         }
 
         function changed() {
-            pendingPreview?.abort();
+            form.dispatchEvent(new Event('admin-batch-input-changed', { bubbles: true }));
             clearError();
         }
 
-        for (const box of boxes) box.addEventListener('change', () => {
-            changed();
-            if (checked().length > 20) box.checked = false;
-            refresh();
-        });
-        selectAll.addEventListener('change', () => {
-            const select = selectAll.checked;
-            boxes.forEach((box, index) => { box.checked = select && index < 20; });
-            changed();
-            refresh();
-        });
         function resetSelection() {
-            boxes.forEach(box => { box.checked = false; });
             drafts.clear();
+            delete saved.operation;
+            delete saved.mode;
+            delete saved.reason;
+            delete saved.destination;
             form.reset();
             currentOperation = operation.value;
-            changed();
-            refresh();
+            selection.clear();
         }
         clear.addEventListener('click', () => {
             resetSelection();
-            selectAll.focus();
+            (selectAll.hidden ? root.querySelector('[data-admin-query-form] input[type="search"]') : selectAll)?.focus();
         });
         form.addEventListener('admin-batch-reset', resetSelection);
         form.addEventListener('input', changed);
         amount.addEventListener('input', () => { draft().shared = amount.value; });
+        reason.addEventListener('input', () => { saved.reason = reason.value; });
+        destination?.addEventListener('change', () => { saved.destination = destination.value; changed(); });
         operation.addEventListener('change', () => {
-            currentOperation = operation.value;
+            currentOperation = saved.operation = operation.value;
             amount.value = draft().shared;
             changed();
             refresh();
         });
         amountMode.addEventListener('change', () => {
+            saved.mode = amountMode.value;
             changed();
             refresh();
         });
 
         function validate() {
-            const selected = checked();
+            const selected = selection.values();
             const type = operation.value;
             const label = operations[type][0];
-            if (!selected.length || selected.length > 20) return [selectAll, '현재 페이지에서 상품을 1~20개 선택해 주세요.'];
+            if (!selected.length || selected.length > selection.limit) {
+                return [selectAll, '전체 페이지에서 상품을 1~' + selection.limit + '개 선택해 주세요.'];
+            }
             if (type === 'TRANSFER') {
                 if (selected.length !== 1) return [selectAll, '매장 간 이동은 상품 하나만 선택해 주세요.'];
                 if (!destination.value || destination.value === form.elements.store.value) {
@@ -183,37 +179,25 @@
                 }
             }
             if (!reason.value.trim()) return [reason, operations[type][1] + '를 입력해 주세요.'];
-            for (const box of selected) {
-                const input = amount.disabled ? form.elements.namedItem('amount.' + box.value) : amount;
+            for (const product of selected) {
+                const input = amount.disabled ? form.elements.namedItem('amount.' + product.id) : amount;
                 const value = input.valueAsNumber;
                 if (!input.value && !input.validity.badInput) return [input, label + '을 입력해 주세요.'];
                 if (!Number.isInteger(value) || value < 1 || value > maxAmount) {
                     return [input, '1~2,147,483,647 사이의 정수를 입력해 주세요.'];
                 }
-                if ((type === 'ISSUE' || type === 'TRANSFER') && value > Number(box.dataset.stock)) {
-                    return [input, box.dataset.name + '의 현재 재고보다 많은 수량을 출고할 수 없습니다.'];
+                if (!selection.isVisible(product.id)) continue;
+                if ((type === 'ISSUE' || type === 'TRANSFER') && value > Number(product.stock)) {
+                    return [input, product.name + '의 현재 재고보다 많은 수량을 출고할 수 없습니다.'];
                 }
-                if (type === 'RECEIVE' && value + Number(box.dataset.stock) > maxAmount) {
+                if (type === 'RECEIVE' && value + Number(product.stock) > maxAmount) {
                     return [input, '입고 후 재고가 허용 범위를 벗어납니다.'];
                 }
             }
             return null;
         }
 
-        function nativePreview() {
-            form.dataset.nativeSubmit = 'true';
-            form.requestSubmit(previewButton);
-        }
-
-        function showPreview(preview) {
-            root.dispatchEvent(new CustomEvent('admin-batch-preview', {
-                detail: { dialog, preview, opener: previewButton, noticeId: 'inventory-batch-result',
-                    refreshLabel: '최신 재고 보기' }
-            }));
-        }
-
-        form.addEventListener('submit', async event => {
-            if (form.dataset.nativeSubmit) return;
+        form.addEventListener('submit', event => {
             const error = validate();
             if (error) {
                 event.preventDefault();
@@ -225,37 +209,14 @@
                 return;
             }
             event.preventDefault();
-            if (pendingPreview || root.querySelector('[data-admin-query-content][aria-busy="true"]')) return;
             clearError();
-            const controller = new AbortController();
-            pendingPreview = controller;
-            previewButton.disabled = true;
-            let fallback = false;
-            try {
-                const response = await fetch(form.action, {
-                    method: 'POST', body: new URLSearchParams(new FormData(form)),
-                    cache: 'no-store', signal: controller.signal
-                });
-                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
-                if (!form.isConnected || controller.signal.aborted) return;
-                const error = html.querySelector('[data-batch-server-error]');
-                const preview = html.querySelector('[data-batch-preview]');
-                if (error) {
-                    const name = error.dataset.field;
-                    const field = name === 'batchProduct' ? selectAll : form.elements.namedItem(name);
-                    showError(field, error.textContent.trim());
-                } else if (response.ok && preview) {
-                    showPreview(preview);
-                } else {
-                    fallback = true;
-                }
-            } catch {
-                fallback = !controller.signal.aborted;
-            } finally {
-                pendingPreview = undefined;
-                previewButton.disabled = false;
-                if (fallback && form.isConnected) nativePreview();
-            }
+            form.dispatchEvent(new CustomEvent('admin-batch-request-preview', {
+                bubbles: true,
+                detail: { dialog, opener: previewButton, noticeId: 'inventory-batch-result',
+                    refreshLabel: '최신 재고 보기',
+                    showError: (name, message) => showError(
+                        name === 'batchProduct' ? selectAll : form.elements.namedItem(name), message) }
+            }));
         });
         refresh();
     }

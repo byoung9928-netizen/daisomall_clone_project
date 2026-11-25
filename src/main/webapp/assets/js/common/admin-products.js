@@ -131,27 +131,21 @@
         const root = form.closest('[data-admin-query]');
         const checkboxes = [...form.elements].filter(input => input.name === 'selectedProduct');
         const selectAll = root.querySelector('[data-bulk-select-all]');
-        const count = form.querySelector('[data-bulk-count]');
         const clear = form.querySelector('[data-batch-clear]');
         const status = form.querySelector('[data-product-bulk-error]');
         const opener = form.querySelector('button[type="submit"]');
         const dialog = root.querySelector('#product-bulk-dialog');
         const type = form.elements.bulkType;
+        const selection = window.DaisoAdminBatchSelection.bind({
+            form, panel: form, boxes: checkboxes, selectAll, onChange: edited
+        });
+        const saved = selection.draft;
+        for (const [name, value] of Object.entries(saved)) form.elements.namedItem(name).value = value;
         const targets = { STATUS: 'targetStatus', PRICE: 'targetPrice', CATEGORY: 'targetCategory' };
-        let pending;
         let invalidField;
         form.noValidate = true;
-        selectAll.hidden = clear.hidden = false;
-        root.querySelector('[data-bulk-select-heading]').hidden = true;
-
-        function refreshSelection() {
-            const total = checkboxes.filter(input => input.checked).length;
-            count.textContent = '상품 ' + total + '개 선택';
-            form.hidden = total === 0;
-            selectAll.checked = total === checkboxes.length;
-            selectAll.indeterminate = total > 0 && total < checkboxes.length;
-            for (const box of checkboxes) box.closest('tr').toggleAttribute('data-batch-selected', box.checked);
-        }
+        clear.hidden = false;
+        root.querySelector('[data-bulk-select-heading]').hidden = checkboxes.length > 0;
 
         function updateType() {
             for (const field of form.querySelectorAll('[data-bulk-field]')) {
@@ -189,33 +183,34 @@
         }
 
         function edited() {
-            pending?.abort();
+            form.dispatchEvent(new Event('admin-batch-input-changed', { bubbles: true }));
             clearError();
         }
 
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(box => { box.checked = selectAll.checked; });
-            edited();
-            refreshSelection();
-        });
-        checkboxes.forEach(box => box.addEventListener('change', () => { edited(); refreshSelection(); }));
         function resetSelection() {
-            checkboxes.forEach(box => { box.checked = false; });
+            for (const name of Object.keys(saved)) delete saved[name];
             form.reset();
-            edited();
+            selection.clear();
             updateType();
-            refreshSelection();
         }
         clear.addEventListener('click', () => {
             resetSelection();
-            selectAll.focus();
+            (selectAll.hidden ? root.querySelector('[data-admin-query-form] input[type="search"]') : selectAll)?.focus();
         });
         form.addEventListener('admin-batch-reset', resetSelection);
-        form.addEventListener('input', edited);
-        type.addEventListener('change', () => { edited(); updateType(); });
+        form.addEventListener('input', event => {
+            if (event.target.name === 'targetPrice') saved.targetPrice = event.target.value;
+            if (event.target.form === form) edited();
+        });
+        form.addEventListener('change', event => {
+            if (event.target.tagName !== 'SELECT') return;
+            saved[event.target.name] = event.target.value;
+            edited();
+            updateType();
+        });
 
         function validate() {
-            if (!checkboxes.some(box => box.checked)) return ['selectedProduct', '변경할 상품을 선택해 주세요.'];
+            if (!selection.size()) return ['selectedProduct', '변경할 상품을 선택해 주세요.'];
             const name = targets[type.value];
             if (!name) return ['bulkType', '일괄 변경 항목을 선택해 주세요.'];
             const field = form.elements.namedItem(name);
@@ -230,13 +225,7 @@
             return null;
         }
 
-        function discard(confirmation) {
-            const body = new URLSearchParams(new FormData(confirmation));
-            body.set('bulkAction', 'cancel');
-            fetch(confirmation.action, { method: 'POST', body, keepalive: true }).catch(() => {});
-        }
-
-        form.addEventListener('submit', async event => {
+        form.addEventListener('submit', event => {
             clearError();
             const issue = validate();
             if (issue) {
@@ -249,37 +238,11 @@
                 return;
             }
             event.preventDefault();
-            if (pending || root.querySelector('[data-admin-query-content][aria-busy="true"]')) return;
-            const attempt = new AbortController();
-            pending = attempt;
-            opener.disabled = true;
-            try {
-                const response = await fetch(form.action, {
-                    method: 'POST', body: new URLSearchParams(new FormData(form)),
-                    cache: 'no-store', signal: attempt.signal
-                });
-                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
-                const preview = html.querySelector('[data-batch-preview]');
-                if (!form.isConnected || attempt.signal.aborted) return;
-                if (response.ok && preview) {
-                    root.dispatchEvent(new CustomEvent('admin-batch-preview', {
-                        detail: { dialog, preview, opener, noticeId: 'product-bulk-result',
-                            refreshLabel: '최신 상품 목록 보기', discard }
-                    }));
-                } else {
-                    const error = html.querySelector('[data-batch-server-error]');
-                    showError(error?.dataset.field, error?.textContent.trim()
-                        || (response.status === 403 ? '관리자 로그인과 요청 확인 정보를 확인해 주세요.'
-                            : '미리보기를 불러오지 못했습니다. 다시 시도해 주세요.'));
-                }
-            } catch {
-                if (!attempt.signal.aborted) showError(null, '미리보기에 연결하지 못했습니다. 다시 시도해 주세요.');
-            } finally {
-                pending = undefined;
-                opener.disabled = false;
-            }
+            form.dispatchEvent(new CustomEvent('admin-batch-request-preview', {
+                bubbles: true,
+                detail: { dialog, opener, showError, noticeId: 'product-bulk-result', refreshLabel: '최신 상품 목록 보기' }
+            }));
         });
-        refreshSelection();
         updateType();
     }
 

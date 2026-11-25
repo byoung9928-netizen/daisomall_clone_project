@@ -44,6 +44,47 @@ public class ProductDAO {
         return queryAdminProducts(conn, filter, limit, offset);
     }
 
+    List<AdminSuggestion> findAdminSuggestions(Connection conn, AdminProductFilter filter) throws SQLException {
+        if (filter.keyword.isEmpty()) return List.of();
+        AdminScope scope = adminScope(filter, true);
+        String sql = scope.prefix + "SELECT p.product_id, p.name, p.product_code, p.price, p.stock_quantity, p.image_url"
+                + (filter.onlineInventory ? ", p.status, p.low_stock_threshold" : "") + scope.from + scope.where
+                + " ORDER BY CASE WHEN p.product_code = ? OR p.product_id = ? OR p.name = ? OR p.brand = ? THEN 0 "
+                + "WHEN LOCATE(?, p.name) = 1 OR LOCATE(?, p.product_code) = 1 "
+                + "OR LOCATE(?, p.product_id) = 1 OR LOCATE(?, p.brand) = 1 THEN 1 ELSE 2 END, "
+                + "CHAR_LENGTH(p.name), p.name, p.product_id LIMIT 10";
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, scope.parameters);
+            for (int i = 1; i <= 8; i++) query.setString(scope.parameters.size() + i, filter.keyword);
+            try (ResultSet rows = query.executeQuery()) {
+                List<AdminSuggestion> matches = new ArrayList<>();
+                while (rows.next()) matches.add(new AdminSuggestion(rows, filter.onlineInventory));
+                return matches;
+            }
+        }
+    }
+
+    static final class AdminSuggestion {
+        final String id;
+        final String name;
+        final String code;
+        final String image;
+        final int price;
+        final int stock;
+        final String stockStatus;
+
+        private AdminSuggestion(ResultSet row, boolean online) throws SQLException {
+            id = row.getString("product_id");
+            name = row.getString("name");
+            code = row.getString("product_code");
+            image = row.getString("image_url");
+            price = row.getInt("price");
+            stock = row.getInt("stock_quantity");
+            stockStatus = online ? OnlineStockState.of(row.getString("status"), stock,
+                    row.getInt("low_stock_threshold")).label : "";
+        }
+    }
+
     // ===== 엑셀에서도 같은 상품·재고 필터와 정렬을 사용 =====
     List<ProductDTO> findAdminProductsForExport(Connection conn, AdminProductFilter filter) throws SQLException {
         return queryAdminProducts(conn, filter, null, 0).products;
@@ -114,6 +155,10 @@ public class ProductDAO {
             terms.add(filter.category);
         }
         scope.append(" WHERE 1 = 1");
+        if (!filter.productId.isEmpty()) {
+            scope.append(" AND p.product_id = ?");
+            terms.add(filter.productId);
+        }
         if (!filter.keyword.isEmpty()) {
             scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
                     + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0)");

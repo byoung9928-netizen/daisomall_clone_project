@@ -3,17 +3,24 @@
     if (!root) return;
     const content = root.querySelector('[data-admin-query-content]');
     const error = root.querySelector('[data-admin-query-error]');
+    const route = new URL(root.dataset.adminQueryRoute, location.origin);
     let committed = new URL(location.href);
+    const initialEntry = committed.href;
     let pending;
     let dirtyForm;
+    const pendingPreviews = new WeakMap();
 
     root.addEventListener('input', event => {
         const form = event.target.closest('[data-admin-draft]');
         if (form) dirtyForm = form;
     });
+    function hasBatchDraft() {
+        return window.DaisoAdminBatchSelection?.hasSelection()
+            && !root.querySelector('[data-batch-form][data-native-submit], #product-bulk[data-native-submit]');
+    }
+
     function hasDraft() {
-        return dirtyForm?.isConnected || (root.querySelector('[data-batch-product]:checked, input[form="product-bulk"]:checked')
-            && !root.querySelector('[data-batch-form][data-native-submit], #product-bulk[data-native-submit]'));
+        return dirtyForm?.isConnected || hasBatchDraft();
     }
 
     window.addEventListener('beforeunload', event => {
@@ -22,8 +29,8 @@
         event.returnValue = '';
     });
 
-    function canLeave() {
-        return !hasDraft() || window.confirm('이동하면 현재 선택과 저장하지 않은 입력이 사라집니다. 이동할까요?');
+    function confirmDiscard() {
+        return window.confirm('이동하면 현재 선택과 저장하지 않은 입력이 사라집니다. 이동할까요?');
     }
 
     function workspaceTable() {
@@ -40,10 +47,31 @@
         document.dispatchEvent(new Event('admin-query-render'));
     }
 
+    function workspacePath(url) {
+        return url.pathname.replace(/;jsessionid=[^/;]*/gi, '');
+    }
+
+    function isWorkspace(url) {
+        return url.origin === route.origin && workspacePath(url) === route.pathname;
+    }
+
+    function canonicalEntry(entry) {
+        if (isWorkspace(entry)) return entry;
+        const target = new URL(route);
+        target.search = entry.search;
+        target.searchParams.delete('view');
+        target.hash = entry.hash;
+        return target;
+    }
+
     async function fetchWorkspace(url, signal) {
+        if (!isWorkspace(url)) throw new Error();
         const response = await fetch(url, { signal, cache: 'no-store' });
+        if (response.status === 403 || response.status === 401) throw new Error('auth');
+        if (response.status === 400) throw new Error('filters');
+        if (!response.ok) throw new Error('server');
         const destination = new URL(response.url);
-        if (!response.ok || destination.origin !== committed.origin || destination.pathname !== committed.pathname) {
+        if (!isWorkspace(destination)) {
             throw new Error();
         }
         const html = new DOMParser().parseFromString(await response.text(), 'text/html');
@@ -105,8 +133,42 @@
         }
     }
 
-    root.addEventListener('admin-batch-preview', event => {
-        const { dialog, preview, opener, noticeId, refreshLabel, discard } = event.detail;
+    root.addEventListener('admin-batch-input-changed', event => pendingPreviews.get(event.target)?.abort());
+
+    root.addEventListener('admin-batch-request-preview', async event => {
+        const form = event.target;
+        const { opener, showError } = event.detail;
+        if (pendingPreviews.has(form) || content.hasAttribute('aria-busy')) return;
+        const attempt = new AbortController();
+        pendingPreviews.set(form, attempt);
+        opener.disabled = true;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST', body: new URLSearchParams(new FormData(form)),
+                cache: 'no-store', signal: attempt.signal
+            });
+            const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+            if (!form.isConnected || attempt.signal.aborted) return;
+            const preview = html.querySelector('[data-batch-preview]');
+            if (response.ok && preview) {
+                openBatchPreview({ ...event.detail, preview });
+            } else {
+                const failure = html.querySelector('[data-batch-server-error]');
+                showError(failure?.dataset.field, failure?.textContent.trim()
+                    || (response.status === 403 ? '관리자 로그인과 요청 확인 정보를 확인해 주세요.'
+                        : '미리보기를 불러오지 못했습니다. 다시 시도해 주세요.'));
+            }
+        } catch {
+            if (form.isConnected && !attempt.signal.aborted) {
+                showError(null, '미리보기에 연결하지 못했습니다. 다시 시도해 주세요.');
+            }
+        } finally {
+            pendingPreviews.delete(form);
+            opener.disabled = false;
+        }
+    });
+
+    function openBatchPreview({ dialog, preview, opener, noticeId, refreshLabel }) {
         dialog.replaceChildren(document.importNode(preview, true));
         const close = dialog.querySelector('[data-batch-close]');
         const revise = dialog.querySelector('[data-batch-revise]');
@@ -118,7 +180,11 @@
         dialog.addEventListener('cancel', preventDismiss);
         dialog.addEventListener('close', () => {
             dialog.removeEventListener('cancel', preventDismiss);
-            if (!attempted && discard) discard(confirmation);
+            if (!attempted) {
+                const body = new URLSearchParams(new FormData(confirmation));
+                body.set('bulkAction', 'cancel');
+                fetch(confirmation.action, { method: 'POST', body, keepalive: true }).catch(() => {});
+            }
             dialog.replaceChildren();
             if (opener.isConnected) opener.focus({ preventScroll: true });
         }, { once: true });
@@ -146,10 +212,10 @@
                 if (!response.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) throw new Error();
                 const result = await response.json();
                 if (response.ok && result.success === true && typeof result.message === 'string') {
-                    let url = committed;
+                    let url = canonicalEntry(committed);
                     try {
                         const target = new URL(result.listUrl, location.origin);
-                        if (target.origin === committed.origin && target.pathname === committed.pathname) url = target;
+                        if (isWorkspace(target)) url = target;
                     } catch { /* Keep the current list URL. */ }
                     const position = workspaceScroll();
                     dialog.close();
@@ -178,11 +244,12 @@
         });
         dialog.showModal();
         dialog.querySelector('h1').focus();
-    });
+    }
 
     async function navigate(url, restore = false, filterForm) {
         if (url.href === pending?.url.href || (!pending && url.href === committed.href)) return;
-        if (!canLeave()) {
+        const hasEditorDraft = dirtyForm?.isConnected;
+        if (hasEditorDraft && !confirmDiscard()) {
             if (restore) history.replaceState(null, '', committed);
             filterForm?.reset();
             return;
@@ -195,10 +262,15 @@
         try {
             const { next, destination } = await fetchWorkspace(url, request.controller.signal);
             if (pending !== request) return;
+            if (!hasEditorDraft && hasBatchDraft() && window.DaisoAdminBatchSelection.changesStore(next) && !confirmDiscard()) {
+                if (restore) history.replaceState(null, '', committed);
+                filterForm?.reset();
+                return;
+            }
             destination.hash = url.hash;
 
             if (!restore) history.pushState(null, '', destination);
-            else if (destination.href !== url.href) history.replaceState(null, '', destination);
+            else if (destination.href !== location.href) history.replaceState(null, '', destination);
             render(next, destination);
             if (url.hash) {
                 let id = url.hash.slice(1);
@@ -210,9 +282,13 @@
                     anchor.scrollIntoView({ block: 'nearest' });
                 }
             }
-        } catch {
+        } catch (failure) {
             if (pending !== request) return;
-            error.textContent = '목록을 불러오지 못했습니다. 기존 결과를 유지합니다.';
+            const messages = {
+                auth: '관리자 로그인이 만료되었거나 조회 권한이 없습니다. 다시 로그인해 주세요.',
+                filters: '검색 조건을 확인해 주세요. 현재 목록은 유지됩니다.'
+            };
+            error.textContent = messages[failure.message] || '목록을 불러오지 못했습니다. 기존 결과를 유지합니다.';
             error.hidden = false;
             if (restore) history.replaceState(null, '', committed);
         } finally {
@@ -224,6 +300,7 @@
     }
 
     root.addEventListener('submit', event => {
+        if (event.defaultPrevented) return;
         const form = event.target;
         if (form.matches('[data-admin-query-form]')) {
             event.preventDefault();
@@ -250,11 +327,14 @@
     root.addEventListener('click', event => {
         if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return;
         const link = event.target.closest('a:is([data-admin-query-link], [data-category-nav], [data-stock-state], .admin-product-pagination a)');
-        if (!link || link.origin !== location.origin || link.pathname !== committed.pathname) return;
+        if (!link || !isWorkspace(new URL(link.href))) return;
         event.preventDefault();
         navigate(new URL(link.href));
     });
-    window.addEventListener('popstate', () => navigate(new URL(location.href), true));
+    window.addEventListener('popstate', () => {
+        const entry = new URL(location.href);
+        navigate(entry.href === initialEntry ? canonicalEntry(entry) : entry, true);
+    });
     window.addEventListener('pageshow', () => {
         root.querySelectorAll('[data-admin-submitting]').forEach(form => delete form.dataset.adminSubmitting);
         root.querySelectorAll('[data-native-submit]').forEach(form => delete form.dataset.nativeSubmit);

@@ -19,20 +19,23 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-json-1" defer></script>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css?v=batch-selection-1">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-selection-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-batch-selection.js?v=batch-selection-1" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory-batch.js?v=batch-json-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory-batch.js?v=batch-selection-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-suggestions.js?v=inventory-suggest-1" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main id="admin-content" class="admin-content store-admin" tabindex="-1" data-admin-query="stores">
+        <main id="admin-content" class="admin-content store-admin" tabindex="-1" data-admin-query="stores" data-admin-query-route="${pageContext.request.contextPath}/app/admin/stores">
             <h1 class="page-title">매장별 재고 관리</h1>
             <p class="error-message" role="alert" data-admin-query-error hidden></p>
             <div data-admin-query-content>
+            <input type="hidden" data-admin-batch-store value="<%= inventoryPage == null ? "" : ProductView.escape(inventoryPage.store) %>">
             <% if (request.getAttribute("inventoryBatchNotice") != null) { %>
                 <p id="inventory-batch-result" class="inventory-success" role="status" tabindex="-1"><%= ProductView.escape(request.getAttribute("inventoryBatchNotice")) %></p>
             <% } %>
@@ -88,9 +91,31 @@
                             <% } %>
                         </select>
                     </label>
-                    <label class="field">상품명·품번
+                    <% if (!inventoryPage.showingHistory && !inventoryPage.showingAssortment) { %>
+                    <div class="field admin-product-suggest" data-admin-suggestions="<%= ProductView.escape(storeRoute) %>/suggestions"
+                         data-suggest-filters="store city category state" data-suggest-stock-label="매장 재고">
+                        <label for="admin-product-query">상품명·품번</label>
+                        <input id="admin-product-query" name="q" type="search" maxlength="100" autocomplete="off"
+                               value="<%= ProductView.escape(inventoryPage.keyword) %>">
+                        <input type="hidden" name="selectedProductId" value="<%= ProductView.escape(inventoryPage.filters.get("selectedProductId")) %>">
+                        <div class="admin-product-suggest-panel" data-admin-suggest-panel hidden>
+                            <p data-admin-suggest-status role="status" hidden></p>
+                            <ul id="admin-product-suggest-list" role="listbox" aria-label="추천 상품"></ul>
+                        </div>
+                    </div>
+                        <label class="field">카테고리
+                            <select name="category">
+                                <option value="">전체 카테고리</option>
+                                <% for (Map.Entry<String, String> category : inventoryPage.categories.entrySet()) { %>
+                                    <option value="<%= ProductView.escape(category.getKey()) %>" <%= category.getKey().equals(inventoryPage.filters.get("category")) ? "selected" : "" %>><%= ProductView.escape(category.getValue()) %></option>
+                                <% } %>
+                            </select>
+                        </label>
+                    <% } else { %>
+                        <label class="field">상품명·품번
                         <input name="q" type="search" maxlength="100" value="<%= ProductView.escape(inventoryPage.keyword) %>">
                     </label>
+                    <% } %>
                     <% if (!inventoryPage.showingHistory && !inventoryPage.showingAssortment) { %>
                         <label class="field">재고 상태
                             <select name="state">
@@ -326,7 +351,7 @@
                                            boolean savedRow = stock.id.equals(savedProduct); %>
                                         <tr id="<%= Page.rowAnchor(stock.id) %>" tabindex="-1"<%= savedRow ? " data-saved-row aria-describedby=\"store-save-result\"" : "" %>>
                                             <% if (activeList) { %><td class="admin-batch-choice"><input type="checkbox" name="batchProduct" form="inventory-batch-form" data-batch-product
-                    value="<%= ProductView.escape(stock.id) %>" aria-label="<%= ProductView.escape(stock.name) %> 선택" data-name="<%= ProductView.escape(stock.name) %>" data-stock="<%= stock.quantity %>" data-threshold="<%= stock.threshold %>"></td><% } %>
+                    value="<%= ProductView.escape(stock.id) %>" aria-label="<%= ProductView.escape(stock.name) %> 선택" data-name="<%= ProductView.escape(stock.name) %>" data-code="<%= ProductView.escape(stock.code) %>" data-stock="<%= stock.quantity %>" data-threshold="<%= stock.threshold %>"></td><% } %>
                 <td><div class="store-stock-product">
                                                 <img src="<%= ProductView.image(inventoryPage.context, stock.image) %>" width="48" height="52" loading="lazy" alt="">
                                                 <div><strong><%= ProductView.escape(stock.name) %></strong><small>품번 <%= ProductView.escape(stock.code) %></small>

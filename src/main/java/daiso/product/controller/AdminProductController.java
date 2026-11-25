@@ -30,6 +30,7 @@ import daiso.product.controller.AdminProductChanges.HistoryPage;
 
 @DaisoController
 public final class AdminProductController {
+    public static final int BULK_LIMIT = 30;
     private static final String ROUTE = "/admin/products";
     private static final String VIEW = "admin/products";
     private static final String CSRF = "adminProductCsrf";
@@ -64,6 +65,18 @@ public final class AdminProductController {
             }
         }
         return show(request, response, session, null);
+    }
+
+    @DaisoGetMapping(ROUTE + "/suggestions")
+    public String suggestions(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
+        return AdminProductSuggestions.respond(request, response, (connection, items) -> {
+            AdminProductFilter filter = AdminProductFilter.readSuggestions(request, STATUSES);
+            for (ProductDAO.AdminSuggestion match : dao.findAdminSuggestions(connection, filter)) {
+                AdminProductSuggestions.add(items, request.getContextPath(), match.id, match.name, match.code,
+                        match.image, match.price, match.stock,
+                        daiso.product.dao.StoreInventoryDAO.State.ofQuantity(match.stock).label);
+            }
+        });
     }
 
     @DaisoGetMapping(ROUTE + "/csv")
@@ -525,8 +538,8 @@ public final class AdminProductController {
     }
 
     private static SortedSet<String> selectedIds(String[] values) {
-        if (values == null || values.length == 0 || values.length > PAGE_SIZE) {
-            throw new IllegalArgumentException("현재 페이지의 상품을 1~30개 선택해 주세요.");
+        if (values == null || values.length == 0 || values.length > BULK_LIMIT) {
+            throw new IllegalArgumentException("전체 페이지에서 상품을 1~" + BULK_LIMIT + "개 선택해 주세요.");
         }
         SortedSet<String> ids = new TreeSet<>();
         for (String id : values) {

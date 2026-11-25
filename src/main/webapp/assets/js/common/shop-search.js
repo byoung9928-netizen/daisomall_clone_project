@@ -7,14 +7,12 @@
     let key = 'daiso.search.' + form.dataset.historyKey;
     let restoringScope = false;
     const cache = new Map();
-    const normalize = value => value.trim().normalize('NFC').toLocaleLowerCase('ko');
+    const composition = window.DaisoSearchComposition.bind(input, refresh);
+    const normalize = value => window.DaisoSearchComposition.normalize(value).toLocaleLowerCase('ko');
     let history = [];
     let timer;
-    let compositionTimer;
     let pending;
     let activeQuery;
-    let composing = false;
-    let imeEnter = false;
     let entries = [];
     let selected = -1;
     function readHistory() {
@@ -154,7 +152,7 @@
     }
 
     function shut() {
-        clearTimeout(compositionTimer);
+        composition.cancelUpdate();
         stop();
         panel.hidden = true;
         input.setAttribute('aria-expanded', 'false');
@@ -223,23 +221,9 @@
     input.addEventListener('focus', refresh);
     input.addEventListener('click', () => { if (panel.hidden) refresh(); });
     input.addEventListener('input', refresh);
-    input.addEventListener('compositionstart', () => { composing = true; });
-    input.addEventListener('compositionupdate', () => {
-        // The browser can dispatch this before updating the field value.
-        clearTimeout(compositionTimer);
-        compositionTimer = setTimeout(() => {
-            if (document.activeElement === input) refresh();
-        }, 0);
-    });
-    input.addEventListener('compositionend', () => {
-        clearTimeout(compositionTimer);
-        composing = false;
-        if (document.activeElement === input) refresh();
-    });
-    input.addEventListener('keyup', event => { if (event.key === 'Enter') imeEnter = false; });
     clear.addEventListener('click', () => { input.value = ''; input.focus(); refresh(); });
     form.addEventListener('submit', event => {
-        if (composing || imeEnter) {
+        if (composition.blocksSubmit()) {
             event.preventDefault();
             return;
         }
@@ -266,14 +250,7 @@
         }
     });
     form.addEventListener('keydown', event => {
-        if (composing || event.isComposing) {
-            if (event.target === input && event.key === 'Enter') imeEnter = true;
-            return;
-        }
-        if (event.target === input && event.key === 'Enter') {
-            if (imeEnter && event.repeat) return;
-            imeEnter = false;
-        }
+        if (event.target === input && composition.ignoreKey(event)) return;
         if (panel.hidden) return;
         if (event.key === 'Escape') {
             event.preventDefault();

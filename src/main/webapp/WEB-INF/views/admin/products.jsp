@@ -25,11 +25,13 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-json-1" defer></script>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css?v=batch-selection-1">
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-selection-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-batch-selection.js?v=batch-selection-1" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js?v=batch-json-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js?v=batch-selection-1" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-suggestions.js?v=inventory-suggest-1" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-wizard.js" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
@@ -37,7 +39,7 @@
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1" data-admin-query="products">
+        <main id="admin-content" class="admin-content" data-admin-page="products" tabindex="-1" data-admin-query="products" data-admin-query-route="${pageContext.request.contextPath}/app/admin/products">
             <h1 class="page-title">상품 관리</h1>
         <% if (daiso.product.controller.ProductController.recommendationDiagnosticsEnabled()) { %>
             <p><a class="button secondary" href="${pageContext.request.contextPath}/app/admin/products/recommendation">시연 회원 추천 분석</a></p>
@@ -89,11 +91,17 @@
                 </nav>
                 <div class="admin-product-toolbar">
                     <form class="admin-product-filters" data-admin-query-form method="get" action="${pageContext.request.contextPath}/app/admin/products">
-                        <label class="field admin-product-filter-row">
-                            <span>상품 검색</span>
-                            <input name="query" type="search" maxlength="120" placeholder="상품명, 품번, 브랜드 또는 ID"
-                                   value="<%= ProductView.escape(filters.get("query")) %>">
-                        </label>
+                        <div class="field admin-product-filter-row admin-product-suggest"
+                             data-suggest-filters="filterCategory filterStatus filterStock stockQuantity" data-suggest-stock-label="온라인 재고" data-admin-suggestions="${pageContext.request.contextPath}/app/admin/products/suggestions">
+                            <label for="admin-product-query">상품 검색</label>
+                            <input id="admin-product-query" name="query" type="search" maxlength="120" autocomplete="off"
+                                   placeholder="상품명, 품번, 브랜드 또는 ID" value="<%= ProductView.escape(filters.get("query")) %>">
+                            <input type="hidden" name="selectedProductId" value="<%= ProductView.escape(filters.get("selectedProductId")) %>">
+                            <div class="admin-product-suggest-panel" data-admin-suggest-panel hidden>
+                                <p data-admin-suggest-status role="status" hidden></p>
+                                <ul id="admin-product-suggest-list" role="listbox" aria-label="추천 상품"></ul>
+                            </div>
+                        </div>
                         <label class="field admin-product-filter-row">
                             <span>카테고리</span>
                             <select name="filterCategory">
@@ -330,7 +338,9 @@
                             <h1 class="page-title" id="product-bulk-title" tabindex="-1">상품 <%= bulkPreview.fieldLabel %> 일괄 변경</h1>
                             <button class="button secondary" type="button" data-batch-close hidden aria-label="미리보기 닫기">×</button>
                         </header>
-                        <p>선택한 상품 <strong><%= bulkPreview.items.size() %>개</strong> · 변경 항목 <strong><%= bulkPreview.fieldLabel %></strong></p>
+                        <div class="batch-preview-summary">
+                            <p>선택한 상품 <strong><%= bulkPreview.items.size() %>개</strong> · 변경 항목 <strong><%= bulkPreview.fieldLabel %></strong></p>
+                        </div>
                         <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품별 변경 전후 비교">
                             <table class="admin-table">
                                 <thead><tr><th scope="col">상품명·품번</th><th scope="col">기존 값</th><th scope="col">변경 후 값</th></tr></thead>
@@ -339,7 +349,7 @@
                                         <tr>
                                             <td><%= ProductView.escape(item.name) %><small>품번 <%= ProductView.escape(item.code) %></small></td>
                                             <td><%= ProductView.escape(item.previousLabel) %></td>
-                                            <td><% if (item.changed) { %><strong class="product-bulk-change"><%= ProductView.escape(bulkPreview.targetLabel) %></strong>
+                                            <td><% if (item.changed) { %><strong class="batch-preview-change"><%= ProductView.escape(bulkPreview.targetLabel) %></strong>
                                                 <% } else { %><%= ProductView.escape(bulkPreview.targetLabel) %><small>변경 없음</small><% } %></td>
                                         </tr>
                                     <% } %>
@@ -359,15 +369,15 @@
                     <p class="admin-count" role="status"><%= request.getAttribute("adminProductCount") %>개 상품
                         <% if (!productRows.isEmpty()) { %> · <%= request.getAttribute("adminProductFirst") %>–<%= request.getAttribute("adminProductLast") %>번째 표시<% } %></p>
                 </div>
-                    <% if (!productRows.isEmpty()) { %>
-                        <form class="admin-panel inventory-batch-panel product-bulk-panel" id="product-bulk"
-                              method="post" action="<%= request.getAttribute("adminProductBulk") %>">
+                        <form class="admin-panel inventory-batch-panel product-bulk-panel" id="product-bulk" data-batch-selection-name="selectedProduct"
+                              data-batch-limit="<%= daiso.product.controller.AdminProductController.BULK_LIMIT %>" method="post" action="<%= request.getAttribute("adminProductBulk") %>">
                             <input type="hidden" name="csrf" value="<%= ProductView.escape(csrf) %>">
                             <header class="inventory-batch-heading">
                                 <h3>상품 일괄 변경</h3>
-                                <output data-bulk-count aria-live="polite">현재 페이지 상품 선택</output>
-                                <button class="button secondary" type="button" data-batch-clear hidden>선택 해제</button>
+                                <output data-batch-count aria-live="polite">현재 페이지 상품 선택</output>
+                                <button class="button secondary" type="button" data-batch-clear hidden>전체 선택 해제</button>
                             </header>
+                            <%@ include file="batch-selection.jspf" %>
                             <div class="inventory-batch-fields">
                             <label class="field"><span>일괄 변경 항목</span>
                                 <select name="bulkType">
@@ -404,7 +414,6 @@
                             <button class="button primary" type="submit">미리보기</button>
                         </form>
                         <dialog class="inventory-batch-dialog product-bulk-dialog" id="product-bulk-dialog" aria-labelledby="product-bulk-title"></dialog>
-                    <% } %>
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품 관리 표 (가로 스크롤 가능)">
                     <table class="admin-table store-stock-table">
                         <caption class="visually-hidden">상품 관리</caption>
@@ -428,6 +437,7 @@
                                    ProductDTO item = row.getKey(); %>
                                 <tr>
                                     <td><input type="checkbox" name="selectedProduct" form="product-bulk"
+                                               data-name="<%= ProductView.escape(item.getName()) %>" data-code="<%= ProductView.escape(item.getProductCode()) %>"
                                                value="<%= ProductView.escape(item.getProductId()) %>"
                                                aria-label="<%= ProductView.escape(item.getName()) %> 선택"></td>
                                     <td><%= ProductView.escape(item.getProductId()) %></td>

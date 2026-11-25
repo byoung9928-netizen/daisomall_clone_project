@@ -22,6 +22,7 @@ import javax.servlet.http.HttpSession;
 
 @DaisoController
 public final class AdminInventoryBatchController {
+    public static final int BATCH_LIMIT = 20;
     private static final String KEY = AdminInventoryBatchController.class.getName();
     private static final String VIEW = "admin/inventory-batch";
     private static final String PREVIEW_KEY = KEY + ".previews";
@@ -59,6 +60,16 @@ public final class AdminInventoryBatchController {
             Map<String, String> filters = returnFilters(request, online);
             request.setAttribute("batchBack", ProductView.url(request.getContextPath(), "/app" + route, filters));
             String token = ProductQueries.text(request, "receipt", 36);
+            if ("cancel".equals(request.getParameter("bulkAction"))) {
+                synchronized (session) {
+                    PreviewPlans previews = (PreviewPlans) session.getAttribute(PREVIEW_KEY);
+                    Plan plan = previews == null ? null : previews.byReceipt.get(token);
+                    if (plan != null && plan.online == online) previews.byReceipt.remove(token);
+                }
+                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                response.flushBuffer();
+                return null;
+            }
             if (token.isEmpty()) {
                 if (json) return AdminBatchResponse.failed(response, 400, "미리보기를 만든 뒤 변경을 확정해 주세요.");
                 Plan plan = preview(request, online, filters);
@@ -140,8 +151,8 @@ public final class AdminInventoryBatchController {
 
     private static Map<String, String> returnFilters(HttpServletRequest request, boolean online) {
         Map<String, String> filters = new LinkedHashMap<>();
-        List<String> names = online ? List.of("q", "category", "state", "sort", "page")
-                : List.of("q", "state", "sort", "store", "city", "page", "storeQuery",
+        List<String> names = online ? List.of("q", "category", "state", "sort", "page", "selectedProductId")
+                : List.of("q", "state", "sort", "store", "city", "page", "storeQuery", "category", "selectedProductId",
                         "compareQ", "compareProduct", "compareCity", "compareSort", "trendDays");
         for (String name : names) filters.put(name, ProductQueries.text(request, name, 120));
         return filters;
@@ -166,8 +177,8 @@ public final class AdminInventoryBatchController {
         }
         if (reason.isEmpty()) throw new InvalidInput("reason", "변경 사유를 입력해 주세요.");
         String[] values = request.getParameterValues("batchProduct");
-        if (values == null || values.length == 0 || values.length > 20) {
-            throw new InvalidInput("batchProduct", "현재 페이지에서 상품을 1~20개 선택해 주세요.");
+        if (values == null || values.length == 0 || values.length > BATCH_LIMIT) {
+            throw new InvalidInput("batchProduct", "전체 페이지에서 상품을 1~" + BATCH_LIMIT + "개 선택해 주세요.");
         }
         TreeSet<String> ids = new TreeSet<>();
         for (String id : values) {
@@ -220,7 +231,7 @@ public final class AdminInventoryBatchController {
                     ProductDTO item = products.findOnlineProduct(connection, id, false);
                     if (item == null || !id.equals(item.getProductId())) throw new IllegalArgumentException("상품을 찾을 수 없습니다.");
                     int before = operation == Operation.THRESHOLD ? item.getLowStockThreshold() : item.getStockQuantity();
-                    lines.add(new Line(id, "", item.getName(), before, checkedAfter(operation, before, amount, field), 0));
+                    lines.add(new Line(id, "", item.getName(), item.getProductCode(), before, checkedAfter(operation, before, amount, field), 0));
                 } else {
                     lines.add(storeLine(connection, stores, store, id, operation, amount, field, "batchProduct"));
                     if (operation == Operation.TRANSFER) {
@@ -263,7 +274,7 @@ public final class AdminInventoryBatchController {
             throw new InvalidInput(storeField, "매장에서 취급하지 않는 상품입니다. 먼저 취급 등록을 완료해 주세요.");
         }
         int before = operation == Operation.THRESHOLD ? item.threshold : item.quantity;
-        return new Line(id, store, item.name, before, checkedAfter(operation, before, amount, quantityField), item.version);
+        return new Line(id, store, item.name, item.code, before, checkedAfter(operation, before, amount, quantityField), item.version);
     }
 
     private int commit(Plan plan, String manager) throws SQLException, NamingException {
@@ -415,15 +426,17 @@ public final class AdminInventoryBatchController {
     public static final class Line {
         public final String store;
         public final String name;
+        public final String code;
         public final int before;
         public final int after;
         private final String id;
         private final long version;
 
-        Line(String id, String store, String name, int before, int after, long version) {
+        Line(String id, String store, String name, String code, int before, int after, long version) {
             this.id = id;
             this.store = store;
             this.name = name;
+            this.code = code;
             this.before = before;
             this.after = after;
             this.version = version;
