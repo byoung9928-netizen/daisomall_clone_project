@@ -252,6 +252,18 @@ public class OrderDAO {
 		        pstmt.executeUpdate();
 		    }
 		}
+		private void reverseDaisoPoints(Connection con, long orderId) throws SQLException{
+			String sql = 
+					"INSERT INTO dasio_point_history "
+					+"(member_id, order_id, point_type,point_amount) "
+					+"SELECT member_id, order_id, 'REVERSE', -point_amount "
+					+"FROM daiso_point_history "
+					+"WHERE order_id = ? AND point_type= 'EARN'";
+			try (PreparedStatement pstmt = con.prepareStatement(sql)){
+				pstmt.setLong(1, orderId);
+				pstmt.executeUpdate();
+			}
+		}
 		public void approvePayment(
 		
 				String memberId,
