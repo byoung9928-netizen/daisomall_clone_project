@@ -16,8 +16,12 @@ public enum OnlineStockState {
     }
 
     public static OnlineStockState of(ProductDTO product) {
-        if (!"AVAILABLE".equals(product.getStatus()) && !"SOLD_OUT".equals(product.getStatus())) return INACTIVE;
-        if (product.getStockQuantity() == 0) return SOLD_OUT;
-        return product.getStockQuantity() <= product.getLowStockThreshold() ? LOW : NORMAL;
+        return of(product.getStatus(), product.getStockQuantity(), product.getLowStockThreshold());
+    }
+
+    static OnlineStockState of(String status, int quantity, int threshold) {
+        if (!"AVAILABLE".equals(status) && !"SOLD_OUT".equals(status)) return INACTIVE;
+        if (quantity == 0) return SOLD_OUT;
+        return quantity <= threshold ? LOW : NORMAL;
     }
 }

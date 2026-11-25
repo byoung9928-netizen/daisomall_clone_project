@@ -46,6 +46,17 @@ public final class OnlineInventoryController {
         return show(request, response, session);
     }
 
+    @DaisoGetMapping(MAPPING + "/suggestions")
+    public String suggestions(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
+        return AdminProductSuggestions.respond(request, response, (connection, items) -> {
+            AdminProductFilter filter = inventoryFilter(request, false);
+            for (ProductDAO.AdminSuggestion match : dao.findAdminSuggestions(connection, filter)) {
+                AdminProductSuggestions.add(items, request.getContextPath(), match.id, match.name,
+                        match.code, match.image, match.price, match.stock, match.stockStatus);
+            }
+        });
+    }
+
     @DaisoPostMapping(MAPPING + "/change")
     public String change(HttpServletRequest request, HttpServletResponse response) throws UnsupportedEncodingException {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -72,6 +83,7 @@ public final class OnlineInventoryController {
             Map<String, String> filters = parameters(ProductQueries.text(request, "q", 120),
                     ProductQueries.text(request, "category", 100), readState(request),
                     ProductQueries.integer(request, "page", 1, 1, 1_000_000), readSort(request, "sort"));
+            filters = ProductView.with(filters, "selectedProductId", ProductQueries.text(request, "selectedProductId", 100));
             int expected = requiredNumber(request, "expected", threshold ? 1 : 0);
             int amount = requiredNumber(request, threshold ? "threshold" : "amount", threshold ? 1 : 0);
             Change operation = threshold ? null : Change.valueOf(ProductQueries.text(request, "operation", 12));
@@ -152,7 +164,7 @@ public final class OnlineInventoryController {
             Map<String, String> categories = dao.findAdminCategories(connection, false);
             if (!category.isEmpty() && !categories.containsKey(category)) throw new IllegalArgumentException();
             String sort = readSort(request, "sort");
-            AdminProductFilter filter = AdminProductFilter.forInventory(keyword, category, STOCK.get(state), sort);
+            AdminProductFilter filter = inventoryFilter(request, true);
             ProductDAO.CatalogPage result = dao.findAdminProducts(connection, filter, PAGE_SIZE, (page - 1) * PAGE_SIZE);
             int pages = Math.max(1, (result.total + PAGE_SIZE - 1) / PAGE_SIZE);
             if (page > pages) {
@@ -160,7 +172,7 @@ public final class OnlineInventoryController {
                 result = dao.findAdminProducts(connection, filter, PAGE_SIZE, (page - 1) * PAGE_SIZE);
             }
             request.setAttribute("onlineInventoryPage",
-                    new Page(request.getContextPath(), result, keyword, category, categories, state, page, pages, sort,
+                    new Page(request.getContextPath(), result, keyword, filter.productId, category, categories, state, page, pages, sort,
                             dao.onlineSummary(connection)));
             request.setAttribute("onlineStockCsrf", AdminProductController.token(session));
             String edit = ProductQueries.text(request, "edit", 100);
@@ -209,12 +221,18 @@ public final class OnlineInventoryController {
     // ===== 온라인 재고 엑셀은 화면과 같은 검색 조건을 해석 =====
     static AdminProductFilter readInventoryFilter(HttpServletRequest request, ProductDAO dao, Connection con)
             throws SQLException {
-        String keyword = ProductQueries.text(request, "q", 120);
-        String category = ProductQueries.text(request, "category", 100);
-        if (!category.isEmpty() && !dao.findAdminCategories(con, false).containsKey(category)) {
+        AdminProductFilter filter = inventoryFilter(request, true);
+        if (!filter.category.isEmpty() && !dao.findAdminCategories(con, false).containsKey(filter.category)) {
             throw new IllegalArgumentException("카테고리를 확인해 주세요.");
         }
-        return AdminProductFilter.forInventory(keyword, category, STOCK.get(readState(request)), readSort(request, "sort"));
+        return filter;
+    }
+
+    private static AdminProductFilter inventoryFilter(HttpServletRequest request, boolean listing) {
+        return AdminProductFilter.forInventory(ProductQueries.text(request, "q", 120),
+                listing ? ProductQueries.text(request, "selectedProductId", 100) : "",
+                ProductQueries.text(request, "category", 100), STOCK.get(readState(request)),
+                listing ? readSort(request, "sort") : "");
     }
 
     private static OnlineStockState readState(HttpServletRequest request) {
@@ -304,7 +322,7 @@ public final class OnlineInventoryController {
         public final int last;
         public final InventoryPagination pagination;
 
-        private Page(String context, ProductDAO.CatalogPage result, String keyword, String category,
+        private Page(String context, ProductDAO.CatalogPage result, String keyword, String productId, String category,
                 Map<String, String> categories, OnlineStockState state, int page, int pages, String sort,
                 Map<OnlineStockState, Long> summary) {
             products = List.copyOf(result.products);
@@ -317,7 +335,7 @@ public final class OnlineInventoryController {
             this.pages = pages;
             this.sort = sort;
             this.summary = summary;
-            filters = parameters(keyword, category, state, page, sort);
+            filters = ProductView.with(parameters(keyword, category, state, page, sort), "selectedProductId", productId);
             resetEditor = ProductView.url(context, ROUTE, filters);
             first = products.isEmpty() ? 0 : (page - 1) * PAGE_SIZE + 1;
             last = products.isEmpty() ? 0 : first + products.size() - 1;
@@ -325,7 +343,7 @@ public final class OnlineInventoryController {
         }
 
         private String pageUrl(String context, int target) {
-            return ProductView.url(context, ROUTE, parameters(keyword, category, state, target, sort));
+            return ProductView.url(context, ROUTE, ProductView.with(filters, "page", target > 1 ? Integer.toString(target) : ""));
         }
 
         public String editUrl(String context, String productId) {

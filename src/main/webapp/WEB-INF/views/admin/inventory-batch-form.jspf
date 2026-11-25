@@ -4,9 +4,11 @@
     <header class="inventory-batch-heading">
         <h3 id="inventory-batch-title">재고 일괄 작업</h3>
         <span data-batch-count aria-live="polite"></span>
-        <button type="button" class="button secondary" data-batch-clear hidden>선택 해제</button>
+        <button type="button" class="button secondary" data-batch-clear hidden>전체 선택 해제</button>
     </header>
-    <form id="inventory-batch-form" method="post" data-batch-form
+    <%@ include file="batch-selection.jspf" %>
+    <form id="inventory-batch-form" method="post" data-batch-form data-batch-selection-name="batchProduct"
+          data-batch-limit="<%= daiso.product.controller.AdminInventoryBatchController.BATCH_LIMIT %>"
           action="<%= ProductView.escape(request.getContextPath() + (storeBatch ? "/app/admin/stores/batch" : "/app/admin/inventory/batch")) %>">
         <input type="hidden" name="csrf" value="<%= ProductView.escape(batchCsrf) %>">
         <% for (Map.Entry<String, String> field : batchFilters.entrySet()) { %>
@@ -50,7 +52,6 @@
         <p id="inventory-batch-hint" class="store-stock-hint" data-batch-hint>선택한 상품에 동일한 수량을 입고합니다.</p>
         <div data-batch-individual hidden></div>
         <p data-batch-error class="error-message" role="alert" tabindex="-1" hidden></p>
-        <p class="store-stock-hint">검색 조건, 페이지 또는 매장을 바꾸면 현재 선택과 입력값이 초기화됩니다.</p>
         <noscript><p class="store-stock-hint">변경 유형에 맞는 수량이나 새 부족 기준을 입력하세요. 선택한 상품에 같은 값이 적용됩니다.</p></noscript>
         <button class="button primary" type="submit">미리보기</button>
     </form>

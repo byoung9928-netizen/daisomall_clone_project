@@ -160,23 +160,93 @@ public final class StoreInventoryDAO {
         return result;
     }
 
-    public List<Stock> inventory(Connection connection, String store, String keyword, State state, int limit, int offset)
+    public static final class InventoryFilter {
+        private final String store;
+        private final String keyword;
+        private final String category;
+        private final String productId;
+        private final State state;
+
+        public InventoryFilter(String store, String keyword, String category, String productId, State state) {
+            this.store = store;
+            this.keyword = keyword;
+            this.category = category;
+            this.productId = productId;
+            this.state = state;
+        }
+
+        private int bind(PreparedStatement statement) throws SQLException {
+            bindScope(statement, store, keyword);
+            int next = 4;
+            if (!category.isEmpty()) statement.setString(next++, category);
+            if (!productId.isEmpty()) statement.setString(next++, productId);
+            return next;
+        }
+    }
+
+    public List<Stock> inventory(Connection connection, InventoryFilter filter, Sort sort, int limit, int offset)
             throws SQLException {
-        return inventory(connection, store, keyword, state, Sort.NAME, limit, offset);
+        String sql = stockFields() + inventoryScope(filter) + " ORDER BY " + sort.order + ", p.product_id LIMIT ? OFFSET ?";
+        List<Stock> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int next = filter.bind(statement);
+            statement.setInt(next, limit);
+            statement.setInt(next + 1, offset);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(readStock(rows));
+            }
+        }
+        return result;
     }
 
-    public List<Stock> inventory(Connection connection, String store, String keyword, State state,
-            Sort sort, int limit, int offset) throws SQLException {
-        return stockPage(connection, inventoryScope(state), store, keyword, sort, limit, offset);
+    public long countInventory(Connection connection, InventoryFilter filter) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*)" + inventoryScope(filter))) {
+            filter.bind(statement);
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
     }
 
-    public long countInventory(Connection connection, String store, String keyword, State state) throws SQLException {
-        return count(connection, inventoryScope(state), store, keyword);
+    public static final class StockSuggestion {
+        public final Stock stock;
+        public final int price;
+
+        private StockSuggestion(ResultSet row) throws SQLException {
+            stock = readStock(row);
+            price = row.getInt("price");
+        }
     }
 
-    private String inventoryScope(State state) {
-        return " FROM store_inventory i JOIN products p ON p.product_id = i.product_id "
-                + "WHERE i.store_id = ? AND i.is_carried = 1" + state.predicate(thresholdExpression()) + STOCK_SEARCH;
+    public List<StockSuggestion> suggestInventory(Connection connection, InventoryFilter filter) throws SQLException {
+        if (filter.keyword.isEmpty()) return List.of();
+        String sql = stockFields() + ", p.price" + inventoryScope(filter)
+                + " ORDER BY CASE WHEN p.product_code = ? OR p.name = ? THEN 0 "
+                + "WHEN LOCATE(?, p.name) = 1 OR LOCATE(?, p.product_code) = 1 THEN 1 ELSE 2 END, "
+                + "CHAR_LENGTH(p.name), p.name, p.product_id LIMIT 10";
+        List<StockSuggestion> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int next = filter.bind(statement);
+            for (int i = 0; i < 4; i++) statement.setString(next + i, filter.keyword);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(new StockSuggestion(rows));
+            }
+        }
+        return result;
+    }
+
+    private String inventoryScope(InventoryFilter filter) {
+        String scope = " FROM store_inventory i JOIN products p ON p.product_id = i.product_id "
+                + "WHERE i.store_id = ? AND i.is_carried = 1" + filter.state.predicate(thresholdExpression()) + STOCK_SEARCH;
+        if (!filter.category.isEmpty()) {
+            scope += " AND p.category_id IN (WITH RECURSIVE descendants AS ("
+                    + "SELECT category_id FROM categories WHERE category_id = ? UNION ALL "
+                    + "SELECT c.category_id FROM categories c JOIN descendants d ON c.parent_id = d.category_id) "
+                    + "SELECT category_id FROM descendants)";
+        }
+        if (!filter.productId.isEmpty()) scope += " AND p.product_id = ?";
+        return scope;
     }
 
     public enum AssortmentFilter {

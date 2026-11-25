@@ -14,7 +14,7 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=canonical-1" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-categories.css">
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-categories.js" defer></script>
@@ -24,7 +24,7 @@
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="product-admin-menu.jspf" %>
-        <main class="admin-content category-admin" id="admin-content" tabindex="-1" data-admin-query="categories">
+        <main class="admin-content category-admin" id="admin-content" tabindex="-1" data-admin-query="categories" data-admin-query-route="${pageContext.request.contextPath}/app/admin/categories">
             <h1 class="page-title">카테고리 관리</h1>
             <p class="error-message" role="alert" data-admin-query-error hidden></p>
             <div data-admin-query-content>
