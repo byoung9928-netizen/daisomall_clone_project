@@ -44,6 +44,47 @@ public class ProductDAO {
         return queryAdminProducts(conn, filter, limit, offset);
     }
 
+    List<AdminSuggestion> findAdminSuggestions(Connection conn, AdminProductFilter filter) throws SQLException {
+        if (filter.keyword.isEmpty()) return List.of();
+        AdminScope scope = adminScope(filter, true);
+        String sql = scope.prefix + "SELECT p.product_id, p.name, p.product_code, p.price, p.stock_quantity, p.image_url"
+                + (filter.onlineInventory ? ", p.status, p.low_stock_threshold" : "") + scope.from + scope.where
+                + " ORDER BY CASE WHEN p.product_code = ? OR p.product_id = ? OR p.name = ? OR p.brand = ? THEN 0 "
+                + "WHEN LOCATE(?, p.name) = 1 OR LOCATE(?, p.product_code) = 1 "
+                + "OR LOCATE(?, p.product_id) = 1 OR LOCATE(?, p.brand) = 1 THEN 1 ELSE 2 END, "
+                + "CHAR_LENGTH(p.name), p.name, p.product_id LIMIT 10";
+        try (PreparedStatement query = conn.prepareStatement(sql)) {
+            bind(query, scope.parameters);
+            for (int i = 1; i <= 8; i++) query.setString(scope.parameters.size() + i, filter.keyword);
+            try (ResultSet rows = query.executeQuery()) {
+                List<AdminSuggestion> matches = new ArrayList<>();
+                while (rows.next()) matches.add(new AdminSuggestion(rows, filter.onlineInventory));
+                return matches;
+            }
+        }
+    }
+
+    static final class AdminSuggestion {
+        final String id;
+        final String name;
+        final String code;
+        final String image;
+        final int price;
+        final int stock;
+        final String stockStatus;
+
+        private AdminSuggestion(ResultSet row, boolean online) throws SQLException {
+            id = row.getString("product_id");
+            name = row.getString("name");
+            code = row.getString("product_code");
+            image = row.getString("image_url");
+            price = row.getInt("price");
+            stock = row.getInt("stock_quantity");
+            stockStatus = online ? OnlineStockState.of(row.getString("status"), stock,
+                    row.getInt("low_stock_threshold")).label : "";
+        }
+    }
+
     // ===== 엑셀에서도 같은 상품·재고 필터와 정렬을 사용 =====
     List<ProductDTO> findAdminProductsForExport(Connection conn, AdminProductFilter filter) throws SQLException {
         return queryAdminProducts(conn, filter, null, 0).products;
@@ -51,27 +92,10 @@ public class ProductDAO {
 
     private CatalogPage queryAdminProducts(Connection conn, AdminProductFilter filter, Integer limit, int offset)
             throws SQLException {
-        String prefix = "";
-        StringBuilder scope = new StringBuilder(" FROM products p");
-        List<Object> terms = new ArrayList<>();
-        if (!filter.category.isEmpty()) {
-            prefix = "WITH RECURSIVE admin_selected AS (SELECT category_id FROM categories WHERE category_id = ? "
-                    + "UNION ALL SELECT c.category_id FROM categories c JOIN admin_selected s ON c.parent_id = s.category_id) ";
-            scope.append(" JOIN admin_selected s ON s.category_id = p.category_id");
-            terms.add(filter.category);
-        }
-        scope.append(" WHERE 1 = 1");
-        if (!filter.keyword.isEmpty()) {
-            scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
-                    + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0)");
-            terms.addAll(Collections.nCopies(4, filter.keyword));
-        }
-        if (!filter.status.isEmpty()) {
-            scope.append(" AND p.status = ?");
-            terms.add(filter.status);
-        }
-        scope.append(filter.stock.predicate);
-        if (filter.stockQuantity != null) terms.add(filter.stockQuantity);
+        AdminScope where = adminScope(filter, true);
+        String prefix = where.prefix;
+        String scope = where.from + where.where;
+        List<Object> terms = where.parameters;
         int total = 0;
         if (limit != null) {
             try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT COUNT(*)" + scope)) {
@@ -82,17 +106,84 @@ public class ProductDAO {
                 }
             }
         }
-        String columns = ADMIN_COLUMNS + (filter.onlineInventory ? ", p.low_stock_threshold" : "");
+        String columns = ADMIN_COLUMNS + (filter.onlineInventory ? ", p.low_stock_threshold" : "")
+                + (limit == null ? ", p.created_at, p.updated_at" : "");
+        String sortingJoin = filter.sort == AdminProductFilter.Sort.REVIEWS ? ACTIVE_REVIEW_STATS
+                : filter.sort == AdminProductFilter.Sort.SALES ? ADMIN_SALES : "";
         String pagination = limit == null ? "" : " LIMIT ? OFFSET ?";
-        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + columns + scope
+        try (PreparedStatement query = conn.prepareStatement(prefix + "SELECT " + columns + where.from + sortingJoin + where.where
                 + " ORDER BY " + filter.sort.orderBy + ", p.product_id" + pagination)) {
             bind(query, terms);
             if (limit != null) {
                 query.setInt(terms.size() + 1, limit);
                 query.setInt(terms.size() + 2, offset);
             }
-            List<ProductDTO> products = readProducts(query, filter.onlineInventory);
+            List<ProductDTO> products = readProducts(query, filter.onlineInventory, limit == null);
             return new CatalogPage(products, limit == null ? products.size() : total);
+        }
+    }
+
+    private static final String ADMIN_SALES = " LEFT JOIN (SELECT i.product_id, SUM(i.quantity) AS units "
+            + "FROM order_items i JOIN orders o ON o.order_id = i.order_id WHERE o.status = 'PAID' "
+            + "AND o.canceled_at IS NULL AND EXISTS (SELECT 1 FROM payment_attempts a WHERE a.order_id = o.order_id "
+            + "AND a.status = 'APPROVED' AND a.tid <> '' AND a.approved_at IS NOT NULL AND a.amount = o.total_amount) "
+            + "GROUP BY i.product_id) admin_sales ON admin_sales.product_id = p.product_id";
+
+    Map<String, Long> adminStatusSummary(Connection conn, AdminProductFilter filter) throws SQLException {
+        AdminScope scope = adminScope(filter, false);
+        Map<String, Long> totals = new LinkedHashMap<>();
+        try (PreparedStatement query = conn.prepareStatement(scope.prefix + "SELECT p.status, COUNT(*)"
+                + scope.from + scope.where + " GROUP BY p.status")) {
+            bind(query, scope.parameters);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) totals.put(rows.getString(1), rows.getLong(2));
+            }
+        }
+        totals.put("", totals.values().stream().mapToLong(Long::longValue).sum());
+        return totals;
+    }
+
+    private static AdminScope adminScope(AdminProductFilter filter, boolean includeStatus) {
+        String prefix = "";
+        StringBuilder from = new StringBuilder(" FROM products p");
+        StringBuilder scope = new StringBuilder();
+        List<Object> terms = new ArrayList<>();
+        if (!filter.category.isEmpty()) {
+            prefix = "WITH RECURSIVE admin_selected AS (SELECT category_id FROM categories WHERE category_id = ? "
+                    + "UNION ALL SELECT c.category_id FROM categories c JOIN admin_selected s ON c.parent_id = s.category_id) ";
+            from.append(" JOIN admin_selected s ON s.category_id = p.category_id");
+            terms.add(filter.category);
+        }
+        scope.append(" WHERE 1 = 1");
+        if (!filter.productId.isEmpty()) {
+            scope.append(" AND p.product_id = ?");
+            terms.add(filter.productId);
+        }
+        if (!filter.keyword.isEmpty()) {
+            scope.append(" AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0 "
+                    + "OR LOCATE(?, p.product_id) > 0 OR LOCATE(?, p.brand) > 0)");
+            terms.addAll(Collections.nCopies(4, filter.keyword));
+        }
+        if (includeStatus && !filter.status.isEmpty()) {
+            scope.append(" AND p.status = ?");
+            terms.add(filter.status);
+        }
+        scope.append(filter.stock.predicate);
+        if (filter.stockQuantity != null) terms.add(filter.stockQuantity);
+        return new AdminScope(prefix, from.toString(), scope.toString(), terms);
+    }
+
+    private static final class AdminScope {
+        final String prefix;
+        final String from;
+        final String where;
+        final List<Object> parameters;
+
+        AdminScope(String prefix, String from, String where, List<Object> parameters) {
+            this.prefix = prefix;
+            this.from = from;
+            this.where = where;
+            this.parameters = parameters;
         }
     }
 
@@ -197,6 +288,23 @@ public class ProductDAO {
             try (ResultSet row = query.executeQuery()) {
                 return row.next() ? readProduct(row) : null;
             }
+        }
+    }
+
+    void updateAdminPrice(Connection conn, String id, int price) throws SQLException {
+        try (PreparedStatement query = conn.prepareStatement("UPDATE products SET price = ? WHERE product_id = ?")) {
+            query.setInt(1, price);
+            query.setString(2, id);
+            query.executeUpdate();
+        }
+    }
+
+    void updateAdminCategory(Connection conn, String id, String category) throws SQLException {
+        try (PreparedStatement query = conn.prepareStatement(
+                "UPDATE products SET category_id = ? WHERE product_id = ?")) {
+            query.setString(1, category);
+            query.setString(2, id);
+            query.executeUpdate();
         }
     }
 
@@ -756,10 +864,19 @@ public class ProductDAO {
     }
 
     private static List<ProductDTO> readProducts(PreparedStatement query, boolean onlineInventory) throws SQLException {
+        return readProducts(query, onlineInventory, false);
+    }
+
+    private static List<ProductDTO> readProducts(PreparedStatement query, boolean onlineInventory, boolean export)
+            throws SQLException {
         List<ProductDTO> products = new ArrayList<>();
         try (ResultSet rows = query.executeQuery()) {
             while (rows.next()) {
                 ProductDTO product = readProduct(rows);
+                if (export) {
+                    product.adminCreatedAt = rows.getObject("created_at", java.time.LocalDateTime.class);
+                    product.adminUpdatedAt = rows.getObject("updated_at", java.time.LocalDateTime.class);
+                }
                 if (onlineInventory) product.setLowStockThreshold(rows.getInt("low_stock_threshold"));
                 products.add(product);
             }

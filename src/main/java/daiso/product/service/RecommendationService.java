@@ -33,7 +33,7 @@ public final class RecommendationService {
     private static final double SIGNAL_CAP = 16;
     private static final int MAX_SEEDS = 48;
 
-    public List<Interest> interests(Collection<Signal> signals, LocalDate today) {
+    public List<Interest> interests(Collection<Signal> signals, LocalDate today, Diagnostic diagnostic) {
         Map<String, EnumMap<Kind, Signal>> grouped = new HashMap<>();
         for (Signal signal : signals) {
             if (weight(signal, today) <= 0) continue;
@@ -47,7 +47,12 @@ public final class RecommendationService {
             double strongest = 0;
             Kind primary = Kind.VIEW;
             for (Signal signal : byKind.values()) {
-                double points = POINTS.get(signal.kind) * weight(signal, today);
+                int base = POINTS.get(signal.kind);
+                double multiplier = weight(signal, today);
+                double points = base * multiplier;
+                if (diagnostic != null) {
+                    diagnostic.signals.add(new SignalScore(id, signal.kind, signal.date, base, multiplier, points));
+                }
                 sum += points;
                 if (points > strongest) {
                     strongest = points;
@@ -59,7 +64,14 @@ public final class RecommendationService {
             result.add(new Interest(id, Math.min(sum, SIGNAL_CAP), primary, recentlyPurchased));
         });
         result.sort(Comparator.comparingDouble((Interest i) -> i.score).reversed().thenComparing(i -> i.id));
-        return List.copyOf(result.subList(0, Math.min(result.size(), MAX_SEEDS)));
+        List<Interest> selected = List.copyOf(result.subList(0, Math.min(result.size(), MAX_SEEDS)));
+        if (diagnostic != null) {
+            Set<String> included = selected.stream().map(interest -> interest.id).collect(Collectors.toSet());
+            diagnostic.signals.removeIf(entry -> !included.contains(entry.id));
+            diagnostic.signals.sort(Comparator.comparing((SignalScore entry) -> entry.id)
+                    .thenComparing(entry -> entry.kind));
+        }
+        return selected;
     }
 
     private static double weight(Signal signal, LocalDate today) {
@@ -70,7 +82,7 @@ public final class RecommendationService {
         return days <= 30 ? .7 : .4;
     }
 
-    public Scope scope(List<Interest> interests, List<ProductDTO> seeds, List<Category> categories) {
+    public Scope scope(List<Interest> interests, List<ProductDTO> seeds, List<Category> categories, Diagnostic diagnostic) {
         Map<String, Category> tree = index(categories);
         Map<String, ProductDTO> products = byId(seeds);
         Map<String, Double> rootScores = new HashMap<>();
@@ -83,6 +95,11 @@ public final class RecommendationService {
         List<String> roots = rootScores.keySet().stream()
                 .sorted(Comparator.<String>comparingDouble(rootScores::get).reversed().thenComparing(id -> id))
                 .limit(5).collect(Collectors.toList());
+        if (diagnostic != null) {
+            rootScores.keySet().stream()
+                    .sorted(Comparator.<String>comparingDouble(rootScores::get).reversed().thenComparing(id -> id))
+                    .forEach(id -> diagnostic.categories.put(tree.get(id).name, rootScores.get(id)));
+        }
         Set<String> leaves = new LinkedHashSet<>();
         Set<String> parents = new LinkedHashSet<>();
         for (ProductDTO seed : seeds) {
@@ -97,7 +114,7 @@ public final class RecommendationService {
 
     public Map<String, String> select(boolean signedIn, List<Interest> interests, List<ProductDTO> seeds,
             List<ProductDTO> candidates, List<ProductDTO> popular, List<ProductDTO> newest,
-            List<Category> categories, Set<String> pickupIds, int limit) {
+            List<Category> categories, Set<String> pickupIds, int limit, Diagnostic diagnostic) {
         Map<String, Category> tree = index(categories);
         Map<String, ProductDTO> seedProducts = byId(seeds);
         Map<String, ProductDTO> pool = byId(candidates);
@@ -167,6 +184,16 @@ public final class RecommendationService {
             recent.add(next);
             if (recent.size() > 5) recent.remove(0);
         }
+        if (diagnostic != null) {
+            for (Ranked rank : backup) {
+                String id = rank.item.getProductId();
+                diagnostic.candidates.add(new Candidate(id, rank.item.getName(), rank.score,
+                        result.getOrDefault(id, rank.reason), result.containsKey(id)));
+            }
+            diagnostic.candidates.sort(Comparator.comparingDouble((Candidate row) -> row.score).reversed()
+                    .thenComparing(row -> row.id));
+            diagnostic.result = new LinkedHashMap<>(result);
+        }
         return result;
     }
 
@@ -229,6 +256,47 @@ public final class RecommendationService {
         Map<String, ProductDTO> result = new LinkedHashMap<>();
         for (ProductDTO item : items) result.putIfAbsent(item.getProductId(), item);
         return result;
+    }
+
+    public static final class Diagnostic {
+        public final List<SignalScore> signals = new ArrayList<>();
+        public final Map<String, Double> categories = new LinkedHashMap<>();
+        public final List<Candidate> candidates = new ArrayList<>();
+        public Map<String, String> result = Map.of();
+    }
+
+    public static final class SignalScore {
+        public final String id;
+        public final Kind kind;
+        public final LocalDate date;
+        public final int base;
+        public final double weight;
+        public final double score;
+
+        private SignalScore(String id, Kind kind, LocalDate date, int base, double weight, double score) {
+            this.id = id;
+            this.kind = kind;
+            this.date = date;
+            this.base = base;
+            this.weight = weight;
+            this.score = score;
+        }
+    }
+
+    public static final class Candidate {
+        public final String id;
+        public final String name;
+        public final double score;
+        public final String reason;
+        public final boolean recommended;
+
+        private Candidate(String id, String name, double score, String reason, boolean recommended) {
+            this.id = id;
+            this.name = name;
+            this.score = score;
+            this.reason = reason;
+            this.recommended = recommended;
+        }
     }
 
     public static final class Interest {

@@ -23,6 +23,18 @@ public final class RecommendationActivityDAO {
         }
     }
 
+    public boolean fixtureMember(Connection connection, String member) throws SQLException {
+        String sql = "SELECT 1 FROM members WHERE member_id = ? AND role = 'MEMBER' "
+                + "AND login_id = CONCAT('demorank', RIGHT(member_id, 4)) "
+                + "AND email = CONCAT(login_id, '@example.invalid')";
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, member);
+            try (ResultSet row = query.executeQuery()) {
+                return row.next();
+            }
+        }
+    }
+
     public List<Signal> findActions(Connection connection, String member, LocalDate since, int limit)
             throws SQLException {
         String sql = "SELECT product_id, activity, MAX(activity_on) AS activity_on FROM ("

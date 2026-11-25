@@ -1,11 +1,13 @@
 package daiso.product.controller;
 
+import java.text.Normalizer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 
 final class AdminProductFilter {
     final String keyword;
+    final String productId;
     final String category;
     final String status;
     final Stock stock;
@@ -15,13 +17,14 @@ final class AdminProductFilter {
 
     private AdminProductFilter(String keyword, String category, String status, Stock stock,
             Integer stockQuantity, Sort sort) {
-        this(keyword, category, status, stock, stockQuantity, sort, false);
+        this(keyword, "", category, status, stock, stockQuantity, sort, false);
     }
 
-    private AdminProductFilter(String keyword, String category, String status, Stock stock,
+    private AdminProductFilter(String keyword, String productId, String category, String status, Stock stock,
             Integer stockQuantity, Sort sort, boolean onlineInventory) {
         this.onlineInventory = onlineInventory;
         this.keyword = keyword;
+        this.productId = productId;
         this.category = category;
         this.status = status;
         this.stock = stock;
@@ -30,22 +33,31 @@ final class AdminProductFilter {
     }
 
     static AdminProductFilter read(HttpServletRequest request, Map<String, String> statuses) {
+        return read(request, statuses, false);
+    }
+
+    static AdminProductFilter readSuggestions(HttpServletRequest request, Map<String, String> statuses) {
+        return read(request, statuses, true);
+    }
+
+    private static AdminProductFilter read(HttpServletRequest request, Map<String, String> statuses, boolean suggestions) {
         String status = ProductQueries.text(request, "filterStatus", 20);
         if (!status.isEmpty() && !statuses.containsKey(status)) throw new IllegalArgumentException();
         String rawStock = ProductQueries.text(request, "filterStock", 20);
         Stock stock = rawStock.isEmpty() ? Stock.ALL : Stock.valueOf(rawStock);
         if (stock.name().startsWith("ONLINE_")) throw new IllegalArgumentException();
         Integer quantity = stock.needsQuantity ? stockQuantity(request) : null;
-        String sort = ProductQueries.text(request, "sort", 20);
+        String sort = suggestions ? "" : ProductQueries.text(request, "sort", 20);
         if ("SHORTAGE".equals(sort)) throw new IllegalArgumentException();
-        return new AdminProductFilter(ProductQueries.text(request, "query", 120),
+        return new AdminProductFilter(Normalizer.normalize(ProductQueries.text(request, "query", 120), Normalizer.Form.NFC),
+                suggestions ? "" : ProductQueries.text(request, "selectedProductId", 100),
                 ProductQueries.text(request, "filterCategory", 100), status,
-                stock, quantity, sort.isEmpty() ? Sort.NEWEST : Sort.valueOf(sort));
+                stock, quantity, sort.isEmpty() ? Sort.NEWEST : Sort.valueOf(sort), false);
     }
 
-    static AdminProductFilter forInventory(String keyword, String category, Stock stock, String sort) {
+    static AdminProductFilter forInventory(String keyword, String productId, String category, Stock stock, String sort) {
         Sort order = "shortage".equals(sort) ? Sort.SHORTAGE : "low".equals(sort) ? Sort.STOCK_ASC : Sort.NAME;
-        return new AdminProductFilter(keyword, category, "", stock, null, order, true);
+        return new AdminProductFilter(Normalizer.normalize(keyword, Normalizer.Form.NFC), productId, category, "", stock, null, order, true);
     }
 
     static AdminProductFilter defaults() {
@@ -55,6 +67,7 @@ final class AdminProductFilter {
     Map<String, String> parameters(int page) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("query", keyword);
+        if (!productId.isEmpty()) values.put("selectedProductId", productId);
         values.put("filterCategory", category);
         values.put("filterStatus", status);
         values.put("filterStock", stock == Stock.ALL ? "" : stock.name());
@@ -108,6 +121,9 @@ final class AdminProductFilter {
 
     enum Sort {
         NEWEST("p.created_at DESC"),
+        UPDATED("p.updated_at DESC"),
+        SALES("COALESCE(admin_sales.units, 0) DESC"),
+        REVIEWS("COALESCE(review_stats.review_count, 0) DESC"),
         NAME("p.name"),
         STOCK_ASC("p.stock_quantity"),
         STOCK_DESC("p.stock_quantity DESC"),

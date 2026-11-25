@@ -35,22 +35,34 @@ public final class AdminCategoryModel {
         return nodes.values().stream().filter(Node::canParent).collect(java.util.stream.Collectors.toUnmodifiableList());
     }
 
-    List<TreeItem> tree(String query, Node selected) {
+    public enum Scope {
+        ALL("전체"), HIDDEN("비노출만"), EMPTY("상품 없음");
+
+        public final String label;
+
+        Scope(String label) { this.label = label; }
+    }
+
+    List<TreeItem> tree(String query, Node selected, Scope scope) {
         List<TreeItem> result = new ArrayList<>();
         String keyword = query.toLowerCase(Locale.ROOT);
-        for (Node root : roots) append(root, keyword, selected, false, result);
+        for (Node root : roots) append(root, keyword, selected, scope, false, result);
         return result;
     }
 
-    private static boolean append(Node node, String keyword, Node selected, boolean ancestorMatch, List<TreeItem> result) {
+    private static boolean append(Node node, String keyword, Node selected, Scope scope,
+            boolean ancestorMatch, List<TreeItem> result) {
         int start = result.size();
-        boolean ownMatch = keyword.isEmpty() || ancestorMatch || node.row.name.toLowerCase(Locale.ROOT).contains(keyword)
-                || node.row.id.toLowerCase(Locale.ROOT).contains(keyword);
-        for (Node child : node.children) append(child, keyword, selected, ownMatch, result);
+        boolean directMatch = !keyword.isEmpty() && (node.row.name.toLowerCase(Locale.ROOT).contains(keyword)
+                || node.row.id.toLowerCase(Locale.ROOT).contains(keyword));
+        boolean keywordMatch = keyword.isEmpty() || ancestorMatch || directMatch;
+        boolean ownMatch = keywordMatch && (scope == Scope.ALL || scope == Scope.HIDDEN && !node.effectiveVisible
+                || scope == Scope.EMPTY && node.subtreeProducts == 0);
+        for (Node child : node.children) append(child, keyword, selected, scope, keywordMatch, result);
         boolean hasResults = result.size() > start;
         boolean selectedPath = selected != null && selected.descendsFrom(node);
-        if (!ownMatch && !hasResults && !selectedPath) return false;
-        result.add(start, new TreeItem(node, hasResults, hasResults && (!keyword.isEmpty() || selectedPath)));
+        if (!ownMatch && !hasResults && !(selectedPath && scope == Scope.ALL)) return false;
+        result.add(start, new TreeItem(node, hasResults, hasResults && (!keyword.isEmpty() || selectedPath || scope != Scope.ALL), directMatch));
         return true;
     }
 
@@ -110,10 +122,13 @@ public final class AdminCategoryModel {
         public final boolean expandable;
         public final boolean open;
 
-        private TreeItem(Node node, boolean expandable, boolean open) {
+        public final boolean matches;
+
+        private TreeItem(Node node, boolean expandable, boolean open, boolean matches) {
             this.node = node;
             this.expandable = expandable;
             this.open = open;
+            this.matches = matches;
         }
     }
 
@@ -160,6 +175,7 @@ public final class AdminCategoryModel {
 
     public static final class Page {
         public final String keyword;
+        public final Scope scope;
         public final Node selected;
         public final List<TreeItem> tree;
         public final List<Node> parents;
@@ -183,11 +199,12 @@ public final class AdminCategoryModel {
         public final String revision;
         private final String context;
 
-        Page(String context, String keyword, AdminCategoryModel model, Node selected, Map<String, String> form,
+        Page(String context, String keyword, Scope scope, AdminCategoryModel model, Node selected, Map<String, String> form,
                 boolean create, boolean historyReady, boolean deleteReady, List<Entry> history, Entry latest, int page, int pageSize,
                 Impact impact, String confirmToken) {
             this.context = context;
             this.keyword = keyword;
+            this.scope = scope;
             this.selected = selected;
             this.create = create;
             this.form = form;
@@ -197,7 +214,7 @@ public final class AdminCategoryModel {
             this.confirmToken = confirmToken;
             this.latest = latest;
             this.history = List.copyOf(history.subList(0, Math.min(history.size(), pageSize)));
-            tree = model.tree(keyword, selected);
+            tree = model.tree(keyword, selected, scope);
             parents = model.parents();
             List<Node> siblings = selected == null ? List.of() : model.siblings(selected.parent);
             int position = selected == null ? -1 : siblings.indexOf(selected);
@@ -207,26 +224,26 @@ public final class AdminCategoryModel {
             revision = selected == null ? "" : selected.version();
             previous = page > 1 && selected != null ? historyUrl(id, page - 1) : null;
             next = history.size() > pageSize ? historyUrl(id, page + 1) : null;
-            newUrl = ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "new", "1"));
+            newUrl = ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "scope", scope.name(), "new", "1"));
             childUrl = selected != null && selected.canParent() ? childUrl(id) : null;
             allHistoryUrl = ProductView.url(context, AdminCategoryController.ROUTE,
-                    Map.of("q", keyword, "edit", id, "mode", "history"));
+                    Map.of("q", keyword, "scope", scope.name(), "edit", id, "mode", "history"));
             resetUrl = editUrl(id);
             productsUrl = selected == null ? null
                     : ProductView.url(context, "/app/admin/products", Map.of("filterCategory", id));
         }
 
         public String editUrl(String id) {
-            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "edit", id));
+            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "scope", scope.name(), "edit", id));
         }
 
         public String childUrl(String parentId) {
-            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "new", "1", "parent", parentId));
+            return ProductView.url(context, AdminCategoryController.ROUTE, Map.of("q", keyword, "scope", scope.name(), "new", "1", "parent", parentId));
         }
 
         private String historyUrl(String id, int page) {
             return ProductView.url(context, AdminCategoryController.ROUTE,
-                    Map.of("q", keyword, "edit", id, "historyPage", Integer.toString(page)));
+                    Map.of("q", keyword, "scope", scope.name(), "edit", id, "historyPage", Integer.toString(page)));
         }
     }
 }

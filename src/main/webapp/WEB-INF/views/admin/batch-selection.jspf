@@ -1,0 +1,6 @@
+<%@ page pageEncoding="UTF-8" %>
+<p class="error-message" role="status" data-batch-selection-notice hidden></p>
+<details class="admin-batch-selection-view" data-batch-selection-view hidden>
+    <summary>선택 상품 보기</summary>
+    <ul data-batch-selection-list></ul>
+</details>

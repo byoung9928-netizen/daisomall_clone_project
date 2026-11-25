@@ -31,6 +31,7 @@ import daiso.product.dao.RecommendationActivityDAO.Kind;
 import daiso.product.dao.RecommendationActivityDAO.Signal;
 import daiso.product.service.RecommendationService;
 import daiso.product.service.RecommendationService.Interest;
+import daiso.product.service.RecommendationService.Diagnostic;
 import daiso.product.service.ProductReviewService;
 
 @DaisoController
@@ -84,21 +85,7 @@ public class ProductController {
             }
         }
 
-        List<ProductDTO> popular = dao.recommendationCandidates(conn, null, POPULAR_POOL);
-        List<Interest> interests = member == null ? List.of() : homeInterests(request, conn, session, member);
-        List<ProductDTO> seeds = new ArrayList<>();
-        List<String> seedIds = interests.stream().map(interest -> interest.id).collect(Collectors.toList());
-        for (var item : dao.findRecentlyViewed(conn, seedIds, seedIds.size(), 0)) seeds.add(item.product);
-        List<ProductDTO> candidates = dao.recommendationCandidates(conn,
-                recommendations.scope(interests, seeds, categories), CANDIDATES_PER_ROOT);
-
-        var ids = new LinkedHashSet<String>();
-        for (List<ProductDTO> group : List.of(popular, candidates, newest)) {
-            for (ProductDTO product : group) ids.add(product.getProductId());
-        }
-        Set<String> pickup = prepareCardPickup(request, conn, List.copyOf(ids));
-        Map<String, String> featured = recommendations.select(member != null, interests, seeds, candidates,
-                popular, newest, categories, pickup, HOME_FEATURED_LIMIT);
+        Map<String, String> featured = rankHomeRecommendations(request, conn, categories, newest, session, member, null);
         request.setAttribute("featuredProducts", dao.recommendationCards(conn, List.copyOf(featured.keySet())));
         request.setAttribute("recommendationReasons", featured);
         List<String> wishlistIds = new ArrayList<>(featured.keySet());
@@ -107,7 +94,67 @@ public class ProductController {
         WishlistController.prepare(request, response, conn, wishlistIds);
     }
 
-    private List<Interest> homeInterests(HttpServletRequest request, Connection conn, HttpSession session, String member) {
+    private Map<String, String> rankHomeRecommendations(HttpServletRequest request, Connection conn,
+            List<Category> categories, List<ProductDTO> newest, HttpSession session, String member,
+            Diagnostic diagnostic) throws SQLException {
+        List<ProductDTO> popular = dao.recommendationCandidates(conn, null, POPULAR_POOL);
+        List<Interest> interests = member == null ? List.of() : homeInterests(request, conn, session, member, diagnostic);
+        List<ProductDTO> seeds = new ArrayList<>();
+        List<String> seedIds = interests.stream().map(interest -> interest.id).collect(Collectors.toList());
+        for (var item : dao.findRecentlyViewed(conn, seedIds, seedIds.size(), 0)) seeds.add(item.product);
+        List<ProductDTO> candidates = dao.recommendationCandidates(conn,
+                recommendations.scope(interests, seeds, categories, diagnostic), CANDIDATES_PER_ROOT);
+
+        var ids = new LinkedHashSet<String>();
+        for (List<ProductDTO> group : List.of(popular, candidates, newest)) {
+            for (ProductDTO product : group) ids.add(product.getProductId());
+        }
+        Set<String> pickup = prepareCardPickup(request, conn, List.copyOf(ids));
+        return recommendations.select(member != null, interests, seeds, candidates, popular, newest,
+                categories, pickup, HOME_FEATURED_LIMIT, diagnostic);
+    }
+
+    @DaisoGetMapping("/admin/products/recommendation")
+    public String recommendationAnalysis(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, NamingException, java.io.IOException {
+        response.setHeader("Cache-Control", "private, no-store");
+        if (!recommendationDiagnosticsEnabled()) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return null;
+        }
+        if (AdminProductController.adminSession(request) == null) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return null;
+        }
+        request.setAttribute("adminSection", "products");
+        String member = request.getParameter("member");
+        if (member == null || member.isBlank()) return "admin/product-recommendation";
+        if (!member.matches("DEMO_RANK_V1_M[0-9]{4}")) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            request.setAttribute("analysisError", "시연 회원 ID를 확인해 주세요.");
+            return "admin/product-recommendation";
+        }
+        try (Connection conn = ProductQueries.connect()) {
+            if (!recommendationActivity.fixtureMember(conn, member)) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                request.setAttribute("analysisError", "등록된 시연 회원을 찾을 수 없습니다.");
+                return "admin/product-recommendation";
+            }
+            Diagnostic diagnostic = new Diagnostic();
+            List<ProductDTO> newest = dao.findCatalog(conn, selection("newest", "", HOME_FEATURED_LIMIT)).products;
+            rankHomeRecommendations(request, conn, dao.findVisibleCategories(conn), newest, null, member, diagnostic);
+            request.setAttribute("recommendationDiagnostic", diagnostic);
+            conn.commit();
+        }
+        return "admin/product-recommendation";
+    }
+
+    public static boolean recommendationDiagnosticsEnabled() {
+        return Boolean.getBoolean("daisomall.dev.recommendations");
+    }
+
+    private List<Interest> homeInterests(HttpServletRequest request, Connection conn, HttpSession session, String member,
+            Diagnostic diagnostic) {
         LocalDate today = LocalDate.now(STORE_ZONE);
         LocalDate since = today.minusDays(RecommendationService.HISTORY_DAYS);
         List<Signal> signals = new ArrayList<>();
@@ -124,7 +171,7 @@ public class ProductController {
                 request.getServletContext().log("추천 조회 이력 확인 실패", error);
             }
         }
-        return recommendations.interests(signals, today);
+        return recommendations.interests(signals, today, diagnostic);
     }
 
     @DaisoGetMapping("/products/home/category-rankings")
@@ -240,6 +287,7 @@ public class ProductController {
                 prepareCardFacts(request, conn, wishlistIds);
                 wishlistIds.add(product.getProductId());
                 WishlistController.prepare(request, response, conn, wishlistIds);
+                ProductRestockController.prepare(request, conn, product);
             }
             conn.commit();
         }

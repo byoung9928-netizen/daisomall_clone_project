@@ -18,6 +18,7 @@ import javax.servlet.http.HttpSession;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.AdminProductReports;
+import daiso.product.controller.AdminReviewController.Period;
 import daiso.product.controller.StoreInventoryController;
 @DaisoController
 public class AdminExcelController {
@@ -30,7 +31,7 @@ public class AdminExcelController {
             "products", List.of("query", "filterCategory", "filterStatus", "filterStock", "stockQuantity", "sort"),
             "inventory", List.of("q", "category", "state", "sort"),
             "returns", List.of(),
-            "sales", List.of("from", "through"));
+            "sales", List.of("from", "through", "salesPeriod"));
 
     // ===== 공통 헤더 버튼: 현재 메뉴와 화면에 적용된 검색 조건만 전달 =====
     public static String downloadUrl(HttpServletRequest request) {
@@ -126,6 +127,7 @@ public class AdminExcelController {
             request.setAttribute("salesFrom", range[0]);
             request.setAttribute("salesThrough", range[1]);
             request.setAttribute("salesRows", AdminReport.sales(range[0], range[1]).rows);
+            request.setAttribute("salesAnalytics", new AdminSalesDAO().analyze(range[0], range[1]));
         } catch (IllegalArgumentException e) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             request.setAttribute("salesError", "시작일과 종료일을 확인해 주세요.");
@@ -140,6 +142,12 @@ public class AdminExcelController {
     private static LocalDate[] salesRange(HttpServletRequest request) {
         try {
             LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+            String preset = request.getParameter("salesPeriod");
+            if (preset != null && !preset.isBlank()) {
+                Period period = Period.valueOf(preset);
+                LocalDate start = period.start(today);
+                if (start != null) return new LocalDate[] {start, today};
+            }
             LocalDate through = readDate(request.getParameter("through"), today);
             LocalDate from = readDate(request.getParameter("from"), through.minusDays(29));
             if (from.isAfter(through) || from.getYear() < 1000 || through.getYear() > 9998) {

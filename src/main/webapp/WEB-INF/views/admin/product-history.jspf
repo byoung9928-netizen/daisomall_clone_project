@@ -6,6 +6,8 @@
 %>
 <% if (productHistory != null) {
     DateTimeFormatter changeTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    Map<String, String> historyQuery = (Map<String, String>) request.getAttribute("productHistoryQuery");
+    Map<String, String> historyBase = (Map<String, String>) request.getAttribute("productHistoryBase");
     Map<String, String> actionNames = Map.of("CREATE", "등록", "UPDATE", "수정", "BULK_STATUS", "일괄 변경", "DELETE", "삭제", "STOCK_ADJUST", "수동 온라인 재고", "STOCK_RESTORE", "온라인 재고 자동 복구");
 %>
     <section class="admin-panel admin-product-history" id="product-history" aria-labelledby="product-history-title">
@@ -13,6 +15,32 @@
             <h2 id="product-history-title">상품 변경 이력</h2>
             <a class="button secondary" href="<%= request.getAttribute("adminProductList") %>">이력 닫기</a>
         </div>
+        <form class="inventory-batch-form" data-admin-query-form method="get"
+              action="<%= request.getContextPath() %>/app/admin/products#product-history">
+            <% for (Map.Entry<String, String> field : historyBase.entrySet()) {
+                   if ("page".equals(field.getKey())) continue; %>
+                <input type="hidden" name="<%= ProductView.escape(field.getKey()) %>" value="<%= ProductView.escape(field.getValue()) %>">
+            <% } %>
+            <label class="field">상품명·품번 <input name="historyQuery" type="search" maxlength="120" value="<%= ProductView.escape(historyQuery.get("historyQuery")) %>"></label>
+            <label class="field">처리 관리자 <input name="historyActor" maxlength="100" value="<%= ProductView.escape(historyQuery.get("historyActor")) %>"></label>
+            <label class="field">주문번호 <input name="historyReference" maxlength="100" value="<%= ProductView.escape(historyQuery.get("historyReference")) %>"></label>
+            <label class="field">기간 <select name="historyPeriod">
+                <% for (daiso.product.controller.AdminReviewController.Period period : daiso.product.controller.AdminReviewController.Period.values()) { %>
+                    <option value="<%= period.name() %>" <%= period.name().equals(historyQuery.get("historyPeriod")) ? "selected" : "" %>><%= period.label %></option>
+                <% } %>
+            </select></label>
+            <label class="field">시작일 <input name="historyStart" type="date" value="<%= ProductView.escape(historyQuery.get("historyStart")) %>"></label>
+            <label class="field">종료일 <input name="historyEnd" type="date" value="<%= ProductView.escape(historyQuery.get("historyEnd")) %>"></label>
+            <label class="field">재고 유형 <select name="historyType">
+                <% for (String[] type : new String[][] {{"", "전체"}, {"RECEIVE", "입고"},{"ISSUE","출고"},{"DAMAGE","파손"},{"COUNT","재고 조사"},
+                        {"RETURN","반품 입고"},{"THRESHOLD","부족 기준"},{"ORDER_CANCEL","취소 복구"},{"ORDER_REFUND","환불 복구"}}) { %>
+                    <option value="<%= type[0] %>" <%= type[0].equals(historyQuery.get("historyType")) ? "selected" : "" %>><%= type[1] %></option>
+                <% } %>
+            </select></label>
+            <label class="field">이력 정렬 <select name="historyOrder"><option value="">최신순</option>
+                <option value="oldest" <%= "oldest".equals(historyQuery.get("historyOrder")) ? "selected" : "" %>>오래된순</option></select></label>
+            <button class="button secondary" type="submit">이력 검색</button>
+        </form>
         <% if (scopedProductId != null && !scopedProductId.isEmpty()) { %>
             <p>상품 ID <strong><%= ProductView.escape(scopedProductId) %></strong></p>
         <% } %>
@@ -50,6 +78,13 @@
                                             <li><strong>유형</strong> <%= daiso.product.controller.OnlineInventoryController.operationLabel(daiso.product.dao.StoreInventoryDAO.Change.valueOf(change.stockOperation)) %> · <%= delta > 0 ? "+" : "" %><%= delta %>개</li>
                                             <li><strong>사유</strong> <%= ProductView.escape(change.stockReason) %></li>
                                         <% } %>
+                                        <% if (change.beforeThreshold != null) { %>
+                                            <li><strong>부족 기준</strong> <%= change.beforeThreshold %>개 이하 → <%= change.afterThreshold %>개 이하
+                                                · <%= ProductView.escape(change.thresholdReason) %></li>
+                                        <% } %>
+                                        <% if (change.beforeCategory != null || change.afterCategory != null) { %>
+                                            <li><strong>카테고리</strong> <%= ProductView.escape(change.beforeCategory) %> → <%= ProductView.escape(change.afterCategory) %></li>
+                                        <% } %>
                                         <% if (change.statusChanged()) { %>
                                             <li><strong>판매 상태</strong> <%= change.beforeStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.beforeStatus, change.beforeStatus)) %> → <%= change.afterStatus == null ? "—" : ProductView.escape(statuses.getOrDefault(change.afterStatus, change.afterStatus)) %></li>
                                         <% } %>
@@ -61,8 +96,11 @@
                 </table>
             </div>
         <% } %>
-        <% if (request.getAttribute("productHistoryOlder") != null) { %>
-            <p><a class="button secondary" href="<%= request.getAttribute("productHistoryOlder") %>#product-history">이전 기록</a></p>
+        <% daiso.product.controller.InventoryPagination inventoryPagination =
+                   (daiso.product.controller.InventoryPagination) request.getAttribute("productHistoryPagination");
+           if (inventoryPagination.pages > 1) {
+               request.setAttribute("adminPaginationLabel", "상품 변경 이력 페이지"); %>
+            <%@ include file="inventory-pagination.jspf" %>
         <% } %>
     </section>
 <% } %>
