@@ -15,6 +15,9 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.State;
+import daiso.product.dao.StoreInventoryDAO.HistoryFilter;
+import daiso.product.dao.StoreInventoryDAO.InventoryFilter;
+import daiso.product.dao.StoreInventoryDAO.Sort;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.Stock;
@@ -66,9 +69,14 @@ public class StoreManagerController {
 
             StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
             boolean showHistory = "history".equals(request.getParameter("mode"));
+            InventoryFilter inventoryFilter =
+                    new InventoryFilter(storeId, "", "", "", State.ALL);
+            HistoryFilter historyFilter =
+                    new HistoryFilter(null, null, "", "", "", false);
+
             long total = showHistory
-                    ? dao.countHistory(connection, storeId, "")
-                    : dao.countInventory(connection, storeId, "", State.ALL);
+                    ? dao.countHistory(connection, storeId, "", historyFilter)
+                    : dao.countInventory(connection, inventoryFilter);
             long pages = Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
             int requestedPage = ProductQueries.integer(
                     request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
@@ -82,10 +90,10 @@ public class StoreManagerController {
             int offset = (page - 1) * PAGE_SIZE;
             if (showHistory) {
                 request.setAttribute("storeManagerHistory",
-                        dao.history(connection, storeId, "", PAGE_SIZE, offset));
+                        dao.history(connection, storeId, "", historyFilter, PAGE_SIZE, offset));
             } else {
                 request.setAttribute("storeManagerStock",
-                        dao.inventory(connection, storeId, "", State.ALL, PAGE_SIZE, offset));
+                        dao.inventory(connection, inventoryFilter, Sort.NAME, PAGE_SIZE, offset));
             }
             request.setAttribute("storeManagerPage", page);
             request.setAttribute("storeManagerPages", pages);
@@ -130,6 +138,7 @@ public class StoreManagerController {
             }
 
             request.setAttribute("storeManagerName", storeName);
+            request.setAttribute("storeManagerCsrf", AdminProductController.token(session));
             request.setAttribute("pickupOrders",
                     new OrderDAO().findPaidPickupOrders(connection, storeId));
 
@@ -138,6 +147,60 @@ public class StoreManagerController {
         } catch (SQLException | NamingException | IllegalStateException error) {
             request.getServletContext().log("매장 픽업 주문 조회 실패", error);
             response.sendError(503, "픽업 주문을 불러오지 못했습니다.");
+            return null;
+        }
+    }
+    
+    @DaisoPostMapping("/store-manager/pickup-orders/status")
+    public String updatePickupStatus(HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+        if (!(memberId instanceof String)) {
+            return "redirect:/member/login";
+        }
+
+        if (!AdminProductController.validToken(request, session)) {
+            response.sendError(403, "픽업 주문 화면을 다시 열어 주세요.");
+            return null;
+        }
+
+        String orderNo = request.getParameter("orderNo");
+        String action = request.getParameter("action");
+        if (orderNo == null || orderNo.isBlank() || orderNo.length() > 100
+                || !("ready".equals(action) || "complete".equals(action))) {
+            response.sendError(400, "주문번호와 처리 동작을 확인해 주세요.");
+            return null;
+        }
+
+        try (Connection connection = ProductQueries.connect()) {
+            String storeId;
+            try (PreparedStatement statement =
+                         connection.prepareStatement(ASSIGNMENT_SQL + " FOR UPDATE")) {
+                statement.setString(1, (String) memberId);
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) {
+                        connection.rollback();
+                        response.sendError(403, "배정된 매장이 있는 관리자만 이용할 수 있습니다.");
+                        return null;
+                    }
+                    storeId = result.getString("store_id");
+                }
+            }
+
+            boolean changed = new OrderDAO().advancePickupStatus(
+                    connection, storeId, orderNo, "complete".equals(action));
+            if (!changed) {
+                connection.rollback();
+                response.sendError(409, "처리할 수 없는 주문입니다. 목록을 새로고침해 주세요.");
+                return null;
+            }
+
+            connection.commit();
+            return "redirect:/store-manager/pickup-orders";
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("픽업 주문 상태 변경 실패", error);
+            response.sendError(503, "픽업 주문 상태를 변경하지 못했습니다.");
             return null;
         }
     }

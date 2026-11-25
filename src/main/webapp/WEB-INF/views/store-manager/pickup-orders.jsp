@@ -33,11 +33,12 @@
                         <th scope="col">준비할 상품</th>
                         <th scope="col">결제 일시</th>
                         <th scope="col">결제 상태</th>
+                        <th scope="col">픽업 진행 상태</th>
                     </tr>
                 </thead>
                 <tbody>
                     <% if (orders.isEmpty()) { %>
-                        <tr><td colspan="5">결제 완료된 픽업 주문이 없습니다.</td></tr>
+                        <tr><td colspan="6">결제 완료된 픽업 주문이 없습니다.</td></tr>
                     <% } else {
                         for (Map<String, Object> order : orders) { %>
                         <tr>
@@ -59,7 +60,26 @@
 
 <td><%= ProductView.escape(order.get("approvedAt")) %></td>
                             <td>결제 완료</td>
-                        </tr>
+						<td>
+    <% String pickupStatus = (String) order.get("pickupStatus"); %>
+    <%= "PICKED_UP".equals(pickupStatus) ? "수령 완료"
+            : "READY".equals(pickupStatus) ? "수령 대기" : "준비 대기" %>
+
+    <% if (pickupStatus == null || "READY".equals(pickupStatus)) { %>
+        <form method="post"
+              action="${pageContext.request.contextPath}/app/store-manager/pickup-orders/status">
+            <input type="hidden" name="csrf"
+                   value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
+            <input type="hidden" name="orderNo"
+                   value="<%= ProductView.escape(order.get("orderNo")) %>">
+            <button type="submit" class="button secondary" name="action"
+                    value="<%= pickupStatus == null ? "ready" : "complete" %>">
+                <%= pickupStatus == null ? "준비 완료" : "수령 완료" %>
+            </button>
+        </form>
+    <% } %>
+</td>
+					</tr>
                     <%  }
                     } %>
                 </tbody>
