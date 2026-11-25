@@ -76,7 +76,15 @@ public class OrderDAO {
 		        calculatedSubtotal += item.getItemTotal();
 		    }
 
-		    long calculatedTotal = calculatedSubtotal + order.getShippingFee() + pickupFee;
+		 // 포인트는 상품 금액까지만 사용하고, 배송비와 픽업 수수료는 별도로 더한다.
+		    int usedPoints = order.getUsedPoints();
+
+		    if (usedPoints < 0 || usedPoints > calculatedSubtotal) {
+		        throw new IllegalArgumentException("사용 포인트가 상품 금액 범위를 벗어났습니다.");
+		    }
+
+		    long calculatedTotal =
+		            calculatedSubtotal - usedPoints + order.getShippingFee() + pickupFee;
 
 		    if (calculatedSubtotal != order.getSubtotalAmount()
 		            || order.getShippingFee() < 0
@@ -89,8 +97,8 @@ public class OrderDAO {
 		            + "(order_no, member_id, checkout_token, status, "
 		            + "recipient, phone, postcode, address1, address2, "
 		            + "delivery_message, subtotal_amount, shipping_fee, total_amount, "
-		            + "fulfillment_type, pickup_store_id, pickup_fee) "
-		            + "VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		            + "fulfillment_type, pickup_store_id, pickup_fee, used_points) "
+		            + "VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 		    String itemSql =
 		        "INSERT INTO order_items "
@@ -106,6 +114,9 @@ public class OrderDAO {
 
 		        try {
 		            long orderId;
+		            if( usedPoints>0) {
+		            	checkAvailablePoints(con,order.getMemberId(),usedPoints);
+		            }
 
 		            // 주문 기본정보 저장
 		            try (PreparedStatement pstmt = con.prepareStatement(
@@ -126,6 +137,7 @@ public class OrderDAO {
 		                pstmt.setString(13, storeId == null ? "DELIVERY" : "PICKUP");
 		                pstmt.setString(14, storeId);
 		                pstmt.setInt(15, pickupFee);
+		                pstmt.setInt(16, usedPoints);
 
 		                pstmt.executeUpdate();
 
@@ -140,7 +152,20 @@ public class OrderDAO {
 		                    orderId = rs.getLong(1);
 		                }
 		            }
+		            // 포인트를 사용한 주문은 사용액을 음수로 기록한다.
+		            if (usedPoints > 0) {
+		                String useSql =
+		                        "INSERT INTO daiso_point_history "
+		                        + "(member_id, order_id, point_type, point_amount) "
+		                        + "VALUES (?, ?, 'USE', ?)";
 
+		                try (PreparedStatement pstmt = con.prepareStatement(useSql)) {
+		                    pstmt.setString(1, order.getMemberId());
+		                    pstmt.setLong(2, orderId);
+		                    pstmt.setInt(3, -usedPoints);
+		                    pstmt.executeUpdate();
+		                }
+		            }
 		            // 주문에 포함된 상품들을 저장
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(itemSql)) {
@@ -238,6 +263,37 @@ public class OrderDAO {
 		    }
 		}
 		
+		// 같은 회원의 주문 두 건이 같은 포인트를 동시에 사용하지 않도록 잔액 확인 전에 잠근다.
+		private void checkAvailablePoints(Connection con, String memberId, int usedPoints)
+		        throws SQLException {
+		    String lockSql = "SELECT member_id FROM members WHERE member_id = ? FOR UPDATE";
+
+		    try (PreparedStatement pstmt = con.prepareStatement(lockSql)) {
+		        pstmt.setString(1, memberId);
+
+		        try (ResultSet rs = pstmt.executeQuery()) {
+		            if (!rs.next()) {
+		                throw new IllegalArgumentException("포인트를 사용할 회원을 찾을 수 없습니다.");
+		            }
+		        }
+		    }
+
+		    String balanceSql =
+		            "SELECT COALESCE(SUM(point_amount), 0) "
+		            + "FROM daiso_point_history WHERE member_id = ?";
+
+		    try (PreparedStatement pstmt = con.prepareStatement(balanceSql)) {
+		        pstmt.setString(1, memberId);
+
+		        try (ResultSet rs = pstmt.executeQuery()) {
+		            rs.next();
+		            if (rs.getLong(1) < usedPoints) {
+		                throw new IllegalArgumentException("보유 포인트가 부족합니다.");
+		            }
+		        }
+		    }
+		}
+		
 		// 다이소 포인트 구매 적립: 배송비와 픽업 수수료를 제외한 상품 금액 1,000원당 1P
 		private void earnDaisoPoints(Connection con, long orderId) throws SQLException {
 		    String sql =
@@ -252,9 +308,25 @@ public class OrderDAO {
 		        pstmt.executeUpdate();
 		    }
 		}
+		
+		// 주문 취소: 이 주문에서 실제 사용했던 포인트를 회원에게 돌려준다.
+		private void restoreUsedPoints(Connection con, long orderId) throws SQLException {
+		    String sql =
+		            "INSERT INTO daiso_point_history "
+		            + "(member_id, order_id, point_type, point_amount) "
+		            + "SELECT member_id, order_id, 'RESTORE', -point_amount "
+		            + "FROM daiso_point_history "
+		            + "WHERE order_id = ? AND point_type = 'USE'";
+
+		    try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+		        pstmt.setLong(1, orderId);
+		        pstmt.executeUpdate();
+		    }
+		}
+		
 		private void reverseDaisoPoints(Connection con, long orderId) throws SQLException{
 			String sql = 
-					"INSERT INTO dasio_point_history "
+					"INSERT INTO daiso_point_history "
 					+"(member_id, order_id, point_type,point_amount) "
 					+"SELECT member_id, order_id, 'REVERSE', -point_amount "
 					+"FROM daiso_point_history "
@@ -263,6 +335,23 @@ public class OrderDAO {
 				pstmt.setLong(1, orderId);
 				pstmt.executeUpdate();
 			}
+		}
+		// 다이소 포인트 잔액 조회: 로그인한 회원의 적립과 회수 내역을 합산한다.
+		public long getDaisoPointBalance(String memberId) throws SQLException {
+		    String sql =
+		            "SELECT COALESCE(SUM(point_amount), 0) "
+		            + "FROM daiso_point_history "
+		            + "WHERE member_id = ?";
+
+		    try (Connection con = ds.getConnection();
+		         PreparedStatement pstmt = con.prepareStatement(sql)) {
+		        pstmt.setString(1, memberId);
+
+		        try (ResultSet rs = pstmt.executeQuery()) {
+		            rs.next();
+		            return rs.getLong(1);
+		        }
+		    }
 		}
 		public void approvePayment(
 		
@@ -710,6 +799,85 @@ public class OrderDAO {
 		    }
 		}
 		
+		// 포인트를 사용하고 30분 이상 결제 대기 중인 주문을 100건씩 조회한다.
+		public List<Long> findExpiredPointOrderIds(long afterOrderId) throws SQLException {
+		    String sql =
+		            "SELECT o.order_id FROM orders o "
+		            + "WHERE o.order_id > ? AND o.status = 'PENDING' "
+		            + "AND o.used_points > 0 "
+		            + "AND o.created_at <= CURRENT_TIMESTAMP - INTERVAL 30 MINUTE "
+		            + "AND NOT EXISTS ("
+		            + "    SELECT 1 FROM payment_attempts p "
+		            + "    WHERE p.order_id = o.order_id AND p.status <> 'PENDING'"
+		            + ") "
+		            + "ORDER BY o.order_id LIMIT 100";
+
+		    List<Long> orderIds = new ArrayList<>();
+
+		    try (Connection con = ds.getConnection();
+		         PreparedStatement pstmt = con.prepareStatement(sql)) {
+		        pstmt.setLong(1, afterOrderId);
+
+		        try (ResultSet rs = pstmt.executeQuery()) {
+		            while (rs.next()) {
+		                orderIds.add(rs.getLong("order_id"));
+		            }
+		        }
+		    }
+		    return orderIds;
+		}
+		
+		// 30분 이상 결제 대기 중인 포인트 사용 주문을 취소하고 사용 포인트를 반환한다.
+		public boolean expirePendingPointOrder(long orderId) throws SQLException {
+		    String expireOrderSql =
+		            "UPDATE orders o "
+		            + "SET o.status = 'CANCELLED', o.canceled_at = CURRENT_TIMESTAMP, "
+		            + "o.hidden_at = CURRENT_TIMESTAMP "
+		            + "WHERE o.order_id = ? AND o.status = 'PENDING' "
+		            + "AND o.used_points > 0 "
+		            + "AND o.created_at <= CURRENT_TIMESTAMP - INTERVAL 30 MINUTE "
+		            + "AND NOT EXISTS ("
+		            + "    SELECT 1 FROM payment_attempts p "
+		            + "    WHERE p.order_id = o.order_id AND p.status <> 'PENDING'"
+		            + ")";
+
+		    String cancelAttemptsSql =
+		            "UPDATE payment_attempts SET status = 'CANCELLED' "
+		            + "WHERE order_id = ? AND status = 'PENDING'";
+
+		    try (Connection con = ds.getConnection()) {
+		        boolean originalAutoCommit = con.getAutoCommit();
+		        con.setReadOnly(false);
+		        con.setAutoCommit(false);
+
+		        try {
+		            int updated;
+		            try (PreparedStatement pstmt = con.prepareStatement(expireOrderSql)) {
+		                pstmt.setLong(1, orderId);
+		                updated = pstmt.executeUpdate();
+		            }
+
+		            if (updated == 0) {
+		                con.commit();
+		                return false;
+		            }
+
+		            try (PreparedStatement pstmt = con.prepareStatement(cancelAttemptsSql)) {
+		                pstmt.setLong(1, orderId);
+		                pstmt.executeUpdate();
+		            }
+
+		            restoreUsedPoints(con, orderId);
+		            con.commit();
+		            return true;
+		        } catch (SQLException | RuntimeException e) {
+		            con.rollback();
+		            throw e;
+		        } finally {
+		            con.setAutoCommit(originalAutoCommit);
+		        }
+		    }
+		}
 		// 결제대기 주문을 취소하고 주문내역에서 제외
 		public boolean cancelPendingOrder(
 		        String memberId,
@@ -747,7 +915,23 @@ public class OrderDAO {
 
 		                updated = pstmt.executeUpdate();
 		            }
+		         // 대기 주문이 이번 요청에서 실제로 취소된 경우에만 사용 포인트를 반환한다.
+		            if (updated > 0) {
+		                String findOrderSql =
+		                        "SELECT order_id FROM orders WHERE member_id = ? AND order_no = ?";
 
+		                try (PreparedStatement pstmt = con.prepareStatement(findOrderSql)) {
+		                    pstmt.setString(1, memberId);
+		                    pstmt.setString(2, orderNo);
+
+		                    try (ResultSet rs = pstmt.executeQuery()) {
+		                        if (!rs.next()) {
+		                            throw new SQLException("포인트를 반환할 취소 주문을 찾을 수 없습니다.");
+		                        }
+		                        restoreUsedPoints(con, rs.getLong("order_id"));
+		                    }
+		                }
+		            }
 		            con.commit();
 
 		            // 두 테이블을 변경하므로 1이 아닌 양수인지 검사
@@ -1325,7 +1509,8 @@ public class OrderDAO {
 		                    );
 		                }
 		            }
-
+		            reverseDaisoPoints(con,orderId);//적립한 포인트 회수
+		            restoreUsedPoints(con,orderId);//결제할 때 사용했던 포인트 반환
 		            con.commit();
 
 		        } catch (SQLException | RuntimeException e) {

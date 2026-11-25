@@ -18,6 +18,7 @@ public class OrderBean {
 	    private String deliveryMessage;
 
 	    private int subtotalAmount;
+	    private int usedPoints;
 	    private int shippingFee;
 	    private int totalAmount;
 	    
@@ -34,6 +35,13 @@ public class OrderBean {
 	    private String carrierId;
 	    private String trackingNumber;
 	    
+	    
+		public int getUsedPoints() {
+			return usedPoints;
+		}
+		public void setUsedPoints(int usedPoints) {
+			this.usedPoints = usedPoints;
+		}
 		public String getCarrierId() {
 			return carrierId;
 		}

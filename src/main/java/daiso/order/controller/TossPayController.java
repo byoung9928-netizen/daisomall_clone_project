@@ -83,8 +83,21 @@ public class TossPayController {
         }
 
         long subtotal = items.stream().mapToLong(CartBean::getItemTotal).sum();
-        long amount = subtotal + (subtotal > 0 && subtotal < 30000 ? 3000 : 0);
-        if (amount <= 0 || amount > Integer.MAX_VALUE
+     // 택배 결제: 상품 금액에서 사용 포인트를 빼고 배송비를 더한다.
+        String pointValue = request.getParameter("usedPoints");
+        int usedPoints;
+        try {
+            usedPoints = pointValue == null ? 0 : Integer.parseInt(pointValue);
+        } catch (NumberFormatException e) {
+            return error("사용 포인트는 정수로 입력해 주세요.");
+        }
+
+        if (usedPoints < 0 || usedPoints > subtotal) {
+            return error("사용 포인트가 상품 금액 범위를 벗어났습니다.");
+        }
+
+        long shipping = subtotal > 0 && subtotal < 30000 ? 3000 : 0;
+        long amount = subtotal - usedPoints + shipping;        if (amount <= 0 || amount > Integer.MAX_VALUE
                 || !Long.toString(amount).equals(request.getParameter("expectedAmount"))) {
             return error("결제 금액이 변경됐어요. 주문서를 새로고침해 주세요.");
         }
@@ -105,7 +118,8 @@ public class TossPayController {
         order.setAddress2((String) address.get("address2"));
         order.setDeliveryMessage((String) session.getAttribute("orderDeliveryMessage"));
         order.setSubtotalAmount(Math.toIntExact(subtotal));
-        order.setShippingFee(Math.toIntExact(amount - subtotal));
+        order.setShippingFee(Math.toIntExact(shipping));
+        order.setUsedPoints(usedPoints);
         order.setTotalAmount(Math.toIntExact(amount));
         order.setItems(items);
 
@@ -127,7 +141,7 @@ public class TossPayController {
             draft.put("address", new java.util.HashMap<>(address));
             draft.put("message", order.getDeliveryMessage());
             draft.put("subtotal", subtotal);
-            draft.put("shipping", amount - subtotal);
+            draft.put("shipping", shipping);
             session.setAttribute("tossPreview", draft);
         }
 
@@ -139,7 +153,7 @@ public class TossPayController {
         result.addProperty("amount", amount);
         return result.toString();
     }
-    //토프세이 테스트 인증 결과 확인
+    //토스페이 테스트 인증 결과 확인
     @DaisoGetMapping("/payment/toss/preview-success")
     @DaisoResponseBody
     public String previewSuccess(HttpServletRequest request, HttpServletResponse response)
@@ -280,7 +294,7 @@ public class TossPayController {
             return error("픽업 장바구니가 변경됐어요. 상품을 다시 선택해 주세요.");
         }
 
-        long amount = subtotal + 200;
+        long amount =subtotal+200;
         if (subtotal <= 0 || amount > Integer.MAX_VALUE
                 || !Long.toString(amount).equals(request.getParameter("expectedAmount"))) {
             return error("픽업 결제 금액이 변경됐어요. 주문서를 새로고침해 주세요.");

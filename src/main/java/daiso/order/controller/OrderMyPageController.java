@@ -70,6 +70,7 @@ public class OrderMyPageController {
             session.getAttribute("myOrderDeleteCsrf")
         );
         OrderDAO dao = new OrderDAO();
+        request.setAttribute("daisoPointBalance", dao.getDaisoPointBalance(memberId));
 
         // DB에서 본인의 최근 주문 목록 조회
         List<Map<String, Object>> orders =

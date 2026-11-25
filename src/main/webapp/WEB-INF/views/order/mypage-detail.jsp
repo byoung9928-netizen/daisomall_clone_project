@@ -1973,7 +1973,8 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 				</div>
 				<div class="my-points">
 					<div>
-						<span>다이소 포인트</span><strong>- P</strong>
+						<span>다이소 포인트</span>
+						<strong><%= myMoney.format(request.getAttribute("daisoPointBalance")) %> P</strong>
 					</div>
 					<div>
 						<span>다이소몰 포인트</span><strong>- P</strong>

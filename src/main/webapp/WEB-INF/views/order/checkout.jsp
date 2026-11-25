@@ -94,18 +94,51 @@
           <% } %>
           <div class="order-note"><strong>확인해 주세요</strong><p>· 주문 시점에 따라 상품의 판매 상태와 재고가 달라질 수 있습니다.</p><p>· 상품 금액 30,000원 이상 구매 시 무료배송입니다.</p><p>· 주문 전 상품과 배송 정보를 확인해 주세요.</p></div>
         </section>
-        <%-- 
+        
         <section class="order-block" aria-labelledby="coupon-heading">
           <div class="order-section-heading"><h2 id="coupon-heading">쿠폰 적용 <span>0</span></h2></div>
           <div class="coupon-row"><input aria-label="선택된 쿠폰" value="쿠폰을 선택해주세요" readonly><button class="order-small-button" type="button" id="open-coupon">선택</button></div>
         </section>
         <section class="order-block" aria-labelledby="point-heading">
-          <div class="order-section-heading"><h2 id="point-heading">포인트 · 상품권</h2><span class="order-discount-total">-0원</span></div>
-          <div class="order-point-row"><label for="daiso-points">다이소 포인트 ⓘ</label><div class="order-point-input"><input id="daiso-points" value="0" disabled><span>P</span><p class="order-point-balance">보유 0P</p></div><button class="order-small-button" type="button" disabled>전액사용</button></div>
-          <div class="order-point-row"><label for="mall-points">다이소몰 포인트 ⓘ</label><div class="order-point-input"><input id="mall-points" value="0" disabled><span>P</span><p class="order-point-balance">보유 0P</p></div><button class="order-small-button" type="button" disabled>전액사용</button></div>
-          <div class="order-point-row"><label for="gift-balance">다이소 상품권 ⓘ</label><div class="order-point-input"><input id="gift-balance" placeholder="보유 금액을 조회해 주세요" disabled><p class="order-point-balance">보유 -원</p></div><button class="order-small-button" type="button" data-order-unavailable>조회하기</button></div>
+          <div class="order-section-heading"><h2 id="point-heading">포인트 · 상품권</h2><span class="order-discount-total">0원</span></div>
+          <div class="order-point-row">
+    <label for="daiso-points">다이소 포인트 ⓘ</label>
+    <div class="order-point-input">
+        <input id="daiso-points" type="number" min="0" step="1" value="0"
+               max="<%= Math.min(orderSubtotal,
+                   ((Number) request.getAttribute("daisoPointBalance")).longValue()) %>">
+        <span>P</span>
+        <p class="order-point-balance">
+            보유 <%= orderMoney.format(request.getAttribute("daisoPointBalance")) %>P
+        </p>
+    </div>
+    <button id="use-all-daiso-points" class="order-small-button" type="button">
+        전액사용
+    </button>
+</div>
+
+<div class="order-point-row">
+    <label for="mall-points">다이소몰 포인트 ⓘ</label>
+    <div class="order-point-input">
+        <input id="mall-points" value="0" disabled>
+        <span>P</span>
+        <p class="order-point-balance">보유 0P</p>
+    </div>
+    <button class="order-small-button" type="button" disabled>전액사용</button>
+</div>
+
+<div class="order-point-row">
+    <label for="gift-balance">다이소 상품권 ⓘ</label>
+    <div class="order-point-input">
+        <input id="gift-balance" placeholder="보유 금액을 조회해 주세요" disabled>
+        <p class="order-point-balance">보유 -원</p>
+    </div>
+    <button class="order-small-button" type="button" data-order-unavailable>
+        조회하기
+    </button>
+</div>
           <div class="gift-register"><button class="order-small-button" type="button" data-order-unavailable>상품권 등록</button><span>상품권을 등록하고 편하게 쇼핑하세요.</span></div>
-        </section>--%>
+        </section>
         <section class="order-block" aria-labelledby="payment-heading">
           <div class="order-section-heading"><h2 id="payment-heading">결제수단<span class="order-required">*</span></h2><label class="order-remember"><input id="remember-payment" type="checkbox"> 이 결제 수단을 다음에도 사용</label></div>
           <div class="payment-methods" role="group" aria-label="결제수단 선택">
@@ -204,6 +237,34 @@
         const paymentLabel = document.getElementById('selected-payment-label');
         const paymentHelp = document.getElementById('selected-payment-help');
         const payButton = document.getElementById('order-pay');
+     // 사용 포인트가 바뀌면 할인 금액, 결제 예상 금액, 결제 버튼을 함께 갱신한다.
+        const pointInput = document.getElementById('daiso-points');
+        const useAllPoints = document.getElementById('use-all-daiso-points');
+        const originalTotal = <%= orderTotal %>;
+        const maxPoints = Number(pointInput.max);
+        const won = new Intl.NumberFormat('ko-KR');
+
+        function updatePointAmount() {
+            const entered = pointInput.valueAsNumber;
+            const points = Number.isFinite(entered)
+                ? Math.min(maxPoints, Math.max(0, Math.floor(entered)))
+                : 0;
+
+            pointInput.value = String(points);
+            const payable = originalTotal - points;
+
+            document.querySelector('#point-heading + .order-discount-total').textContent =
+                '-' + won.format(points) + '원';
+            document.querySelector('.order-summary-total strong').textContent =
+                won.format(payable) + '원';
+            payButton.textContent = won.format(payable) + '원 결제하기';
+        }
+
+        pointInput.addEventListener('input', updatePointAmount);
+        useAllPoints.addEventListener('click', function () {
+            pointInput.value = String(maxPoints);
+            updatePointAmount();
+        });
         let selectedPayment = 'kakao';
 
         function selectPayment(method) {
@@ -305,8 +366,15 @@
                 data.set('consent', 'true');
                 document.querySelectorAll('#order-selected-items input[name="cartItemId"]')
                     .forEach(input => data.append('cartItemId', input.value));
-                if (isTossPay) data.set('expectedAmount', '<%= orderTotal %>');
+                const usedPoints = Number(pointInput.value);
+                const expectedAmount = originalTotal - usedPoints;
 
+                if (expectedAmount <= 0) {
+                    throw new Error('현재 결제창에서는 결제할 금액이 1원 이상이어야 합니다.');
+                }
+
+                data.set('usedPoints', String(usedPoints));
+                data.set('expectedAmount', String(expectedAmount));
                 const contextPath = '<%= orderContext %>';
                 const path = isTossPay ? '/app/payment/toss/ready' : '/app/payment/kakao/ready';
                 const response = await fetch(contextPath + path, { method: 'POST', body: data });

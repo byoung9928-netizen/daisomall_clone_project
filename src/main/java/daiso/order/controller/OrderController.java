@@ -136,6 +136,8 @@ public class OrderController {
         }
         request.setAttribute("orderItems", items);
         request.setAttribute("orderSubtotal", subtotal);
+        long daisoPointBalance =new daiso.order.db.OrderDAO().getDaisoPointBalance(memberId);
+        request.setAttribute("daisoPointBalance",daisoPointBalance);
         request.setAttribute("orderShipping", shipping);
         synchronized (session) {
             Object deliveryAddress = session.getAttribute("orderDeliveryAddress");

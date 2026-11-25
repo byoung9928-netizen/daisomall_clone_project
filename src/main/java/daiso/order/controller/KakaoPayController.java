@@ -114,10 +114,30 @@ public class KakaoPayController {
                 quantity += item.getQuantity();
             }
 
-            long shipping = subtotal < 30000 ? 3000 : 0;
+         // 카카오 택배 결제에 포인트 기준을 적용한다.
+            String pointValue = request.getParameter("usedPoints");
+            int usedPoints;
+            try {
+                usedPoints = pointValue == null ? 0 : Integer.parseInt(pointValue);
+            } catch (NumberFormatException e) {
+                return error("사용 포인트는 정수로 입력해 주세요.");
+            }
 
-            int totalAmount =
-                Math.toIntExact(subtotal + shipping);
+            if (usedPoints < 0 || usedPoints > subtotal) {
+                return error("사용 포인트가 상품 금액 범위를 벗어났습니다.");
+            }
+
+            long shipping = subtotal > 0 && subtotal < 30000 ? 3000 : 0;
+            int totalAmount = Math.toIntExact(subtotal - usedPoints + shipping);
+
+            if (totalAmount <= 0) {
+                return error("현재 결제창에서는 결제할 금액이 1원 이상이어야 합니다.");
+            }
+
+            String expectedAmount = request.getParameter("expectedAmount");
+            if (expectedAmount != null && !Integer.toString(totalAmount).equals(expectedAmount)) {
+                return error("결제 금액이 변경됐어요. 주문서를 새로고침해 주세요.");
+            }
 
             int totalQuantity = Math.toIntExact(quantity);
 
@@ -159,6 +179,7 @@ public class KakaoPayController {
 
             order.setSubtotalAmount(Math.toIntExact(subtotal));
             order.setShippingFee(Math.toIntExact(shipping));
+            order.setUsedPoints(usedPoints);
             order.setTotalAmount(totalAmount);
             order.setItems(items);
 
@@ -189,6 +210,7 @@ public class KakaoPayController {
             pending.put("memberId", memberId);
             pending.put("tid", result.get("tid").getAsString());
             pending.put("totalAmount", totalAmount);
+            pending.put("shipping", shipping);
             pending.put("items", items);
 
             pending.put(
@@ -498,7 +520,7 @@ public class KakaoPayController {
                         completed.put("address", pending.get("deliveryAddress"));
                         completed.put("message", pending.get("deliveryMessage"));
                         completed.put("subtotal", subtotal);
-                        completed.put("shipping", total - subtotal);
+                        completed.put("shipping", pending.getOrDefault("shipping", total-subtotal));
                         completed.put("total", total);
                         completed.put("paymentMethod", "카카오페이");
                         String paidAt = approval.has("approved_at")
