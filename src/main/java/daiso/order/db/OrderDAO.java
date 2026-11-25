@@ -423,6 +423,32 @@ public class OrderDAO {
 		        }
 		    }
 		}
+		
+		public String findLatestChatStatus(String memberId, boolean returnQuestion)
+		        throws SQLException {
+		    String sql;
+
+		    if (returnQuestion) {
+		        sql = "SELECT r.status FROM order_returns r "
+		                + "JOIN orders o ON o.order_id = r.order_id "
+		                + "WHERE o.member_id = ? AND o.hidden_at IS NULL "
+		                + "ORDER BY r.requested_at DESC, r.return_id DESC LIMIT 1";
+		    } else {
+		        sql = "SELECT o.status FROM orders o "
+		                + "WHERE o.member_id = ? AND o.hidden_at IS NULL "
+		                + "ORDER BY o.created_at DESC, o.order_id DESC LIMIT 1";
+		    }
+
+		    try (Connection con = ds.getConnection();
+		         PreparedStatement statement = con.prepareStatement(sql)) {
+		        statement.setString(1, memberId);
+
+		        try (ResultSet result = statement.executeQuery()) {
+		            return result.next() ? result.getString("status") : null;
+		        }
+		    }
+		}
+		
 		public List<Map<String, Object>> getMyOrders(String memberId)
 		        throws SQLException {
 
@@ -772,6 +798,61 @@ public class OrderDAO {
 		        }
 		    }
 		}
+		
+		public List<Map<String, Object>> findPaidPickupOrders(
+		        Connection connection, String storeId) throws SQLException {
+		    String sql = "WITH recent_pickups AS ("
+		            + "    SELECT o.order_id, o.order_no, o.recipient, p.approved_at "
+		            + "    FROM orders o "
+		            + "    JOIN payment_attempts p ON p.payment_id = ("
+		            + "        SELECT MAX(p2.payment_id) FROM payment_attempts p2 "
+		            + "        WHERE p2.order_id = o.order_id"
+		            + "    ) "
+		            + "    WHERE o.fulfillment_type = 'PICKUP' AND o.pickup_store_id = ? "
+		            + "    AND o.status = 'PAID' AND p.status = 'APPROVED' "
+		            + "    AND o.canceled_at IS NULL "
+		            + "    ORDER BY p.approved_at DESC, o.order_id DESC LIMIT 50"
+		            + ") "
+		            + "SELECT p.order_id, p.order_no, p.recipient, p.approved_at, "
+		            + "       i.product_name, i.quantity "
+		            + "FROM recent_pickups p "
+		            + "LEFT JOIN order_items i ON i.order_id = p.order_id "
+		            + "ORDER BY p.approved_at DESC, p.order_id DESC, i.order_item_id ASC";
+
+		    Map<Long, Map<String, Object>> orders = new java.util.LinkedHashMap<>();
+		    Map<Long, List<String>> itemsByOrder = new HashMap<>();
+
+		    try (PreparedStatement statement = connection.prepareStatement(sql)) {
+		        statement.setString(1, storeId);
+
+		        try (ResultSet result = statement.executeQuery()) {
+		            while (result.next()) {
+		                long orderId = result.getLong("order_id");
+		                List<String> items = itemsByOrder.get(orderId);
+
+		                if (items == null) {
+		                    items = new ArrayList<>();
+		                    itemsByOrder.put(orderId, items);
+
+		                    Map<String, Object> order = new HashMap<>();
+		                    order.put("orderNo", result.getString("order_no"));
+		                    order.put("recipient", result.getString("recipient"));
+		                    order.put("approvedAt", result.getTimestamp("approved_at"));
+		                    order.put("items", items);
+		                    orders.put(orderId, order);
+		                }
+
+		                String productName = result.getString("product_name");
+		                if (productName != null) {
+		                    items.add(productName + " × " + result.getInt("quantity") + "개");
+		                }
+		            }
+		        }
+		    }
+
+		    return new ArrayList<>(orders.values());
+		}
+		
 		// 로그인 회원의 결제 완료된 매장픽업 주문 조회
 		public Map<String, Object> findPaidPickupOrder(String memberId, String orderNo)
 		        throws SQLException {

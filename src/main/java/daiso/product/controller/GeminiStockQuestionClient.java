@@ -37,6 +37,16 @@ public final class GeminiStockQuestionClient {
                 + "특정 매장의 상품 재고를 확인하려는 경우에만 kind를 stock으로 설정한다. "
                 + "stock이면 store에 매장명이나 지역, product에 상품명이나 품번을 넣는다. "
                 + "빠진 검색어와 answer는 빈 문자열로 둔다. "
+                + "우리 쇼핑몰의 상품 가격을 묻는 질문은 kind를 product로 설정한다. "
+                + "product에는 상품명이나 품번을 넣고 store와 answer는 비운다. "
+                + "가격 질문에 상품명이 빠졌으면 product는 빈 문자열로 둔다. "
+                + "특정 매장을 지정하지 않고 상품을 살 수 있는 매장이나 픽업 가능 매장을 묻는 질문은 "
+                + "kind를 pickup_stores로 설정한다. product에 상품명이나 품번을 넣고 store와 answer는 비운다. "
+                + "특정 매장의 재고를 묻는 질문은 기존처럼 kind를 stock으로 설정한다. "
+                + "택배 배송비, 무료배송 기준, 매장픽업 수수료를 묻는 질문은 kind를 shipping_policy로 설정한다. "
+                + "반품이나 환불의 신청 방법 또는 신청 조건을 묻는 질문은 kind를 return_policy로 설정한다. "
+                + "shipping_policy와 return_policy에는 store, product, answer를 빈 문자열로 둔다. "
+                + "본인의 주문, 배송, 반품, 환불 상태를 묻는 경우는 general로 분류하고, 현재 챗봇에서 내 주문 상태를 조회할 수 없다고 안내한다. "
                 + "다른 질문은 kind를 general로 하고 answer에 답변을 넣으며 store와 product는 비운다. "
                 + "실제 재고, 주문 상태, 배송 상태, 가격은 추측하지 않는다. "
                 + "답변은 읽기 쉬운 일반 텍스트로 작성한다.";
@@ -53,7 +63,8 @@ public final class GeminiStockQuestionClient {
 
         JsonObject schema = JsonParser.parseString(
                 "{\"type\":\"object\",\"properties\":{"
-                + "\"kind\":{\"type\":\"string\",\"enum\":[\"general\",\"stock\"]},"
+                + "\"kind\":{\"type\":\"string\",\"enum\":[\"general\",\"stock\",\"product\","
+                + "\"pickup_stores\",\"shipping_policy\",\"return_policy\"]},"
                 + "\"store\":{\"type\":\"string\"},\"product\":{\"type\":\"string\"},"
                 + "\"answer\":{\"type\":\"string\"}},"
                 + "\"required\":[\"kind\",\"store\",\"product\",\"answer\"],"
