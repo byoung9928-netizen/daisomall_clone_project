@@ -75,6 +75,16 @@ public class OrderMyPageController {
         // DB에서 본인의 최근 주문 목록 조회
         List<Map<String, Object>> orders =
             dao.getMyOrders(memberId);
+        
+        try {
+            byte[] photo = new daiso.member.controller.MemberDAO().findProfilePhoto(memberId);
+            if (photo != null) {
+                request.setAttribute("myProfilePhoto",
+                        java.util.Base64.getEncoder().encodeToString(photo));
+            }
+        } catch (SQLException | javax.naming.NamingException error) {
+            request.getServletContext().log("프로필 사진 조회 실패", error);
+        }
 
         DateTimeFormatter formatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -188,9 +198,7 @@ public class OrderMyPageController {
 
 		    if (savedAddress instanceof Map) {
 		        profileDeliveryAddress = (Map<String, String>) savedAddress;
-		    } else if (selected != null && selected.get("address") instanceof Map) {
-		        profileDeliveryAddress =
-		                (Map<String, String>) selected.get("address");
+		  
 		    } else {
 		        profileDeliveryAddress = Collections.emptyMap();
 		    }

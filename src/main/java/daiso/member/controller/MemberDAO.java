@@ -430,6 +430,33 @@ public class MemberDAO {
         }
     }
     
+    public boolean saveProfilePhoto(String memberId, byte[] photo)
+            throws NamingException, SQLException {
+        String sql = "UPDATE members SET profile_photo = ? "
+                + "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBytes(1, photo);
+            statement.setString(2, memberId);
+            return statement.executeUpdate() == 1;
+        }
+    }
+
+    public byte[] findProfilePhoto(String memberId)
+            throws NamingException, SQLException {
+        String sql = "SELECT profile_photo FROM members "
+                + "WHERE member_id = ? AND status = 'ACTIVE'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, memberId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getBytes("profile_photo") : null;
+            }
+        }
+    }
+    
     public MemberProfileInfo findProfileByMemberId(String memberId)
             throws NamingException, SQLException {
 
@@ -1009,19 +1036,20 @@ public class MemberDAO {
     public boolean withdrawMember(String memberId, String verifiedPasswordHash)
             throws NamingException, SQLException {
         String updateMemberSql =
-                "UPDATE members SET status = 'WITHDRAWN', withdrawn_at = CURRENT_TIMESTAMP "
-                + "WHERE member_id = ? AND role = 'MEMBER' AND status = 'ACTIVE' "
+        		"UPDATE members SET status = 'WITHDRAWN', withdrawn_at = CURRENT_TIMESTAMP, profile_photo = NULL "                + "WHERE member_id = ? AND role = 'MEMBER' AND status = 'ACTIVE' "
                 + "AND password_hash = ? "
                 + "AND NOT EXISTS ("
                 + "    SELECT 1 FROM orders o WHERE o.member_id = ? "
                 + "    AND o.status IN ('PENDING', 'PAID', 'PREPARING', "
                 + "                     'SHIPPED', 'CANCELLING', 'REFUNDING')"
+                + " AND NOT (o.status = 'PAID' AND (o.fulfillment_type <=> 'PICKUP') "
+                + "          AND (o.pickup_status <=> 'PICKED_UP'))"
                 + ") "
                 + "AND NOT EXISTS ("
                 + "    SELECT 1 FROM order_returns r "
                 + "    JOIN orders o ON o.order_id = r.order_id "
                 + "    WHERE o.member_id = ? "
-                + "    AND r.status IN ('REQUESTED', 'APPROVED', 'RECEIVED', 'REFUNDING')"
+                + "    AND r.status IN ('REQUESTED', 'APPROVED', 'RECEIVED', 'REFUNDING')"               
                 + ")";
 
         String[] cleanupStatements = {

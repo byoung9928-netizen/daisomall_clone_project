@@ -654,6 +654,7 @@ public class OrderDAO {
 		                order.put("orderNo", rs.getString("order_no"));
 		                order.put("status", rs.getString("status"));
 		                order.put("fulfillmentType", rs.getString("fulfillment_type"));
+		                order.put("pickupStatus", rs.getString("pickup_status"));
                         order.put("pickupStore", rs.getString("store_name") != null ? rs.getString("store_name") : rs.getString("pickup_store_id"));
                         order.put("pickupCity", rs.getString("city"));
                         order.put("pickupFee", rs.getInt("pickup_fee"));
@@ -1018,10 +1019,38 @@ public class OrderDAO {
 		    }
 		}
 		
+		public boolean advancePickupStatus(Connection connection, String storeId,
+		        String orderNo, boolean markPickedUp) throws SQLException {
+		    String sql = "UPDATE orders o SET o.pickup_status = ? "
+		            + "WHERE o.order_no = ? AND o.pickup_store_id = ? "
+		            + "AND o.fulfillment_type = 'PICKUP' AND o.status = 'PAID' "
+		            + "AND o.canceled_at IS NULL AND o.pickup_status <=> ? "
+		            + "AND EXISTS ("
+		            + "    SELECT 1 FROM payment_attempts p "
+		            + "    WHERE p.order_id = o.order_id AND p.status = 'APPROVED' "
+		            + "    AND p.payment_id = ("
+		            + "        SELECT MAX(p2.payment_id) FROM payment_attempts p2 "
+		            + "        WHERE p2.order_id = o.order_id"
+		            + "    )"
+		            + ")";
+
+		    try (PreparedStatement statement = connection.prepareStatement(sql)) {
+		        statement.setString(1, markPickedUp ? "PICKED_UP" : "READY");
+		        statement.setString(2, orderNo);
+		        statement.setString(3, storeId);
+		        if (markPickedUp) {
+		            statement.setString(4, "READY");
+		        } else {
+		            statement.setNull(4, java.sql.Types.VARCHAR);
+		        }
+		        return statement.executeUpdate() == 1;
+		    }
+		}
+		
 		public List<Map<String, Object>> findPaidPickupOrders(
 		        Connection connection, String storeId) throws SQLException {
 		    String sql = "WITH recent_pickups AS ("
-		            + "    SELECT o.order_id, o.order_no, o.recipient, p.approved_at "
+		            + "    SELECT o.order_id, o.order_no, o.recipient,  o.pickup_status, p.approved_at "
 		            + "    FROM orders o "
 		            + "    JOIN payment_attempts p ON p.payment_id = ("
 		            + "        SELECT MAX(p2.payment_id) FROM payment_attempts p2 "
@@ -1032,7 +1061,7 @@ public class OrderDAO {
 		            + "    AND o.canceled_at IS NULL "
 		            + "    ORDER BY p.approved_at DESC, o.order_id DESC LIMIT 50"
 		            + ") "
-		            + "SELECT p.order_id, p.order_no, p.recipient, p.approved_at, "
+		            + "SELECT p.order_id, p.order_no, p.recipient, p.pickup_status, p.approved_at, "
 		            + "       i.product_name, i.quantity "
 		            + "FROM recent_pickups p "
 		            + "LEFT JOIN order_items i ON i.order_id = p.order_id "
@@ -1057,6 +1086,7 @@ public class OrderDAO {
 		                    order.put("orderNo", result.getString("order_no"));
 		                    order.put("recipient", result.getString("recipient"));
 		                    order.put("approvedAt", result.getTimestamp("approved_at"));
+		                    order.put("pickupStatus", result.getString("pickup_status"));
 		                    order.put("items", items);
 		                    orders.put(orderId, order);
 		                }
@@ -1275,6 +1305,7 @@ public class OrderDAO {
 		    String selectSql =
 		        "SELECT o.order_id, o.total_amount, o.stock_deducted, "
 		        + "o.status AS order_status, "
+		        + "o.pickup_status, "
 		        + "p.payment_id, p.tid, p.amount, p.method, "
 		        + "p.status AS payment_status "
 		        + "FROM orders o "
@@ -1316,6 +1347,10 @@ public class OrderDAO {
 		                        throw new IllegalArgumentException(
 		                            "본인의 주문을 찾을 수 없습니다."
 		                        );
+		                    }
+		                    
+		                    if ("PICKED_UP".equals(rs.getString("pickup_status"))) {
+		                        throw new IllegalArgumentException("수령이 끝난 픽업 주문은 취소할 수 없습니다.");
 		                    }
 
 		                    if (!"PAID".equals(rs.getString("order_status"))
