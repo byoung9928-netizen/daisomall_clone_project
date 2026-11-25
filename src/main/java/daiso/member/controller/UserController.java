@@ -778,6 +778,34 @@ public class UserController {
         return "admin/dashboard";
     }
     
+    @DaisoPostMapping("/member/profile/photo")
+    public String uploadProfilePhoto(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+        if (!(memberId instanceof String)) {
+            return "redirect:/member/login";
+        }
+
+        String myPage = "redirect:/order/mypage";
+        try {
+            Object expected = session.getAttribute("memberConsentCsrf");
+            if (!(expected instanceof String) || !expected.equals(request.getParameter("csrfToken"))) {
+                return myPage + "?photo=retry";
+            }
+
+            byte[] photo = daiso.product.controller.ReviewPhotoUpload.normalize(
+                    request.getPart("profilePhoto"));
+            boolean saved = new MemberDAO().saveProfilePhoto((String) memberId, photo);
+            return saved ? myPage : myPage + "?photo=retry";
+        } catch (IllegalArgumentException | IllegalStateException
+                | java.io.IOException | javax.servlet.ServletException error) {
+            return myPage + "?photo=invalid";
+        } catch (java.sql.SQLException | javax.naming.NamingException error) {
+            request.getServletContext().log("프로필 사진 저장 실패", error);
+            return myPage + "?photo=retry";
+        }
+    }
+    
     @DaisoGetMapping("/member/profile")
     public String memberProfile() {
         return "redirect:/order/mypage?section=profile";

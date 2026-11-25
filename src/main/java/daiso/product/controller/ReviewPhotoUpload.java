@@ -17,7 +17,7 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.servlet.http.Part;
 
-final class ReviewPhotoUpload {
+public final class ReviewPhotoUpload {
     private static final long MAX_BATCH = 5 * 1024 * 1024;
     private static final long MAX_INPUT = 2 * 1024 * 1024;
     private static final long MAX_PIXELS = 16_000_000;
@@ -40,7 +40,11 @@ final class ReviewPhotoUpload {
         return images;
     }
 
-    private static byte[] normalize(Part part) throws IOException {
+    public static byte[] normalize(Part part) throws IOException {
+        if (part == null || part.getSize() < 1 || part.getSize() > MAX_INPUT) {
+            throw new IllegalArgumentException("2MB 이하의 JPG 또는 PNG 사진을 선택해 주세요.");
+        }
+
         try (InputStream raw = part.getInputStream(); MemoryCacheImageInputStream input = new MemoryCacheImageInputStream(raw)) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) throw invalid();

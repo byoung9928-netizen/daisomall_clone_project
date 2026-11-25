@@ -84,7 +84,8 @@ if (deliveryPhoneDigits.length() == 11) {
 	maskedDeliveryPhone = deliveryPhoneDigits.substring(0, 3) + "-***-****";
 }
 
-String deliveryPostcode = profileDeliveryAddress.getOrDefault("postcode", "");
+String deliveryPostcode =
+java.util.Objects.toString(profileDeliveryAddress.get("postcode"), "");
 if (deliveryPostcode.length() == 5) {
 	deliveryPostcode = deliveryPostcode.substring(0, 3) + "**";
 }
@@ -159,6 +160,23 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	place-items: center;
 	position: relative;
 	margin-bottom: 18px
+}
+label.my-avatar {
+    cursor: pointer;
+}
+
+.my-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+#profile-photo-file:focus-visible + .my-avatar {
+    outline: 2px solid #1769d1;
+    outline-offset: 3px;
 }
 
 .my-avatar svg {
@@ -1933,13 +1951,35 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 		data-page="mypage" tabindex="-1">
 		<h1 class="visually-hidden">마이페이지 주문 상세</h1>
 		<section class="account-overview" aria-label="회원 이용 현황">
-			<div class="my-profile">
-				<div class="my-avatar">
-					<svg viewBox="0 0 48 48" aria-hidden="true">
-						<circle cx="24" cy="15" r="9" />
-						<path d="M7 43v-5a17 17 0 0 1 34 0v5z" /></svg>
-					<span>0</span>
-				</div>
+		<div class="my-profile">
+			<form method="post" enctype="multipart/form-data"
+      action="<%= myContext %>/app/member/profile/photo">
+    <input type="hidden" name="csrfToken"
+           value="<%= ProductView.escape(request.getAttribute("memberConsentCsrf")) %>">
+    <input id="profile-photo-file" name="profilePhoto" type="file"
+           class="visually-hidden" accept="image/jpeg,image/png"
+           onchange="if (this.files.length) this.form.requestSubmit()">
+
+    <label class="my-avatar" for="profile-photo-file">
+        <% if (request.getAttribute("myProfilePhoto") != null) { %>
+            <img src="data:image/jpeg;base64,<%= ProductView.escape(request.getAttribute("myProfilePhoto")) %>"
+                 alt="">
+        <% } else { %>
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+                <circle cx="24" cy="15" r="9" />
+                <path d="M7 43v-5a17 17 0 0 1 34 0v5z" />
+            </svg>
+        <% } %>
+        <span aria-hidden="true">+</span>
+        <strong class="visually-hidden">프로필 사진 변경</strong>
+    </label>
+
+    <% if ("invalid".equals(request.getParameter("photo"))) { %>
+        <p role="alert">2MB 이하의 정상적인 JPG 또는 PNG 사진을 선택해 주세요.</p>
+    <% } else if ("retry".equals(request.getParameter("photo"))) { %>
+        <p role="alert">사진을 저장하지 못했습니다. 다시 시도해 주세요.</p>
+    <% } %>
+</form>
 				<span class="my-member-tag">개인</span><a class="my-member-name"
 					href="<%=myContext%>/app/member/profile"> <%=ProductView.escape(request.getAttribute("memberName"))%>님
 					›
@@ -3058,8 +3098,10 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 						data-order-no="<%= ProductView.escape(myOrder.get("orderNo")) %>"
 						data-csrf="<%= ProductView.escape(request.getAttribute("myOrderDeleteCsrf")) %>">
 						결제대기 주문 삭제</button>
-					<% } else if ("PAID".equals(myOrder.get("status"))
-							&& "APPROVED".equals(myOrder.get("paymentStatus"))) { %>
+					<%
+					} else if ("PAID".equals(myOrder.get("status")) && "APPROVED".equals(myOrder.get("paymentStatus"))
+							&& !"PICKED_UP".equals(myOrder.get("pickupStatus"))) {
+					%>
 					<a class="my-outline-button"
 						style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none;"
 						href="<%= myContext %>/app/order/cancel/form?orderNo=<%= java.net.URLEncoder.encode(
