@@ -287,10 +287,18 @@ public final class AdminProductController {
     @DaisoPostMapping(ROUTE + "/bulk-status")
     public String bulkStatus(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
         response.setHeader("Cache-Control", "private, no-store");
+        response.addHeader("Vary", "Accept");
+        boolean json = AdminBatchResponse.wantsJson(request);
         HttpSession session = adminSession(request);
-        if (session == null) return denied(request, response, "관리자 계정으로 로그인해 주세요.");
+        if (session == null) {
+            String message = "관리자 계정으로 로그인해 주세요.";
+            return json ? AdminBatchResponse.failed(response, 403, message) : denied(request, response, message);
+        }
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        if (!validToken(request, session)) return denied(request, response, "상품 관리 화면을 새로 연 후 다시 시도해 주세요.");
+        if (!validToken(request, session)) {
+            String message = "상품 관리 화면을 새로 연 후 다시 시도해 주세요.";
+            return json ? AdminBatchResponse.failed(response, 403, message) : denied(request, response, message);
+        }
         try {
             String receipt = ProductQueries.text(request, "bulkReceipt", 36);
             if ("cancel".equals(request.getParameter("bulkAction"))) {
@@ -302,6 +310,7 @@ public final class AdminProductController {
                 return null;
             }
             if (receipt.isEmpty()) {
+                if (json) return AdminBatchResponse.failed(response, 400, "미리보기를 만든 뒤 변경을 확정해 주세요.");
                 BulkPreview preview = previewBulk(request);
                 synchronized (session) {
                     Map<String, BulkPreview> previews = bulkSession(session).previews;
@@ -323,15 +332,24 @@ public final class AdminProductController {
             String message = updated == 0 ? "선택한 상품이 모두 이미 같은 값입니다."
                     : "선택한 상품 " + updated + "개의 " + preview.fieldLabel
                             + ("PRICE".equals(preview.type) ? "을" : "를") + " 변경했습니다.";
+            if (json) {
+                String listUrl = ProductView.rawUrl(request.getContextPath() + request.getServletPath(), ROUTE, preview.filters);
+                return AdminBatchResponse.saved(response, message, listUrl);
+            }
             synchronized (session) {
                 rememberBulk(bulkSession(session).notices, receipt, message);
             }
             return "redirect:" + ProductView.rawUrl("", ROUTE,
                     ProductView.with(preview.filters, "productBulkSaved", receipt)) + "#product-bulk-result";
         } catch (IllegalArgumentException error) {
+            if (json) return AdminBatchResponse.failed(response, 400, error.getMessage());
             request.setAttribute("adminBulkError", true);
             return problem(request, response, session, HttpServletResponse.SC_BAD_REQUEST, error.getMessage(), null);
         } catch (SQLException | NamingException error) {
+            if (json) {
+                request.getServletContext().log("상품 일괄 변경 실패", error);
+                return AdminBatchResponse.failed(response, 503, "상품과 변경 이력을 저장하지 못했습니다. 최신 상품 목록을 확인해 주세요.");
+            }
             return unavailable(request, response, error);
         }
     }

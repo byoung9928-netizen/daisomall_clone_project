@@ -145,15 +145,19 @@
             changed();
             refresh();
         });
-        clear.addEventListener('click', () => {
+        function resetSelection() {
             boxes.forEach(box => { box.checked = false; });
             drafts.clear();
             form.reset();
             currentOperation = operation.value;
             changed();
             refresh();
+        }
+        clear.addEventListener('click', () => {
+            resetSelection();
             selectAll.focus();
         });
+        form.addEventListener('admin-batch-reset', resetSelection);
         form.addEventListener('input', changed);
         amount.addEventListener('input', () => { draft().shared = amount.value; });
         operation.addEventListener('change', () => {
@@ -204,7 +208,7 @@
         function showPreview(preview) {
             root.dispatchEvent(new CustomEvent('admin-batch-preview', {
                 detail: { dialog, preview, opener: previewButton, noticeId: 'inventory-batch-result',
-                    receiptParameter: 'batchSaved', refreshLabel: '최신 재고 보기' }
+                    refreshLabel: '최신 재고 보기' }
             }));
         }
 

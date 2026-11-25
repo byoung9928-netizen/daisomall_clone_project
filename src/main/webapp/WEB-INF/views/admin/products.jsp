@@ -26,10 +26,10 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-json-1" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-detail-description.css">
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-products.js?v=batch-json-1" defer></script>
     <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-wizard.js" defer></script>
 </head>
 <body class="admin-body product-admin-ux">

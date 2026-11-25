@@ -199,14 +199,18 @@
             refreshSelection();
         });
         checkboxes.forEach(box => box.addEventListener('change', () => { edited(); refreshSelection(); }));
-        clear.addEventListener('click', () => {
+        function resetSelection() {
             checkboxes.forEach(box => { box.checked = false; });
             form.reset();
             edited();
             updateType();
             refreshSelection();
+        }
+        clear.addEventListener('click', () => {
+            resetSelection();
             selectAll.focus();
         });
+        form.addEventListener('admin-batch-reset', resetSelection);
         form.addEventListener('input', edited);
         type.addEventListener('change', () => { edited(); updateType(); });
 
@@ -260,7 +264,7 @@
                 if (response.ok && preview) {
                     root.dispatchEvent(new CustomEvent('admin-batch-preview', {
                         detail: { dialog, preview, opener, noticeId: 'product-bulk-result',
-                            receiptParameter: 'productBulkSaved', refreshLabel: '최신 상품 목록 보기', discard }
+                            refreshLabel: '최신 상품 목록 보기', discard }
                     }));
                 } else {
                     const error = html.querySelector('[data-batch-server-error]');

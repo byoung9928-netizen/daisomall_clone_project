@@ -5,7 +5,7 @@ import daiso.common.annotation.DaisoPostMapping;
 import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.Stock;
-import java.io.UnsupportedEncodingException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -31,23 +31,26 @@ public final class AdminInventoryBatchController {
     private final AdminProductChanges audit = new AdminProductChanges();
 
     @DaisoPostMapping("/admin/inventory/batch")
-    public String online(HttpServletRequest request, HttpServletResponse response) throws UnsupportedEncodingException {
+    public String online(HttpServletRequest request, HttpServletResponse response) throws IOException {
         return batch(request, response, true);
     }
 
     @DaisoPostMapping("/admin/stores/batch")
-    public String stores(HttpServletRequest request, HttpServletResponse response) throws UnsupportedEncodingException {
+    public String stores(HttpServletRequest request, HttpServletResponse response) throws IOException {
         return batch(request, response, false);
     }
 
     private String batch(HttpServletRequest request, HttpServletResponse response, boolean online)
-            throws UnsupportedEncodingException {
+            throws IOException {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setHeader("Cache-Control", "private, no-store");
+        response.addHeader("Vary", "Accept");
+        boolean json = AdminBatchResponse.wantsJson(request);
         request.setAttribute("adminSection", online ? "inventory" : "stores");
         HttpSession session = AdminProductController.adminSession(request);
         if (session == null || !AdminProductController.validToken(request, session)) {
-            return problem(request, response, 403, "관리자 권한 또는 요청 확인 정보가 유효하지 않습니다.");
+            String message = "관리자 권한 또는 요청 확인 정보가 유효하지 않습니다.";
+            return json ? AdminBatchResponse.failed(response, 403, message) : problem(request, response, 403, message);
         }
         String route = online ? "/admin/inventory" : "/admin/stores";
         String manager = session.getAttribute("member_id").toString();
@@ -57,6 +60,7 @@ public final class AdminInventoryBatchController {
             request.setAttribute("batchBack", ProductView.url(request.getContextPath(), "/app" + route, filters));
             String token = ProductQueries.text(request, "receipt", 36);
             if (token.isEmpty()) {
+                if (json) return AdminBatchResponse.failed(response, 400, "미리보기를 만든 뒤 변경을 확정해 주세요.");
                 Plan plan = preview(request, online, filters);
                 rememberPreview(session, plan);
                 request.setAttribute("batchPreview", plan);
@@ -76,24 +80,31 @@ public final class AdminInventoryBatchController {
             }
             request.setAttribute("batchBack", ProductView.url(request.getContextPath(), "/app" + route, plan.filters));
             int changed = commit(plan, manager);
+            String message = "재고 일괄 작업을 완료했습니다. " + changed + "개 재고 행을 변경했습니다.";
+            if (json) {
+                String listUrl = ProductView.rawUrl(request.getContextPath() + request.getServletPath(), route, plan.filters);
+                return AdminBatchResponse.saved(response, message, listUrl);
+            }
             synchronized (session) {
                 PreviewPlans previews = (PreviewPlans) session.getAttribute(PREVIEW_KEY);
                 if (previews.notices.size() >= PREVIEW_LIMIT) {
                     previews.notices.remove(previews.notices.keySet().iterator().next());
                 }
-                previews.notices.put(plan.receipt, new Notice(route,
-                        "재고 일괄 작업을 완료했습니다. " + changed + "개 재고 행을 변경했습니다."));
+                previews.notices.put(plan.receipt, new Notice(route, message));
             }
             return "redirect:" + ProductView.rawUrl("", route,
                     ProductView.with(plan.filters, SAVED_PARAMETER, plan.receipt)) + "#inventory-batch-result";
         } catch (InvalidInput error) {
             request.setAttribute("batchErrorField", error.field);
-            return problem(request, response, 400, error.getMessage());
+            return json ? AdminBatchResponse.failed(response, 400, error.getMessage())
+                    : problem(request, response, 400, error.getMessage());
         } catch (IllegalArgumentException error) {
-            return problem(request, response, 400, error.getMessage());
+            return json ? AdminBatchResponse.failed(response, 400, error.getMessage())
+                    : problem(request, response, 400, error.getMessage());
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("재고 일괄 작업 실패", error);
-            return problem(request, response, 503, "재고와 변경 이력을 저장하지 못했습니다. 스키마와 재고 상태를 확인해 주세요.");
+            String message = "재고와 변경 이력을 저장하지 못했습니다. 스키마와 재고 상태를 확인해 주세요.";
+            return json ? AdminBatchResponse.failed(response, 503, message) : problem(request, response, 503, message);
         }
     }
 

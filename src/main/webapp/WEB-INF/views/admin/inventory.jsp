@@ -13,9 +13,9 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-product-workspace.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-product-workspace.js?v=batch-json-1" defer></script>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-stores.css">
-    <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory-batch.js" defer></script>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-inventory-batch.js?v=batch-json-1" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>

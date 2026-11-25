@@ -26,18 +26,87 @@
         return !hasDraft() || window.confirm('이동하면 현재 선택과 저장하지 않은 입력이 사라집니다. 이동할까요?');
     }
 
+    function workspaceTable() {
+        return content.querySelector('.admin-table-scroll:not(dialog .admin-table-scroll)');
+    }
+
     function render(next, destination) {
-        const scrollLeft = content.querySelector('.admin-table-scroll')?.scrollLeft || 0;
+        const scrollLeft = workspaceTable()?.scrollLeft || 0;
         content.replaceChildren(...next.childNodes);
-        const table = content.querySelector('.admin-table-scroll');
+        const table = workspaceTable();
         if (table) table.scrollLeft = scrollLeft;
         committed = destination;
         dirtyForm = undefined;
         document.dispatchEvent(new Event('admin-query-render'));
     }
 
+    async function fetchWorkspace(url, signal) {
+        const response = await fetch(url, { signal, cache: 'no-store' });
+        const destination = new URL(response.url);
+        if (!response.ok || destination.origin !== committed.origin || destination.pathname !== committed.pathname) {
+            throw new Error();
+        }
+        const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const next = html.querySelector('[data-admin-query-content]');
+        if (!next || html.querySelector('[data-admin-query]')?.dataset.adminQuery !== root.dataset.adminQuery) throw new Error();
+        return { next, destination };
+    }
+
+    function showBatchNotice(id, message) {
+        let notice = document.getElementById(id);
+        if (!notice) {
+            notice = document.createElement('p');
+            notice.id = id;
+            notice.className = 'inventory-success';
+            notice.setAttribute('role', 'status');
+            content.prepend(notice);
+        }
+        notice.textContent = message;
+    }
+
+    function workspaceScroll() {
+        const table = workspaceTable();
+        return { x: window.scrollX, y: window.scrollY, left: table?.scrollLeft || 0, top: table?.scrollTop || 0 };
+    }
+
+    function restoreWorkspaceScroll(position) {
+        workspaceTable()?.scrollTo({ left: position.left, top: position.top, behavior: 'instant' });
+        window.scrollTo({ left: position.x, top: position.y, behavior: 'instant' });
+    }
+
+    async function refreshAfterBatch(url, noticeId, message) {
+        pending?.controller.abort();
+        const request = { url, controller: new AbortController() };
+        pending = request;
+        content.setAttribute('aria-busy', 'true');
+        error.hidden = true;
+        try {
+            const { next, destination } = await fetchWorkspace(url, request.controller.signal);
+            if (pending !== request) return;
+            const position = workspaceScroll();
+            history.replaceState(null, '', destination);
+            render(next, destination);
+            showBatchNotice(noticeId, message);
+            restoreWorkspaceScroll(position);
+        } catch {
+            if (pending !== request) return;
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'button secondary';
+            retry.textContent = '목록 다시 불러오기';
+            retry.addEventListener('click', () => refreshAfterBatch(url, noticeId, message));
+            error.replaceChildren('변경은 저장됐지만 최신 목록을 불러오지 못했습니다. ', retry);
+            error.hidden = false;
+        } finally {
+            if (pending === request) {
+                pending = undefined;
+                content.removeAttribute('aria-busy');
+            }
+        }
+    }
+
     root.addEventListener('admin-batch-preview', event => {
-        const { dialog, preview, opener, noticeId, receiptParameter, refreshLabel, discard } = event.detail;
+        const { dialog, preview, opener, noticeId, refreshLabel, discard } = event.detail;
         dialog.replaceChildren(document.importNode(preview, true));
         const close = dialog.querySelector('[data-batch-close]');
         const revise = dialog.querySelector('[data-batch-revise]');
@@ -68,32 +137,32 @@
             revise.setAttribute('aria-disabled', 'true');
             try {
                 const response = await fetch(confirmation.action, {
-                    method: 'POST', body: new URLSearchParams(new FormData(confirmation)), cache: 'no-store'
+                    method: 'POST',
+                    headers: { Accept: 'application/json' },
+                    body: new URLSearchParams(new FormData(confirmation)),
+                    cache: 'no-store',
+                    redirect: 'error'
                 });
-                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
-                const next = html.querySelector('[data-admin-query-content]');
-                const destination = new URL(response.url);
-                if (response.ok && response.redirected && destination.origin === location.origin
-                        && destination.pathname === location.pathname
-                        && html.querySelector('[data-admin-query]')?.dataset.adminQuery === root.dataset.adminQuery
-                        && next?.querySelector('#' + noticeId)) {
-                    destination.searchParams.delete(receiptParameter);
+                if (!response.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) throw new Error();
+                const result = await response.json();
+                if (response.ok && result.success === true && typeof result.message === 'string') {
+                    let url = committed;
+                    try {
+                        const target = new URL(result.listUrl, location.origin);
+                        if (target.origin === committed.origin && target.pathname === committed.pathname) url = target;
+                    } catch { /* Keep the current list URL. */ }
+                    const position = workspaceScroll();
                     dialog.close();
-                    pending?.controller.abort();
-                    pending = undefined;
-                    content.removeAttribute('aria-busy');
-                    history.replaceState(null, '', destination);
-                    render(next, destination);
-                    const notice = root.querySelector('#' + noticeId);
-                    notice.focus({ preventScroll: true });
-                    notice.scrollIntoView({ block: 'nearest' });
+                    opener.form.dispatchEvent(new Event('admin-batch-reset'));
+                    showBatchNotice(noticeId, result.message);
+                    restoreWorkspaceScroll(position);
+                    void refreshAfterBatch(url, noticeId, result.message);
                     return;
                 }
-                warning.textContent = html.querySelector('[data-batch-server-error]')?.textContent.trim()
-                    || (response.status === 403 ? '관리자 로그인과 요청 확인 정보를 확인해 주세요.'
-                        : '저장 결과를 확인할 수 없습니다. 목록에서 최신 값을 확인해 주세요.');
+                warning.textContent = result.success === false && result.message
+                    ? result.message : '저장 결과를 확인할 수 없습니다. 목록에서 최신 값을 확인해 주세요.';
             } catch {
-                warning.textContent = '연결이 끊겨 저장 결과를 확인할 수 없습니다. 목록에서 최신 값을 확인해 주세요.';
+                warning.textContent = '확정 응답을 확인하지 못했습니다. 목록에서 최신 값을 확인해 주세요.';
             } finally {
                 saving = false;
                 close.disabled = false;
@@ -124,16 +193,9 @@
         content.setAttribute('aria-busy', 'true');
         error.hidden = true;
         try {
-            const response = await fetch(url, { signal: request.controller.signal, cache: 'no-store' });
-            const destination = new URL(response.url);
-            if (!response.ok || destination.origin !== committed.origin || destination.pathname !== committed.pathname) {
-                throw new Error();
-            }
-            destination.hash = url.hash;
-            const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const { next, destination } = await fetchWorkspace(url, request.controller.signal);
             if (pending !== request) return;
-            const next = html.querySelector('[data-admin-query-content]');
-            if (!next || html.querySelector('[data-admin-query]')?.dataset.adminQuery !== root.dataset.adminQuery) throw new Error();
+            destination.hash = url.hash;
 
             if (!restore) history.pushState(null, '', destination);
             else if (destination.href !== url.href) history.replaceState(null, '', destination);
