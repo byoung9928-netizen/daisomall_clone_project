@@ -27,8 +27,8 @@ public class OrderCancelViewDAO {
         }
     }
     public Map<String,Object> findOrder(String memberId, String orderNo) throws SQLException {
-        String sql = "SELECT o.order_id,o.order_no,o.status,o.subtotal_amount,o.shipping_fee,o.total_amount,"
-            + "p.status AS payment_status FROM orders o JOIN payment_attempts p ON p.order_id=o.order_id "
+        String sql = "SELECT o.order_id,o.order_no,o.status,o.subtotal_amount,o.shipping_fee,o.total_amount,o.fulfillment_type,o.pickup_store_id,o.pickup_fee,"
+            + "p.status AS payment_status,p.method FROM orders o JOIN payment_attempts p ON p.order_id=o.order_id "
             + "WHERE o.member_id=? AND o.order_no=? ORDER BY p.payment_id DESC LIMIT 1";
         try (Connection con = ds.getConnection()) {
             Map<String,Object> order = new HashMap<>();
@@ -40,6 +40,10 @@ public class OrderCancelViewDAO {
                     order.put("status",rs.getString("status")); order.put("paymentStatus",rs.getString("payment_status"));
                     order.put("subtotal",rs.getInt("subtotal_amount")); order.put("shipping",rs.getInt("shipping_fee"));
                     order.put("total",rs.getInt("total_amount"));
+                    order.put("pickup", "PICKUP".equals(rs.getString("fulfillment_type")));
+                    order.put("pickupStoreId", rs.getString("pickup_store_id"));
+                    order.put("pickupFee", rs.getInt("pickup_fee"));
+                    order.put("paymentMethod", rs.getString("method"));
                 }
             }
             List<CartBean> items = new ArrayList<>();

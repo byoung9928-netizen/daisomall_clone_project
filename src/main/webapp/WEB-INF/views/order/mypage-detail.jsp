@@ -382,6 +382,8 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 	vertical-align: middle
 }
 
+.my-delivery-tag img { vertical-align: middle; }
+
 .my-order-number {
 	font-size: 11px;
 	color: #6d7e94;
@@ -2928,9 +2930,16 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 				<%
 				}
 				%>
-				<div class="my-order-heading">
+				<%
+                boolean pickup = "PICKUP".equals(myOrder.get("fulfillmentType"));
+                String feeLabel = pickup ? "픽업 수수료" : "총 배송비";
+                Object fee = myOrder.get(pickup ? "pickupFee" : "shipping");
+                String paymentName = "TOSSPAY".equals(myOrder.get("payMethod")) ? "토스페이"
+                        : "KAKAOPAY".equals(myOrder.get("payMethod")) ? "카카오페이" : "결제수단 미확인";
+                %>
+                <div class="my-order-heading">
 					<h1><%=ProductView.escape(myOrder.get("date"))%><span
-							class="my-delivery-tag">택배</span>
+							class="my-delivery-tag"><% if (pickup) { %><img src="<%=myContext%>/assets/images/home/service-pickup.svg" width="14" height="16" alt=""> 매장픽업<% } else { %>택배<% } %></span>
 					</h1>
 					<span class="my-order-number">주문번호 <%=ProductView.escape(myOrder.get("orderNo"))%></span>
 				</div>
@@ -2957,7 +2966,10 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 					<h2><%=ProductView.escape(myStatusLabel)%></h2>
 
 					<%
-					if (myCurrentStep >= 0) {
+					if (pickup) { %>
+                    <p>픽업매장 · <strong><%=ProductView.escape(myOrder.get("pickupStore"))%></strong></p>
+                    <a href="#my-delivery-title">픽업 정보 보기</a>
+                    <% } else if (myCurrentStep >= 0) {
 					%>
 					<ol class="my-status-steps">
 						<li <%=myCurrentStep == 0 ? "aria-current=\"step\"" : ""%>>
@@ -3072,20 +3084,21 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 				</div>
 				<section class="my-section" aria-labelledby="my-delivery-title">
 					<div class="my-section-heading">
-						<h2 id="my-delivery-title">배송정보</h2>
+						<h2 id="my-delivery-title" tabindex="-1"><%=pickup ? "픽업정보" : "배송정보"%></h2>
+                        <% if (!pickup) { %>
 						<button class="my-change-button" type="button" disabled
-							title="결제 후 배송지 변경 기능은 준비 중입니다">⇄ 변경</button>
+							title="결제 후 배송지 변경 기능은 준비 중입니다">⇄ 변경</button><% } %>
 					</div>
 					<table class="my-data-table">
-						<caption class="visually-hidden">주문 배송정보</caption>
+						<caption class="visually-hidden"><%=pickup ? "주문 픽업정보" : "주문 배송정보"%></caption>
 						<tbody>
 							<tr>
 								<th scope="row">수령 방법</th>
-								<td>택배배송</td>
+								<td><%=pickup ? "매장픽업" : "택배배송"%></td>
 							</tr>
 							<tr>
-								<th scope="row">배송지</th>
-								<td><%=ProductView.escape(myAddress.get("addressName"))%></td>
+								<th scope="row"><%=pickup ? "픽업매장" : "배송지"%></th>
+								<td><%=ProductView.escape(pickup ? myOrder.get("pickupStore") : myAddress.get("addressName"))%></td>
 							</tr>
 							<tr>
 								<th scope="row">받는분</th>
@@ -3096,15 +3109,16 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 								<td><%=ProductView.escape(myAddress.get("phone"))%></td>
 							</tr>
 							<tr>
-								<th scope="row">주소</th>
-								<td><%=ProductView.escape(myAddress.get("address1"))%> <%=ProductView.escape(myAddress.get("address2"))%></td>
+								<th scope="row"><%=pickup ? "매장 지역" : "주소"%></th>
+                                <% if (pickup) { %><td><%=ProductView.escape(myOrder.get("pickupCity"))%></td><% } else { %>
+								<td><%=ProductView.escape(myAddress.get("address1"))%> <%=ProductView.escape(myAddress.get("address2"))%></td><% } %>
 							</tr>
-							<tr>
+							<% if (!pickup) { %><tr>
 								<th scope="row">배송 요청사항</th>
 								<td><%=myOrder.get("message") == null || myOrder.get("message").toString().isBlank()
 		? "없음"
 		: ProductView.escape(myOrder.get("message"))%></td>
-							</tr>
+							</tr><% } %>
 						</tbody>
 					</table>
 				</section>
@@ -3124,13 +3138,13 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 								<td class="money"><%=myMoney.format(myOrder.get("subtotal"))%>원</td>
 							</tr>
 							<tr>
-								<th scope="row">총 배송비</th>
-								<td class="money"><%=myMoney.format(myOrder.get("shipping"))%>원</td>
+								<th scope="row"><%=feeLabel%></th>
+								<td class="money"><%=myMoney.format(fee)%>원</td>
 							</tr>
-							<tr class="muted">
+							<% if (!pickup) { %><tr class="muted">
 								<th scope="row">기본 배송비</th>
-								<td class="money"><%=myMoney.format(myOrder.get("shipping"))%>원</td>
-							</tr>
+								<td class="money"><%=myMoney.format(fee)%>원</td>
+							</tr><% } %>
 							<tr class="tinted">
 								<%
 								// DB의 결제 상태를 화면에 표시할 문구로 변환
@@ -3161,7 +3175,7 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 								}
 								%>
 
-								<th scope="row">카카오페이 <span class="my-payment-label">
+								<th scope="row"><%=paymentName%> <span class="my-payment-label">
 										<%=ProductView.escape(myPaymentLabel)%>
 								</span>
 								</th>
@@ -3169,7 +3183,7 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 							</tr>
 							<tr>
 								<th scope="row">결제수단</th>
-								<td>카카오페이</td>
+								<td><%=paymentName%></td>
 							</tr>
 							<tr>
 								<th scope="row">결제일시</th>
@@ -3189,7 +3203,7 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 					<button class="my-receipt-close" id="close-my-receipt"
 						type="button" aria-label="거래명세서 닫기">×</button>
 				</div>
-				<p>카카오페이 모의결제 내역</p>
+				<p><%=paymentName%> 결제 내역</p>
 				<p>
 					주문번호
 					<%=ProductView.escape(myOrder.get("orderNo"))%></p>
@@ -3218,8 +3232,8 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 					</tbody>
 				</table>
 				<p class="my-receipt-total">
-					배송비
-					<%=myMoney.format(myOrder.get("shipping"))%>원
+                    <%=feeLabel%>
+					<%=myMoney.format(fee)%>원
 				</p>
 				<p class="my-receipt-total">
 					총 결제 금액

@@ -1,25 +1,30 @@
 package daiso.order.controller;
-
-import java.sql.SQLException;
-import java.util.List;
-import daiso.cart.db.CartBean;
-import daiso.cart.db.CartDAO;
-import java.util.Map;
-import java.util.UUID;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
-import daiso.common.annotation.*;
-import daiso.order.db.OrderCancelViewDAO;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
+
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import daiso.cart.db.CartBean;
+import daiso.cart.db.CartDAO;
+import daiso.common.annotation.DaisoController;
+import daiso.common.annotation.DaisoGetMapping;
+import daiso.common.annotation.DaisoPostMapping;
+import daiso.common.annotation.DaisoResponseBody;
+import daiso.order.db.OrderCancelViewDAO;
 import daiso.order.db.OrderDAO;
 import daiso.order.payment.kakaoPayClient;
-
+import daiso.order.payment.TossPayClient;
 @DaisoController
 public class OrderCancelPageController {
     @DaisoGetMapping("/order/cancel/form")
@@ -164,8 +169,13 @@ public class OrderCancelPageController {
                 return "이미 처리 중이거나 취소 가능한 주문이 아닙니다.";
             }
 
+            
+            String paymentMethod = (String)order.get("paymentMethod");
+            if(!"KAKAOPAY".equals(paymentMethod) && !"TOSSPAY".equals(paymentMethod)) {
+            	return "현재 이 결제수단은 온라인 주문취소를 지원하지 않습니다.";
+            }
             return executePaidCancellation(
-            	    memberId, orderNo, restoreCart, session
+            	    memberId, orderNo, paymentMethod, reason, restoreCart, session
             	);
 
            
@@ -177,17 +187,27 @@ public class OrderCancelPageController {
     private String executePaidCancellation(
             String memberId,
             String orderNo,
+            String paymentMethod,
+            String reason,
             boolean restoreCart,
             HttpSession session) {
 
         try {
             // 키 설정 오류가 있으면 DB 변경 전에 중단
-            kakaoPayClient client = new kakaoPayClient();
+            
+            boolean toss ="TOSSPAY".equals(paymentMethod);
+            if(toss) {
+            	String secretKey = System.getenv("TOSS_PAYMENTS_SECRET_KEY");
+            	if(secretKey == null || !secretKey.startsWith("test_sk")) {
+            		return "토스페이 테스트 시크릿 키를 확인해 주세요.";
+            	}
+            }
+            kakaoPayClient client = toss? null : new kakaoPayClient();
             OrderDAO dao = new OrderDAO();
 
             // 본인 주문·결제 상태 확인 후 중복 취소 차단
             Map<String, Object> target =
-                dao.beginPaidOrderCancellation(memberId, orderNo);
+                dao.beginPaidOrderCancellation(memberId, orderNo,paymentMethod);
 
             long orderId =
                 ((Number) target.get("orderId")).longValue();
@@ -199,52 +219,40 @@ public class OrderCancelPageController {
             int amount = ((Number) target.get("total")).intValue();
 
             try {
-                // 취소 금액은 화면 값이 아니라 DB의 결제 금액 사용
-                JsonObject result =
-                    client.cancelPayment(tid, amount);
+                Timestamp canceledAt;
 
-                // 본인의 해당 결제가 전액 취소됐는지 확인
-                boolean matches =
-                    kakaoPayClient.CID.equals(
-                        result.get("cid").getAsString())
-                    && tid.equals(
-                        result.get("tid").getAsString())
-                    && orderNo.equals(
-                        result.get("partner_order_id").getAsString())
-                    && memberId.equals(
-                        result.get("partner_user_id").getAsString())
-                    && "CANCEL_PAYMENT".equals(
-                        result.get("status").getAsString())
-                    && result.getAsJsonObject("amount")
-                        .get("total").getAsInt() == amount
-                    && result.getAsJsonObject("approved_cancel_amount")
-                        .get("total").getAsInt() == amount
-                    && result.getAsJsonObject("canceled_amount")
-                        .get("total").getAsInt() == amount
-                    && result.getAsJsonObject("cancel_available_amount")
-                        .get("total").getAsInt() == 0;
+                // ===== 결제수단별 취소 요청 및 응답 확인 =====
+                if (toss) {
+                    JsonObject payment = new TossPayClient().cancel(
+                            tid, amount, reason, "order-cancel-" + paymentId);
+                    canceledAt = verifyTossCancellation(payment, tid, orderNo, amount);
+                } else {
+                    JsonObject result = client.cancelPayment(tid, amount);
 
-                if (!matches) {
-                    return "취소 응답이 주문정보와 일치하지 않습니다. "
-                        + "재요청하지 말고 결제 상태를 확인해 주세요.";
+                    boolean matches = kakaoPayClient.CID.equals(result.get("cid").getAsString())
+                            && tid.equals(result.get("tid").getAsString())
+                            && orderNo.equals(result.get("partner_order_id").getAsString())
+                            && memberId.equals(result.get("partner_user_id").getAsString())
+                            && "CANCEL_PAYMENT".equals(result.get("status").getAsString())
+                            && result.getAsJsonObject("amount").get("total").getAsInt() == amount
+                            && result.getAsJsonObject("approved_cancel_amount").get("total").getAsInt() == amount
+                            && result.getAsJsonObject("canceled_amount").get("total").getAsInt() == amount
+                            && result.getAsJsonObject("cancel_available_amount").get("total").getAsInt() == 0;
+
+                    if (!matches) {
+                        return "취소 응답이 주문정보와 일치하지 않습니다. "
+                                + "재요청하지 말고 결제 상태를 확인해 주세요.";
+                    }
+
+                    canceledAt = Timestamp.valueOf(LocalDateTime.parse(
+                            result.get("canceled_at").getAsString(),
+                            DateTimeFormatter.ISO_DATE_TIME));
                 }
 
-                Timestamp canceledAt = Timestamp.valueOf(
-                    LocalDateTime.parse(
-                        result.get("canceled_at").getAsString(),
-                        DateTimeFormatter.ISO_DATE_TIME
-                    )
-                );
-
-                // 카카오페이 취소 성공 확인 후 DB에 반영
+                // ===== 취소 확인 후 주문 상태와 재고를 한 번만 반영 =====
                 dao.completePaidOrderCancellation(
-                    memberId,
-                    orderId,
-                    paymentId,
-                    tid,
-                    amount,
-                    canceledAt
-                );
+                        memberId, orderId, paymentId, tid, amount, canceledAt);
+
              // 환불 DB 저장이 끝난 뒤에만 장바구니에 다시 담기
                 if (restoreCart) {
                     String message = restoreCancelledCart(memberId, orderNo);
@@ -287,6 +295,34 @@ public class OrderCancelPageController {
             return "결제 취소 설정을 확인해 주세요.";
         }
     }
+    
+    //토츠페이먼츠 전액취소결과 확인
+    private Timestamp verifyTossCancellation(
+    		JsonObject payment, String paymentKey, String orderNo, int amount)
+    		throws IOException{
+    	if(!paymentKey.equals(payment.get("paymentKey").getAsString())
+    			|| !orderNo.equals(payment.get("orderId").getAsString())
+    			|| amount != payment.get("totalAmount").getAsInt()
+    			|| !"CANCELED".equals(payment.get("status").getAsString())
+    			|| payment.get("balanceAmount").getAsInt() != 0 ){
+    		throw new IOException("토스 취소 결과가 주문정보와 일치하지않습니다.");
+    		
+    	}
+    	if(payment.has("cancels")&& payment.get("cancels").isJsonArray()) {
+    		for(JsonElement entry : payment.getAsJsonArray("cancels")) {
+    			JsonObject cancel = entry.getAsJsonObject();
+    			if("DONE".equals(cancel.get("cancelStatus").getAsString())
+    					&& cancel.get("cancelAmount").getAsInt()==amount) {
+    						return Timestamp.from(
+    								OffsetDateTime.parse(cancel.get("canceledAt").getAsString()).toInstant());
+    								
+    					}
+    			}
+    		}
+    	throw new IOException("토스 전액 취소 기록을 확인하지 못했습니다.");
+    	}
+    
+    
     private String restoreCancelledCart(
             String memberId, String orderNo) {
 
@@ -308,16 +344,19 @@ public class OrderCancelPageController {
             }
 
             CartDAO cartDAO = new CartDAO();
+            boolean pickup = Boolean.TRUE.equals(order.get("pickup"));
             int addedCount = 0;
             int failedCount = 0;
 
             for (CartBean item : items) {
                 try {
-                    boolean added = cartDAO.addCart(
-                        memberId,
-                        item.getProductId(),
-                        item.getQuantity()
-                    );
+                    boolean added = true;
+                    if (pickup) {
+                        cartDAO.addPickupCart(memberId, (String) order.get("pickupStoreId"),
+                            item.getProductId(), item.getQuantity());
+                    } else {
+                        added = cartDAO.addCart(memberId, item.getProductId(), item.getQuantity());
+                    }
 
                     if (added) {
                         addedCount++;
