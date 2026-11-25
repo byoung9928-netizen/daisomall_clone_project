@@ -5,7 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-/** Restores online stock within the caller's locked order transaction. */
+/** Restores stock within the caller's locked order transaction. */
 final class OnlineStockRestoration {
     enum Reason {
         ORDER_CANCEL("주문 취소"), ORDER_REFUND("반품·환불");
@@ -35,7 +35,8 @@ final class OnlineStockRestoration {
 
     static void restore(Connection connection, long orderId, Reason reason) throws SQLException {
         String orderNo;
-        String lock = "SELECT order_no, stock_restored_at FROM orders "
+        String pickupStoreId;
+        String lock = "SELECT order_no, stock_restored_at, fulfillment_type, pickup_store_id FROM orders "
                 + "WHERE order_id = ? AND stock_deducted = TRUE FOR UPDATE";
         try (PreparedStatement query = connection.prepareStatement(lock)) {
             query.setLong(1, orderId);
@@ -43,9 +44,30 @@ final class OnlineStockRestoration {
                 if (!row.next()) throw new SQLException("재고를 차감한 주문을 찾을 수 없습니다.");
                 if (row.getTimestamp("stock_restored_at") != null) return;
                 orderNo = row.getString("order_no");
+                pickupStoreId = "PICKUP".equals(row.getString("fulfillment_type"))
+                        ? row.getString("pickup_store_id") : null;
+                if ("PICKUP".equals(row.getString("fulfillment_type"))
+                        && (pickupStoreId == null || pickupStoreId.isBlank())) {
+                    throw new SQLException("픽업 주문의 매장을 찾을 수 없습니다.");
+                }
             }
         }
 
+        if (pickupStoreId == null) {
+            restoreOnlineStock(connection, orderId, orderNo, reason);
+        } else {
+            restorePickupStock(connection, orderId, pickupStoreId);
+        }
+
+        try (PreparedStatement mark = connection.prepareStatement("UPDATE orders SET stock_restored_at = CURRENT_TIMESTAMP(6) "
+                + "WHERE order_id = ? AND stock_deducted = TRUE AND stock_restored_at IS NULL")) {
+            mark.setLong(1, orderId);
+            if (mark.executeUpdate() != 1) throw new SQLException("재고 복구 완료 시각을 저장하지 못했습니다.");
+        }
+    }
+
+    private static void restoreOnlineStock(Connection connection, long orderId, String orderNo, Reason reason)
+            throws SQLException {
         // Lock products in the same order used by payment approval.
         String items = "SELECT product_id, SUM(quantity) AS quantity, MIN(quantity) AS min_quantity "
                 + "FROM order_items WHERE order_id = ? GROUP BY product_id ORDER BY product_id";
@@ -94,11 +116,32 @@ final class OnlineStockRestoration {
                 } while (rows.next());
             }
         }
+    }
 
-        try (PreparedStatement mark = connection.prepareStatement("UPDATE orders SET stock_restored_at = CURRENT_TIMESTAMP(6) "
-                + "WHERE order_id = ? AND stock_deducted = TRUE AND stock_restored_at IS NULL")) {
-            mark.setLong(1, orderId);
-            if (mark.executeUpdate() != 1) throw new SQLException("재고 복구 완료 시각을 저장하지 못했습니다.");
+    // Restore inventory to the store that fulfilled the order.
+    private static void restorePickupStock(Connection connection, long orderId, String storeId) throws SQLException {
+        String items = "SELECT product_id, SUM(quantity) AS quantity, MIN(quantity) AS min_quantity "
+                + "FROM order_items WHERE order_id = ? GROUP BY product_id ORDER BY product_id";
+        String update = "UPDATE store_inventory SET quantity = quantity + ?, version = version + 1 "
+                + "WHERE store_id = ? AND product_id = ? AND is_carried = 1 AND quantity <= ?";
+
+        try (PreparedStatement purchased = connection.prepareStatement(items);
+             PreparedStatement stock = connection.prepareStatement(update)) {
+            purchased.setLong(1, orderId);
+            try (ResultSet rows = purchased.executeQuery()) {
+                if (!rows.next()) throw new SQLException("복구할 픽업 주문 상품이 없습니다.");
+                do {
+                    long quantity = rows.getLong("quantity");
+                    if (rows.getInt("min_quantity") <= 0 || quantity > Integer.MAX_VALUE) {
+                        throw new SQLException("복구할 상품 수량이 유효하지 않습니다.");
+                    }
+                    stock.setLong(1, quantity);
+                    stock.setString(2, storeId);
+                    stock.setString(3, rows.getString("product_id"));
+                    stock.setLong(4, Integer.MAX_VALUE - quantity);
+                    if (stock.executeUpdate() != 1) throw new SQLException("픽업 매장 재고를 복구하지 못했습니다.");
+                } while (rows.next());
+            }
         }
     }
 }
