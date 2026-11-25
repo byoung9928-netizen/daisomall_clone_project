@@ -237,8 +237,24 @@ public class OrderDAO {
 		        }
 		    }
 		}
+		
+		// 다이소 포인트 구매 적립: 배송비와 픽업 수수료를 제외한 상품 금액 1,000원당 1P
+		private void earnDaisoPoints(Connection con, long orderId) throws SQLException {
+		    String sql =
+		            "INSERT INTO daiso_point_history "
+		            + "(member_id, order_id, point_type, point_amount) "
+		            + "SELECT member_id, order_id, 'EARN', subtotal_amount DIV 1000 "
+		            + "FROM orders "
+		            + "WHERE order_id = ? AND status = 'PAID' AND subtotal_amount >= 1000";
+
+		    try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+		        pstmt.setLong(1, orderId);
+		        pstmt.executeUpdate();
+		    }
+		}
 		public void approvePayment(
-		        String memberId,
+		
+				String memberId,
 		        long orderId,
 		        String tid,
 		        int amount,
@@ -393,6 +409,7 @@ public class OrderDAO {
 		                    );
 		                }
 		            }
+		            earnDaisoPoints(con,orderId);
 		            String deleteCartSql =
 		            	    "DELETE c FROM cart_items c "
 		            	    + "JOIN order_items oi "
@@ -473,11 +490,12 @@ public class OrderDAO {
 		        String memberId, String orderNo) throws SQLException {
 
 				String sql =
-				    "SELECT o.*, p.status AS payment_status, "
+				    "SELECT o.*, s.store_name, s.city, p.method AS pay_method, p.status AS payment_status, "
 				    + "p.approved_at, r.status AS return_status, "
 				    + "r.admin_note AS return_admin_note "
 				    + "FROM orders o "
-				    + "LEFT JOIN payment_attempts p ON p.payment_id = ("
+				    + "LEFT JOIN store_locations s ON s.store_id = o.pickup_store_id "
+                    + "LEFT JOIN payment_attempts p ON p.payment_id = ("
 				    + "SELECT MAX(p2.payment_id) "
 				    + "FROM payment_attempts p2 "
 				    + "WHERE p2.order_id = o.order_id"
@@ -508,7 +526,12 @@ public class OrderDAO {
 		                order.put("orderId", orderId);
 		                order.put("orderNo", rs.getString("order_no"));
 		                order.put("status", rs.getString("status"));
-		                order.put("carrierId", rs.getString("carrier_id"));
+		                order.put("fulfillmentType", rs.getString("fulfillment_type"));
+                        order.put("pickupStore", rs.getString("store_name") != null ? rs.getString("store_name") : rs.getString("pickup_store_id"));
+                        order.put("pickupCity", rs.getString("city"));
+                        order.put("pickupFee", rs.getInt("pickup_fee"));
+                        order.put("payMethod", rs.getString("pay_method"));
+                        order.put("carrierId", rs.getString("carrier_id"));
 		                order.put("trackingNumber", rs.getString("tracking_number"));
 		                order.put("paymentStatus", rs.getString("payment_status"));
 		                order.put("returnStatus", rs.getString("return_status"));
@@ -911,7 +934,7 @@ public class OrderDAO {
 		                cart.setString(3, storeId);
 		                cart.executeUpdate();
 		            }
-
+		            earnDaisoPoints(con, orderId);
 		            con.commit();
 		        } catch (SQLException | RuntimeException e) {
 		            con.rollback();
@@ -970,12 +993,12 @@ public class OrderDAO {
 		    }
 		}
 		public Map<String, Object> beginPaidOrderCancellation(
-		        String memberId, String orderNo) throws SQLException {
+		        String memberId, String orderNo,String expectedMethod) throws SQLException {
 
 		    String selectSql =
 		        "SELECT o.order_id, o.total_amount, o.stock_deducted, "
 		        + "o.status AS order_status, "
-		        + "p.payment_id, p.tid, p.amount, "
+		        + "p.payment_id, p.tid, p.amount, p.method, "
 		        + "p.status AS payment_status "
 		        + "FROM orders o "
 		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
@@ -1026,7 +1049,10 @@ public class OrderDAO {
 		                            "이미 처리 중이거나 취소 가능한 주문이 아닙니다."
 		                        );
 		                    }
-
+		                    //잠근 결제기록의 결제수단 확인
+		                    if(!expectedMethod.equals(rs.getString("method"))) {
+		                    	throw new IllegalArgumentException("주문의 결제수단을 다시 확인해 주세요.");
+		                    }
 		                    String tid = rs.getString("tid");
 		                    kakaoPayClient.requireGatewayIdentifier(tid);
 		                    kakaoPayClient.requireGatewayIdentifier(orderNo);
