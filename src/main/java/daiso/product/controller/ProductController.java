@@ -1,5 +1,8 @@
 package daiso.product.controller;
 
+import daiso.product.service.ProductBehaviorRecorder;
+import daiso.product.service.ProductBehaviorRecorder.Type;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -298,6 +301,7 @@ public class ProductController {
             LocalDate viewedOn = ProductActivityController.remember(session, member, product.getProductId());
             if (member != null && viewedOn != null) recordView(request, member, product.getProductId(), viewedOn);
             prepareDetailReviews(request, product.getProductId(), positiveReviewPage(request.getParameter("photoPage")));
+            ProductBehaviorRecorder.record(request, Type.VIEW, product.getProductId());
         }
         return "product/detail";
     }

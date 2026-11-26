@@ -47,37 +47,35 @@ public final class WishlistDAO {
     }
 
     // 동일한 등록 요청은 기존 찜 시각을 바꾸지 않음
-    public void add(Connection connection, String memberId, String productId) throws SQLException {
-        String sql = "INSERT INTO product_wishlists (member_id, product_id) VALUES (?, ?) "
-                + "ON DUPLICATE KEY UPDATE member_id = ?";
+    public boolean add(Connection connection, String memberId, String productId) throws SQLException {
+        String sql = "INSERT INTO product_wishlists (member_id, product_id) VALUES (?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, memberId);
             statement.setString(2, productId);
-            statement.setString(3, memberId);
-            statement.executeUpdate();
+            return statement.executeUpdate() == 1;
+        } catch (SQLException error) {
+            if (error.getErrorCode() == 1062 && "23000".equals(error.getSQLState())) return false;
+            throw error;
         }
     }
 
     // 이미 해제된 상품에 같은 요청을 보내도 해제 상태 유지
-    public void remove(Connection connection, String memberId, String productId) throws SQLException {
+    public boolean remove(Connection connection, String memberId, String productId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM product_wishlists WHERE member_id = ? AND product_id = ?")) {
             statement.setString(1, memberId);
             statement.setString(2, productId);
-            statement.executeUpdate();
+            return statement.executeUpdate() == 1;
         }
     }
 
-    public void removeSelected(Connection connection, String memberId, Collection<String> productIds) throws SQLException {
-        if (productIds.isEmpty()) return;
-        String sql = "DELETE FROM product_wishlists WHERE member_id = ? AND product_id IN ("
-                + String.join(",", Collections.nCopies(productIds.size(), "?")) + ")";
-        try (PreparedStatement query = connection.prepareStatement(sql)) {
-            query.setString(1, memberId);
-            int index = 2;
-            for (String productId : productIds) query.setString(index++, productId);
-            query.executeUpdate();
+    public Set<String> removeSelected(Connection connection, String memberId, Collection<String> productIds)
+            throws SQLException {
+        Set<String> deleted = new HashSet<>();
+        for (String productId : new java.util.TreeSet<>(productIds)) {
+            if (remove(connection, memberId, productId)) deleted.add(productId);
         }
+        return deleted;
     }
 
     // 품절 및 숨겨진 카테고리 상품도 찜 목록에는 유지

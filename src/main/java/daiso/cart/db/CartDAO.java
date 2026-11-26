@@ -58,11 +58,16 @@
  	 }
  	 //2. CartController cartAdd에서 addCart로 넘어옴
  	 public boolean addCart(String memberId,String productId, int quantity) throws SQLException{
+            addCartAndCheckNew(memberId, productId, quantity);
+            return true;
+         }
+
+     public boolean addCartAndCheckNew(String memberId, String productId, int quantity) throws SQLException {
             return addCart(memberId, productId, quantity, false);
          }
 
-     public void addSoldOutProduct(String memberId, String productId) throws SQLException {
-            addCart(memberId, productId, 1, true);
+     public boolean addSoldOutProduct(String memberId, String productId) throws SQLException {
+            return addCart(memberId, productId, 1, true);
          }
 
      private boolean addCart(String memberId, String productId, int quantity, boolean preview) throws SQLException {
@@ -111,17 +116,6 @@
  		 				
  		 				}
  		 			}
-                    if (preview) {
-                        try (PreparedStatement save = con.prepareStatement(
-                                "INSERT INTO cart_items (member_id, product_id, quantity) VALUES (?, ?, 1) "
-                                + "ON DUPLICATE KEY UPDATE quantity = cart_items.quantity")) {
-                            save.setString(1, memberId);
-                            save.setString(2, productId);
-                            save.executeUpdate();
-                        }
-                        con.commit();
-                        return true;
-                    }
                     //- 이미 장바구니에 담긴 수량 확인
  		 			String cartSql = 
  		 					"SELECT quantity FROM cart_items "
@@ -142,6 +136,21 @@
  		 					}
  		 				}
  		 			}
+                    if (preview) {
+                        if (currentQuantity > 0) {
+                            con.commit();
+                            return false;
+                        }
+                        try (PreparedStatement save = con.prepareStatement(
+                                "INSERT INTO cart_items (member_id, product_id, quantity) VALUES (?, ?, 1) "
+                                + "ON DUPLICATE KEY UPDATE quantity = cart_items.quantity")) {
+                            save.setString(1, memberId);
+                            save.setString(2, productId);
+                            save.executeUpdate();
+                        }
+                        con.commit();
+                        return true;
+                    }
  		 		// - 합산할 수량 확인
  		            long totalQuantity =
  		                (long) currentQuantity + quantity;
@@ -182,7 +191,7 @@
 
  		            con.commit();
 
- 		            return result > 0;
+                    return currentQuantity == 0 && result > 0;
 
  		        } catch (SQLException | RuntimeException e) {
  		            con.rollback();
@@ -243,94 +252,44 @@
  				}
  	 		}
  	 	}
- 	 public boolean deleteCart(String memberId, long cartItemId)
- 	 			        throws SQLException {
+    public List<String> deleteCartItems(String memberId, long[] cartItemIds) throws SQLException {
+        if (cartItemIds == null || cartItemIds.length == 0) {
+            throw new IllegalArgumentException("삭제할 상품을 선택해 주세요.");
+        }
+        String where = " WHERE cart_item_id = ? AND member_id = ?";
+        List<String> removed = new ArrayList<>();
+        try (Connection con = ds.getConnection()) {
+            boolean originalAutoCommit = con.getAutoCommit();
+            con.setReadOnly(false);
+            con.setAutoCommit(false);
+            try (PreparedStatement find = con.prepareStatement(
+                        "SELECT product_id FROM cart_items" + where + " FOR UPDATE");
+                    PreparedStatement delete = con.prepareStatement("DELETE FROM cart_items" + where)) {
+                find.setString(2, memberId);
+                delete.setString(2, memberId);
+                for (long cartItemId : java.util.Arrays.stream(cartItemIds).distinct().sorted().toArray()) {
+                    find.setLong(1, cartItemId);
+                    String productId;
+                    try (ResultSet row = find.executeQuery()) {
+                        if (!row.next()) continue;
+                        productId = row.getString("product_id");
+                    }
+                    delete.setLong(1, cartItemId);
+                    if (delete.executeUpdate() == 1) removed.add(productId);
+                }
+                con.commit();
+                return removed;
+            } catch (SQLException | RuntimeException error) {
+                con.rollback();
+                throw error;
+            } finally {
+                con.setAutoCommit(originalAutoCommit);
+            }
+        }
+    }
 
- 	 			    String sql =
- 	 			        "DELETE FROM cart_items "
- 	 			        + "WHERE cart_item_id = ? "
- 	 			        + "AND member_id = ?";
-
- 	 			    try (Connection con = ds.getConnection()) {
- 	 			        boolean originalAutoCommit = con.getAutoCommit();
-
- 	 			        con.setReadOnly(false);
- 	 			        con.setAutoCommit(false);
-
- 	 			        try {
- 	 			            int result;
-
- 	 			            try (PreparedStatement pstmt =
- 	 			                    con.prepareStatement(sql)) {
-
- 	 			                pstmt.setLong(1, cartItemId);
- 	 			                pstmt.setString(2, memberId);
-
- 	 			                result = pstmt.executeUpdate();
- 	 			            }
-
- 	 			            con.commit();
- 	 			            return result > 0;
-
- 	 			        } catch (SQLException | RuntimeException e) {
- 	 			            con.rollback();
- 	 			            throw e;
-
- 	 			        } finally {
- 	 			            con.setAutoCommit(originalAutoCommit);
- 	 			        }
- 		 
-
-	 	}//conncetion을 쓰는 try
-	 	
-	 	
- 	 			}
- 	 public int deleteSelectedCart(
- 	 					String memberId, long[] cartItemIds)
- 	 					throws SQLException{
- 	 					
- 	 				if (cartItemIds == null || cartItemIds.length==0) {
- 	 					throw new IllegalArgumentException(
- 	 							"삭제할 상품을 선택해 주세요."
- 	 							);
- 	 				}
- 	 				String sql=
- 	 						"DELETE FROM cart_items "
- 	 						+"WHERE cart_item_id = ? "
- 	 						+"AND member_id = ?";
- 	 				
- 	 				try (Connection con = ds.getConnection()){
- 	 					boolean originalAutoCommit = con.getAutoCommit();
- 	 					
- 	 					con.setReadOnly(false);
- 	 					con.setAutoCommit(false);
- 	 					
- 	 					try {
- 	 						int deletedCount = 0;
- 	 						
- 	 						try(PreparedStatement pstmt = con.prepareStatement(sql)){
- 	 							
- 	 							for (long cartItemId : cartItemIds) {
- 	 								pstmt.setLong(1, cartItemId);
- 	 								pstmt.setString(2,memberId);
- 	 								
- 	 								deletedCount += pstmt.executeUpdate();
- 	 							}
- 	 						}
- 	 						
- 	 						con.commit();
- 	 						return deletedCount;
- 	 					}catch(SQLException | RuntimeException e) {
- 	 						con.rollback();
- 	 						throw e;
- 	 					} finally {
- 	 						con.setAutoCommit(originalAutoCommit);
- 	 					}
- 	 					
- 	 				}
- 	 			}
  	 //매장픽업담기:매장 재고 확인 후 장바구니 수량 저장
- 	 public void addPickupCart(String memberId,String storeId,String productId, int quantity) throws SQLException{
+    public boolean addPickupCart(String memberId, String storeId, String productId, int quantity) throws SQLException {
  	 			if(quantity<1||quantity>99) {
  	 				throw new IllegalArgumentException("수량은 1~99개로 입력해 주세요.");
  	 			}
@@ -396,6 +355,7 @@
  	 					ps.executeUpdate();
  	 				}
  	 				con.commit();
+					return currentQuantity == 0;
  	 			} catch (SQLException | RuntimeException e) {
  	 				con.rollback();
  	 				throw e;

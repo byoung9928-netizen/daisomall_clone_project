@@ -1,5 +1,8 @@
 package daiso.product.controller;
 
+import daiso.product.service.ProductBehaviorRecorder;
+import daiso.product.service.ProductBehaviorRecorder.Type;
+
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
@@ -130,15 +133,17 @@ public final class ProductActivityController {
             if ("recent".equals(kind)) {
                 removeDisplayed(session, member, ids);
             } else {
+                java.util.Set<String> removed;
                 try (Connection connection = ProductQueries.connect()) {
                     try {
-                        wishlist.removeSelected(connection, member, ids);
+                        removed = wishlist.removeSelected(connection, member, ids);
                         connection.commit();
                     } catch (SQLException error) {
                         connection.rollback();
                         throw error;
                     }
                 }
+                ProductBehaviorRecorder.record(request, Type.WISHLIST_REMOVE, removed);
             }
             return "REMOVED";
         } catch (UnsupportedEncodingException | SQLException | NamingException error) {
