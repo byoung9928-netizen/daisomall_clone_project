@@ -3,13 +3,11 @@ package daiso.product.controller;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.dao.ProductReviewDAO;
-import daiso.product.dao.ReviewExtrasDAO;
 import daiso.product.dto.MyReviewItem;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -22,7 +20,6 @@ public final class MyReviewsController {
     private static final String VIEW = "product/my-review-items";
     private static final int PAGE_SIZE = 15;
     private final ProductReviewDAO reviews = new ProductReviewDAO();
-    private final ReviewExtrasDAO extras = new ReviewExtrasDAO();
 
     @DaisoGetMapping("/products/reviews/mine")
     public String list(HttpServletRequest request, HttpServletResponse response) {
@@ -35,28 +32,41 @@ public final class MyReviewsController {
         }
         boolean written = "written".equals(request.getParameter("tab"));
         boolean oldest = "oldest".equals(request.getParameter("sort"));
-        int page;
+        String rawType = request.getParameter("type");
+        String type = rawType == null ? "" : rawType;
+        int requestedPage;
         try {
-            page = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
+            if (!List.of("", "DELIVERY", "PICKUP").contains(type)) throw new IllegalArgumentException();
+            requestedPage = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
         } catch (IllegalArgumentException error) {
             response.setStatus(400);
             return VIEW;
         }
 
         try (Connection connection = ProductQueries.connect()) {
-            List<MyReviewItem> results = reviews.mine(connection, (String) identity, written, oldest,
-                    PAGE_SIZE + 1, (page - 1) * PAGE_SIZE);
-            List<MyReviewItem> items = results.subList(0, Math.min(PAGE_SIZE, results.size()));
+            String member = (String) identity;
+            Map<String, Integer> available = reviews.mineCounts(connection, member, false);
+            Map<String, Integer> myWritten = reviews.mineCounts(connection, member, true);
+            int availableTotal = total(available);
+            int writtenTotal = total(myWritten);
+            Map<String, Integer> activeCounts = written ? myWritten : available;
+            int activeTotal = written ? writtenTotal : availableTotal;
+            int filtered = type.isEmpty() ? activeTotal : activeCounts.getOrDefault(type, 0);
+            int lastPage = Math.max(1, (filtered - 1) / PAGE_SIZE + 1);
+            int page = Math.min(requestedPage, lastPage);
+            List<MyReviewItem> items = reviews.mine(connection, member, written, type, oldest,
+                    PAGE_SIZE, (page - 1) * PAGE_SIZE);
             request.setAttribute("myReviewItems", items);
             request.setAttribute("myReviewWritten", written);
-            if (written && !items.isEmpty() && extras.available(connection)) {
-                List<Long> ids = items.stream().map(item -> item.reviewId).collect(Collectors.toList());
-                request.setAttribute("myReviewPhotos", extras.photos(connection, ids));
-            }
-            if (page > 1) request.setAttribute("myReviewPrevious", pageLink(request, written, oldest, page - 1));
-            if (results.size() > PAGE_SIZE && page < Integer.MAX_VALUE / PAGE_SIZE) {
-                request.setAttribute("myReviewNext", pageLink(request, written, oldest, page + 1));
-            }
+            request.setAttribute("myReviewOldest", oldest);
+            request.setAttribute("myReviewType", type);
+            request.setAttribute("myReviewPage", page);
+            request.setAttribute("myReviewAvailableTotal", availableTotal);
+            request.setAttribute("myReviewWrittenTotal", writtenTotal);
+            request.setAttribute("myReviewActiveTotal", activeTotal);
+            request.setAttribute("myReviewTypeCounts", activeCounts);
+            if (page > 1) request.setAttribute("myReviewPrevious", pageLink(request, written, oldest, type, page - 1));
+            if (page < lastPage) request.setAttribute("myReviewNext", pageLink(request, written, oldest, type, page + 1));
             connection.commit();
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("마이페이지 리뷰 조회 실패", error);
@@ -65,13 +75,17 @@ public final class MyReviewsController {
         return VIEW;
     }
 
+    private static int total(Map<String, Integer> counts) {
+        return counts.values().stream().mapToInt(Integer::intValue).sum();
+    }
+
     static String returnPath(boolean written) {
         return ROUTE + (written ? "&reviewTab=written" : "");
     }
 
-    private static String pageLink(HttpServletRequest request, boolean written, boolean oldest, int page) {
+    private static String pageLink(HttpServletRequest request, boolean written, boolean oldest, String type, int page) {
         return ProductView.url(request.getContextPath(), "/app/order/mypage", Map.of(
                 "productActivity", "reviews", "reviewTab", written ? "written" : "",
-                "reviewSort", oldest ? "oldest" : "", "reviewPage", Integer.toString(page)));
+                "reviewSort", oldest ? "oldest" : "", "reviewType", type, "reviewPage", Integer.toString(page)));
     }
 }

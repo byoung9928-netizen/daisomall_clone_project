@@ -1,31 +1,11 @@
 <%@ page pageEncoding="UTF-8" %>
-<%
-    boolean reviewsWritten = "written".equals(request.getParameter("reviewTab"));
-    boolean reviewsOldest = "oldest".equals(request.getParameter("reviewSort"));
-    String reviewListRoute = "/app/order/mypage";
-    Map<String, String> reviewParams = Map.of("productActivity", "reviews");
-    Map<String, String> currentReviewParams = ProductView.with(reviewParams, "reviewTab", reviewsWritten ? "written" : "");
-%>
 <section class="product-activity-section my-review-page" aria-labelledby="my-review-title">
     <div class="my-review-heading">
-        <h1 id="my-review-title">리뷰</h1>
+        <h1 id="my-review-title" tabindex="-1">리뷰</h1>
         <p>구매한 상품의 리뷰를 작성하고 내가 쓴 리뷰를 관리할 수 있어요.</p>
     </div>
-    <nav class="my-review-tabs" aria-label="내 리뷰 목록">
-        <a href="<%= ProductView.url(myContext, reviewListRoute, reviewParams) %>"
-           <%= reviewsWritten ? "" : "aria-current=\"page\"" %>>작성 가능한 리뷰</a>
-        <a href="<%= ProductView.url(myContext, reviewListRoute, ProductView.with(reviewParams, "reviewTab", "written")) %>"
-           <%= reviewsWritten ? "aria-current=\"page\"" : "" %>>내가 작성한 리뷰</a>
-    </nav>
-    <nav class="my-review-sorts" aria-label="리뷰 정렬">
-        <a href="<%= ProductView.url(myContext, reviewListRoute, currentReviewParams) %>"
-           <%= reviewsOldest ? "" : "aria-current=\"page\"" %>>최신순</a>
-        <a href="<%= ProductView.url(myContext, reviewListRoute, ProductView.with(currentReviewParams, "reviewSort", "oldest")) %>"
-           <%= reviewsOldest ? "aria-current=\"page\"" : "" %>>오래된순</a>
-    </nav>
-    <div data-product-activity aria-busy="true" data-url="<%= ProductView.url(myContext, "/app/products/reviews/mine",
-            Map.of("tab", reviewsWritten ? "written" : "", "sort", reviewsOldest ? "oldest" : "",
-                    "page", request.getParameter("reviewPage") == null ? "" : request.getParameter("reviewPage"))) %>">
+    <p class="my-review-load-error" data-review-list-error role="status" hidden></p>
+    <div data-my-review-list data-review-list-url="<%= ProductView.escape(myContext + "/app/products/reviews/mine") %>" aria-busy="true">
         <p class="product-activity-empty" role="status">리뷰를 불러오는 중입니다.</p>
         <noscript><p>목록을 보려면 브라우저에서 JavaScript를 활성화해 주세요.</p></noscript>
     </div>

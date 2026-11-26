@@ -1,6 +1,73 @@
 (() => {
     'use strict';
 
+    const reviewList = document.querySelector('[data-my-review-list]');
+    let listRequest;
+
+    async function loadList(pageUrl = new URL(location.href), push = false) {
+        const listUrl = new URL(reviewList.dataset.reviewListUrl, location.href);
+        const error = document.querySelector('[data-review-list-error]');
+        const scroll = window.scrollY;
+        for (const [key, parameter] of Object.entries({
+            tab: 'reviewTab', type: 'reviewType', sort: 'reviewSort', page: 'reviewPage'
+        })) {
+            const value = pageUrl.searchParams.get(parameter);
+            if (value) listUrl.searchParams.set(key, value);
+        }
+        listRequest?.abort();
+        const request = new AbortController();
+        listRequest = request;
+        reviewList.setAttribute('aria-busy', 'true');
+        error.hidden = true;
+        try {
+            const response = await fetch(listUrl, { signal: request.signal, redirect: 'error', cache: 'no-store' });
+            if (!response.ok) throw new Error(response.status === 401 ? 'LOGIN' : 'LIST');
+            const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const result = html.querySelector('[data-review-list-result]');
+            if (!result || !/^[1-9]\d*$/.test(result.dataset.page)) throw new Error('LIST');
+            if (listRequest !== request) return false;
+            if (result.dataset.page === '1') pageUrl.searchParams.delete('reviewPage');
+            else pageUrl.searchParams.set('reviewPage', result.dataset.page);
+            if (pageUrl.href !== location.href) {
+                if (push) history.pushState(null, '', pageUrl);
+                else history.replaceState(history.state, '', pageUrl);
+            }
+            reviewList.replaceChildren(result);
+            if (window.scrollY !== scroll) window.scrollTo({ top: scroll, behavior: 'instant' });
+            return true;
+        } catch (failure) {
+            if (listRequest !== request) return false;
+            error.textContent = failure.message === 'LOGIN' ? '로그인한 뒤 리뷰 목록을 확인해 주세요.'
+                : '리뷰 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+            error.hidden = false;
+            if (!reviewList.querySelector('[data-review-list-result]')) reviewList.replaceChildren();
+            return false;
+        } finally {
+            if (listRequest === request) reviewList.removeAttribute('aria-busy');
+        }
+    }
+
+    function ordinaryClick(event) {
+        return !event.defaultPrevented && event.button === 0 && !event.ctrlKey
+            && !event.metaKey && !event.shiftKey && !event.altKey;
+    }
+
+    if (reviewList) {
+        reviewList.addEventListener('click', async event => {
+            const link = event.target.closest('[data-review-list-link]');
+            if (!link || !ordinaryClick(event)) return;
+            event.preventDefault();
+            const label = link.textContent.trim().replace(/\s+/g, ' ');
+            if (await loadList(new URL(link.href), true)) {
+                const target = [...reviewList.querySelectorAll('[data-review-list-link]')]
+                    .find(item => item.textContent.trim().replace(/\s+/g, ' ') === label);
+                (target || reviewList.querySelector('.my-review-tabs [aria-current]'))?.focus({ preventScroll: true });
+            }
+        });
+        window.addEventListener('popstate', () => loadList());
+        loadList();
+    }
+
     if (typeof HTMLDialogElement === 'undefined' || typeof HTMLDialogElement.prototype.showModal !== 'function') return;
 
     const messages = {
@@ -11,7 +78,7 @@
     const orderLinks = [...document.querySelectorAll('[data-order-review]')];
     const standalone = document.querySelector('[data-review-dialog]');
     let opening = false;
-    if (!standalone && orderLinks.length === 0) return;
+    if (!standalone && !reviewList && orderLinks.length === 0) return;
 
     const notice = document.createElement('dialog');
     notice.className = 'review-dialog review-dialog--prompt';
@@ -75,7 +142,11 @@
         return complete;
     }
 
-    function bind(dialog, opener, orderLink = null) {
+    function bind(dialog, opener) {
+        const orderLink = opener.matches('[data-order-review]') ? opener : null;
+        const fromList = opener.matches('[data-my-review-open]');
+        const dynamic = orderLink || fromList;
+        const productId = opener.closest('[data-review-item]')?.dataset.reviewItem;
         const close = dialog.querySelector('[data-review-close]');
         const remove = dialog.querySelector('[data-review-delete]');
         const form = dialog.querySelector('form');
@@ -87,7 +158,7 @@
         close.addEventListener('click', () => dialog.close());
         dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
         dialog.addEventListener('close', () => {
-            if (orderLink) dialog.remove();
+            if (dynamic) dialog.remove();
             if (!completing) opener.focus({ preventScroll: true });
         });
 
@@ -119,6 +190,7 @@
                 if (saved) {
                     returnUrl = response.headers.get('X-Review-Return');
                     if (orderLink) refreshed = await refreshOrders(orderLink.dataset.orderReview);
+                    if (fromList) refreshed = await loadList();
                 } else {
                     detail = errorText(response, result);
                 }
@@ -139,8 +211,15 @@
             completing = true;
             dialog.close();
             await prompt('리뷰 ' + label + ' 완료', refreshed ? success
-                : success + ' 버튼 상태를 확인하려면 주문내역을 다시 불러와 주세요.');
-            if (orderLink) opener.focus({ preventScroll: true });
+                : success + (fromList ? ' 최신 목록을 확인하려면 리뷰 화면을 다시 불러와 주세요.'
+                    : ' 버튼 상태를 확인하려면 주문내역을 다시 불러와 주세요.'));
+            if (dynamic) {
+                const row = fromList && [...reviewList.querySelectorAll('[data-review-item]')]
+                    .find(item => item.dataset.reviewItem === productId);
+                const focus = opener.isConnected ? opener : row?.querySelector('.my-review-edit')
+                    || reviewList.querySelector('.my-review-tabs [aria-current]') || document.getElementById('my-review-title');
+                focus?.focus({ preventScroll: true });
+            }
             else if (returnUrl && new URL(returnUrl, location.href).origin === location.origin) location.assign(returnUrl);
             else location.reload();
         }
@@ -267,7 +346,7 @@
         });
         existing.forEach(input => input.addEventListener('change', check));
         check();
-        if (orderLink) dialog.addEventListener('close', () => {
+        if (dynamic) dialog.addEventListener('close', () => {
             if (!dialog.isConnected) previewUrls.forEach(url => URL.revokeObjectURL(url));
         });
     }
@@ -281,36 +360,43 @@
         standalone.showModal();
     }
 
-    for (const link of orderLinks) {
-        link.dataset.reviewUrl = link.href;
-        link.addEventListener('click', async event => {
-            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            if (link.getAttribute('aria-disabled') === 'true' || opening || notice.open
-                    || document.querySelector('[data-review-dialog]:modal')) return;
-            opening = true;
-            link.setAttribute('aria-busy', 'true');
-            const url = editorUrl(link);
-            url.searchParams.set('fragment', 'editor');
-            try {
-                const response = await fetch(url, { redirect: 'error', cache: 'no-store' });
-                const body = await response.text();
-                if (!response.ok) {
-                    await prompt('리뷰 화면을 열 수 없습니다', errorText(response, body) || '잠시 후 다시 시도해 주세요.');
-                    return;
-                }
-                const html = new DOMParser().parseFromString(body, 'text/html');
-                const dialog = html.querySelector('[data-review-dialog]');
-                if (!dialog) throw new Error();
-                document.body.append(dialog);
-                bind(dialog, link, link);
-                dialog.showModal();
-            } catch {
-                await prompt('리뷰 화면을 열 수 없습니다', '잠시 후 다시 시도해 주세요.');
-            } finally {
-                opening = false;
-                link.removeAttribute('aria-busy');
+    for (const link of orderLinks) link.dataset.reviewUrl = link.href;
+    document.addEventListener('click', async event => {
+        const link = event.target.closest('[data-order-review], [data-my-review-open]');
+        if (!link || !ordinaryClick(event)) return;
+        event.preventDefault();
+        if (link.getAttribute('aria-disabled') === 'true' || opening || notice.open
+                || document.querySelector('[data-review-dialog]:modal')) return;
+        opening = true;
+        link.setAttribute('aria-busy', 'true');
+        const url = editorUrl(link);
+        url.searchParams.set('fragment', 'editor');
+        try {
+            const response = await fetch(url, { redirect: 'error', cache: 'no-store' });
+            const body = await response.text();
+            if (!response.ok) {
+                await prompt('리뷰 화면을 열 수 없습니다', errorText(response, body) || '잠시 후 다시 시도해 주세요.');
+                return;
             }
-        });
-    }
+            const html = new DOMParser().parseFromString(body, 'text/html');
+            const dialog = html.querySelector('[data-review-dialog]');
+            if (!dialog) throw new Error();
+            document.body.append(dialog);
+            bind(dialog, link);
+            const stars = Number(link.dataset.reviewStarsValue);
+            if (stars >= 1 && stars <= 5 && !dialog.querySelector('[name="reviewId"]')) {
+                const rating = dialog.querySelector('[name="rating"][value="' + stars + '"]');
+                if (rating) {
+                    rating.checked = true;
+                    rating.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            dialog.showModal();
+        } catch {
+            await prompt('리뷰 화면을 열 수 없습니다', '잠시 후 다시 시도해 주세요.');
+        } finally {
+            opening = false;
+            link.removeAttribute('aria-busy');
+        }
+    });
 })();

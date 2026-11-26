@@ -18,7 +18,7 @@
 <head>
     <%@ include file="../common/head.jspf" %>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css?v=delivery-review">
-    <script defer src="${pageContext.request.contextPath}/assets/js/common/product-review-editor.js?v=delivery-review"></script>
+    <script defer src="${pageContext.request.contextPath}/assets/js/common/product-review-editor.js?v=my-review-list"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">본문 바로가기</a>

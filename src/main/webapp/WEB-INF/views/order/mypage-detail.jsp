@@ -101,10 +101,10 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 <head>
 <%@ include file="../common/head.jspf"%>
 <link rel="stylesheet"
-	href="${pageContext.request.contextPath}/assets/css/my-product-activity.css">
-<% if (!orderReviewStates.isEmpty()) { %>
-<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css?v=delivery-review">
-<script defer src="${pageContext.request.contextPath}/assets/js/common/product-review-editor.js?v=delivery-review"></script>
+	href="${pageContext.request.contextPath}/assets/css/my-product-activity.css?v=my-review-list">
+<% if (!orderReviewStates.isEmpty() || "reviews".equals(productActivity)) { %>
+<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css?v=my-review-list">
+<script defer src="${pageContext.request.contextPath}/assets/js/common/product-review-editor.js?v=my-review-list"></script>
 <% } %>
 <% if (Set.of("wishlist", "recent", "frequent").contains(productActivity)) { %>
 <link rel="stylesheet"

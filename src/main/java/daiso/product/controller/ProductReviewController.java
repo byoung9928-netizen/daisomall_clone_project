@@ -67,7 +67,9 @@ public final class ProductReviewController {
             String member = memberId(session);
             boolean fragment = "editor".equals(request.getParameter("fragment"));
             if (fragment && member == null) return error(request, response, 401, "로그인이 필요합니다.");
-            if (fragment && orderNo == null) return error(request, response, 400, "주문번호를 확인해 주세요.");
+            if (fragment && orderNo == null && !MyReviewsController.RETURN_SOURCE.equals(request.getParameter("from"))) {
+                return error(request, response, 400, "리뷰 진입 경로를 확인해 주세요.");
+            }
             if (orderNo != null && (member == null || !service.orderReviewStates(member, orderNo).containsKey(productId))) {
                 return error(request, response, 403, PURCHASE_MESSAGE);
             }

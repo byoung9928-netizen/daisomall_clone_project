@@ -20,14 +20,15 @@ public final class ProductReviewDAO {
     private static final String ACTIVE = " WHERE rv.product_id = ? AND rv.deleted_at IS NULL";
     private static final String REVIEWS = " FROM product_reviews rv";
     // 리뷰 작성 당시 연결한 주문상품의 전액 환불 완료 여부를 조회한다.
-    private static final String FIELDS = "SELECT rv.review_id, rv.rating, rv.content, rv.created_at, rv.version, "
-            + "EXISTS (SELECT 1 FROM order_items i JOIN orders o ON o.order_id = i.order_id "
+    private static final String REFUNDED = "EXISTS (SELECT 1 FROM order_items i JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
             + "WHERE i.order_item_id = rv.order_item_id "
             + "AND i.product_id = rv.product_id AND o.member_id = rv.member_id "
             + "AND o.status = 'CANCELLED' AND o.canceled_at IS NOT NULL "
             + "AND p.method = 'KAKAOPAY' AND p.status = 'CANCELLED' AND p.approved_at IS NOT NULL "
-            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount) AS refunded";
+            + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount)";
+    private static final String FIELDS = "SELECT rv.review_id, rv.rating, rv.content, rv.created_at, rv.version, "
+            + REFUNDED + " AS refunded";
     private static final String REVIEW_PURCHASE = ApprovedPurchase.PAYMENT
             + " AND ((o.fulfillment_type = 'DELIVERY' AND o.status = 'DELIVERED'"
             + " AND NOT EXISTS (SELECT 1 FROM order_returns ret WHERE ret.order_id = o.order_id AND ret.status = 'REFUNDED'))"
@@ -43,6 +44,25 @@ public final class ProductReviewDAO {
             + "UNION ALL SELECT c.category_id FROM categories c JOIN visible v "
             + "ON c.parent_id = v.category_id WHERE c.is_visible = 1) ";
     private static final String MY_PRODUCT = "pr.product_id, pr.name, pr.image_url, pr.product_code, ";
+    private static final String WRITTEN_ITEMS = VISIBLE + ", review_items AS (SELECT " + MY_PRODUCT
+            + "rv.rating, rv.content, rv.created_at AS event_at, o.fulfillment_type AS purchase_type, "
+            + "COALESCE(rm.moderation_state, 'PUBLISHED') AS moderation_state, v.category_id IS NOT NULL AS visible, "
+            + REFUNDED + " AS refunded "
+            + "FROM product_reviews rv JOIN products pr ON pr.product_id = rv.product_id "
+            + "JOIN order_items i ON i.order_item_id = rv.order_item_id JOIN orders o ON o.order_id = i.order_id "
+            + "LEFT JOIN visible v ON pr.category_id = v.category_id "
+            + "LEFT JOIN product_review_moderation rm ON rm.review_id = rv.review_id "
+            + "WHERE rv.member_id = ? AND rv.deleted_at IS NULL) ";
+    private static final String AVAILABLE_ITEMS = VISIBLE + ", eligible AS (SELECT i.product_id, p.approved_at AS event_at, "
+            + "o.fulfillment_type AS purchase_type, ROW_NUMBER() OVER (PARTITION BY i.product_id "
+            + "ORDER BY p.approved_at DESC, i.order_item_id DESC) AS purchase_rank "
+            + "FROM order_items i JOIN orders o ON o.order_id = i.order_id "
+            + "JOIN payment_attempts p ON p.order_id = o.order_id WHERE o.member_id = ? AND " + REVIEW_PURCHASE
+            + " AND NOT EXISTS (SELECT 1 FROM product_reviews r WHERE r.member_id = o.member_id "
+            + "AND r.product_id = i.product_id AND r.deleted_at IS NULL)), review_items AS (SELECT " + MY_PRODUCT
+            + "0 AS rating, NULL AS content, e.event_at, e.purchase_type, NULL AS moderation_state, TRUE AS visible, FALSE AS refunded "
+            + "FROM eligible e JOIN products pr ON pr.product_id = e.product_id "
+            + "JOIN visible v ON pr.category_id = v.category_id WHERE e.purchase_rank = 1) ";
 
     public enum Sort {
         NEWEST("newest", "rv.created_at DESC, rv.review_id DESC"),
@@ -106,32 +126,31 @@ public final class ProductReviewDAO {
         }
     }
 
-    public List<MyReviewItem> mine(Connection connection, String member, boolean written, boolean oldest,
-            int limit, int offset) throws SQLException {
-        String sql;
-        if (written) {
-            sql = VISIBLE + "SELECT " + MY_PRODUCT + "r.review_id, r.rating, r.content, r.created_at AS event_at, "
-                    + "COALESCE(rm.moderation_state, 'PUBLISHED') AS moderation_state, v.category_id IS NOT NULL AS visible "
-                    + "FROM product_reviews r JOIN products pr ON pr.product_id = r.product_id "
-                    + "LEFT JOIN visible v ON pr.category_id = v.category_id "
-                    + "LEFT JOIN product_review_moderation rm ON rm.review_id = r.review_id "
-                    + "WHERE r.member_id = ? AND r.deleted_at IS NULL";
-        } else {
-            sql = VISIBLE + ", eligible AS (SELECT i.product_id, MAX(p.approved_at) AS event_at "
-                    + "FROM order_items i JOIN orders o ON o.order_id = i.order_id "
-                    + "JOIN payment_attempts p ON p.order_id = o.order_id WHERE o.member_id = ? AND " + REVIEW_PURCHASE
-                    + " AND NOT EXISTS(SELECT 1 FROM product_reviews r WHERE r.member_id = o.member_id "
-                    + "AND r.product_id = i.product_id AND r.deleted_at IS NULL) GROUP BY i.product_id) "
-                    + "SELECT " + MY_PRODUCT + "0 AS review_id, 0 AS rating, NULL AS content, e.event_at, "
-                    + "NULL AS moderation_state, TRUE AS visible FROM eligible e JOIN products pr ON pr.product_id = e.product_id "
-                    + "JOIN visible v ON pr.category_id = v.category_id";
-        }
-        sql += " ORDER BY event_at " + (oldest ? "ASC" : "DESC") + ", pr.product_id LIMIT ? OFFSET ?";
-        List<MyReviewItem> items = new ArrayList<>();
+    public Map<String, Integer> mineCounts(Connection connection, String member, boolean written) throws SQLException {
+        String sql = (written ? WRITTEN_ITEMS : AVAILABLE_ITEMS)
+                + "SELECT purchase_type, COUNT(*) AS total FROM review_items GROUP BY purchase_type";
+        Map<String, Integer> counts = new HashMap<>();
         try (PreparedStatement query = connection.prepareStatement(sql)) {
             query.setString(1, member);
-            query.setInt(2, limit);
-            query.setInt(3, offset);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) counts.put(rows.getString("purchase_type"), rows.getInt("total"));
+            }
+        }
+        return counts;
+    }
+
+    public List<MyReviewItem> mine(Connection connection, String member, boolean written, String purchaseType,
+            boolean oldest, int limit, int offset) throws SQLException {
+        String sql = (written ? WRITTEN_ITEMS : AVAILABLE_ITEMS) + "SELECT * FROM review_items"
+                + (purchaseType.isEmpty() ? "" : " WHERE purchase_type = ?")
+                + " ORDER BY event_at " + (oldest ? "ASC" : "DESC") + ", product_id LIMIT ? OFFSET ?";
+        List<MyReviewItem> items = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            int index = 1;
+            query.setString(index++, member);
+            if (!purchaseType.isEmpty()) query.setString(index++, purchaseType);
+            query.setInt(index++, limit);
+            query.setInt(index, offset);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
                     ProductDTO product = new ProductDTO();
@@ -140,8 +159,8 @@ public final class ProductReviewDAO {
                     product.setProductCode(rows.getString("product_code"));
                     product.setImage(rows.getString("image_url"));
                     items.add(new MyReviewItem(product, rows.getObject("event_at", LocalDateTime.class),
-                            rows.getLong("review_id"), rows.getInt("rating"), rows.getString("content"),
-                            rows.getString("moderation_state"), rows.getBoolean("visible")));
+                            rows.getInt("rating"), rows.getString("content"), rows.getString("moderation_state"),
+                            rows.getBoolean("visible"), rows.getString("purchase_type"), rows.getBoolean("refunded")));
                 }
             }
         }
