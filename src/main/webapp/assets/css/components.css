@@ -416,13 +416,22 @@
 }
 .ai-chat-quick-actions {
     padding: 0 12px 8px;
+    display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
-.ai-chat-quick-actions button {
+.ai-chat-quick-actions button,
+.ai-chat-quick-actions a {
+    display: inline-flex;
+    align-items: center;
     padding: 6px 12px;
     border: 1px solid #d7dce3;
-    border-radius: 16px;
+    border-radius: 999px;
     background: #fff;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
     cursor: pointer;
 }
 .ai-chat-product-list {

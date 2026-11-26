@@ -95,10 +95,9 @@
 		    sendQuestion(input.value.trim());
 		});
 
-		const shippingButton = document.getElementById('ai-chat-faq-shipping');
-		if (shippingButton) {
-		    shippingButton.addEventListener('click', () => {
-		        sendQuestion('배송비 얼마야?', 'shipping_fee');
+		dialog.querySelectorAll('[data-faq-id]').forEach(button => {
+		    button.addEventListener('click', () => {
+		        sendQuestion(button.dataset.faqQuestion, button.dataset.faqId);
 		    });
-		}
+		});
 })();

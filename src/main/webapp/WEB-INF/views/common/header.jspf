@@ -154,9 +154,11 @@
             data-faq-question="반품 어떻게 해?">반품 방법</button>
     <button type="button" data-faq-id="pickup_guide"
             data-faq-question="매장픽업 어떻게 해?">매장픽업 안내</button>
+	<a
+		href="${pageContext.request.contextPath}/app/support/inquiries?view=write">
+		1:1 문의 </a>
 </div>
-			<button type="button" id="ai-chat-faq-shipping">배송비 안내</button>
-		</div>
+		
 <form id="ai-chat-form" class="ai-chat-form" method="post"
       action="${pageContext.request.contextPath}/app/stores/chat"
       data-product-detail-url="${pageContext.request.contextPath}/app/products/detail">

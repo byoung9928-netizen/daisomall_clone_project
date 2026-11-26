@@ -61,7 +61,7 @@ public class ProductReadServlet extends HttpServlet {
             try (Connection conn = ProductQueries.connect()) {
                 if (catalog) {
                     ProductDAO.CatalogPage page = dao.findCatalog(conn, filter);
-                    String products = page.products.stream().map(ProductReadServlet::productJson)
+                    String products = page.products.stream().map(product -> productJson(request.getContextPath(), product))
                             .collect(Collectors.joining(",", "[", "]"));
                     json = "{\"items\":" + products + ",\"total\":" + page.total + "}";
                 } else if ("/categories".equals(path)) {
@@ -73,7 +73,7 @@ public class ProductReadServlet extends HttpServlet {
                         response.sendError(HttpServletResponse.SC_NOT_FOUND);
                         return;
                     }
-                    json = productJson(product);
+                    json = productJson(request.getContextPath(), product);
                 }
                 conn.commit();
             }
@@ -218,7 +218,7 @@ public class ProductReadServlet extends HttpServlet {
         }
     }
 
-    private static String productJson(ProductDTO product) {
+    private static String productJson(String context, ProductDTO product) {
         return "{\"id\":" + jsonString(product.getProductId())
                 + ",\"code\":" + jsonString(product.productCode)
                 + ",\"name\":" + jsonString(product.getName())
@@ -228,6 +228,7 @@ public class ProductReadServlet extends HttpServlet {
                 + ",\"brand\":" + jsonString(product.brand)
                 + ",\"status\":" + jsonString(product.status)
                 + ",\"image\":" + jsonString(product.image)
+                + ",\"imageUrl\":" + jsonString(ProductView.imageUrl(context, product.getImage()))
                 + ",\"description\":" + jsonString(product.description)
                 + ",\"rating\":" + product.rating
                 + ",\"reviewCount\":" + product.reviewCount
