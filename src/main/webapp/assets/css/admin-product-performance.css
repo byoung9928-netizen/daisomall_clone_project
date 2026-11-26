@@ -1,0 +1,62 @@
+[data-admin-query="product-performance"] .performance-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .75rem;
+    align-items: end;
+}
+.performance-filters .field { margin: 0; min-width: 0; }
+.performance-filters :is(input, select) { width: 100%; min-width: 0; }
+.performance-filters [hidden] { display: none; }
+.performance-filters .admin-product-suggest {
+    grid-column: span 2;
+    display: grid;
+    gap: .25rem;
+}
+.performance-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.performance-filters .performance-actions { grid-column: 1 / -1; }
+.performance-period { margin-block: 1rem .5rem; }
+.performance-notice {
+    padding: .55rem .75rem;
+    margin-block: .5rem;
+    background: #fff5ea;
+    border-inline-start: 3px solid #ad580c;
+}
+.performance-metrics.store-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    margin-block: 1rem;
+}
+.performance-metrics strong { overflow-wrap: anywhere; }
+.performance-trend, .performance-detail { margin-block-end: 1.25rem; }
+.performance-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+    gap: .75rem;
+}
+.performance-charts figure {
+    min-width: 0;
+    margin: 0;
+    padding: .65rem;
+    border: 1px solid var(--admin-line);
+    background: #fff;
+}
+.performance-charts figcaption { font-weight: 700; }
+.performance-charts canvas { display: block; width: 100%; height: 90px; }
+.performance-charts small, .performance-key { color: #5a626e; }
+.performance-trend-data { margin-block-start: .8rem; }
+.performance-trend-data summary { width: fit-content; cursor: pointer; }
+.performance-detail .performance-actions { margin-block: .75rem; }
+.performance-detail-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    gap: .65rem;
+}
+.performance-detail-stats div { padding: .5rem; border: 1px solid var(--admin-line); }
+.performance-detail-stats dt { color: #5a626e; font-size: .875rem; }
+.performance-detail-stats dd { margin: .2rem 0 0; font-weight: 700; }
+.performance-comparison th, .performance-rows th { text-align: left; }
+.performance-rows tbody th { white-space: normal; min-width: 11rem; }
+.performance-rows small { display: block; color: #5a626e; padding-top: .15rem; }
+.performance-rows td { white-space: nowrap; }
+@media (max-width: 560px) {
+    .performance-filters .admin-product-suggest { grid-column: 1 / -1; }
+}

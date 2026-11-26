@@ -114,7 +114,7 @@ public final class AdminProductController {
         return null;
     }
 
-    private static void csvRow(StringBuilder output, Object... cells) {
+    static void csvRow(StringBuilder output, Object... cells) {
         for (int i = 0; i < cells.length; i++) {
             if (i != 0) output.append(',');
             String value = cells[i] == null ? "" : cells[i].toString();

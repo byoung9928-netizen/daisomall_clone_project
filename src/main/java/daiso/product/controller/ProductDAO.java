@@ -143,7 +143,7 @@ public class ProductDAO {
         return totals;
     }
 
-    private static AdminScope adminScope(AdminProductFilter filter, boolean includeStatus) {
+    static AdminScope adminScope(AdminProductFilter filter, boolean includeStatus) {
         String prefix = "";
         StringBuilder from = new StringBuilder(" FROM products p");
         StringBuilder scope = new StringBuilder();
@@ -173,7 +173,7 @@ public class ProductDAO {
         return new AdminScope(prefix, from.toString(), scope.toString(), terms);
     }
 
-    private static final class AdminScope {
+    static final class AdminScope {
         final String prefix;
         final String from;
         final String where;
