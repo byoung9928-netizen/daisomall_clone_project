@@ -307,7 +307,9 @@
             .pickup-method { min-height: 96px; }
         }
 
-    </style>
+    .order-point-row{display:grid;grid-template-columns:280px minmax(0,1fr) 120px;gap:12px;align-items:start;margin:0 0 24px;padding-left:20px}.order-point-row>label{font-size:14px;padding-top:14px}.order-point-input{position:relative}.order-point-input input{width:100%;height:48px;border:1px solid #e1e4e9;background:#f6f7f9;padding:0 32px 0 16px;color:#a6aeb8;font-size:14px}.order-point-input>span{position:absolute;right:16px;top:15px;font-size:14px;color:#697688}.order-point-balance{font-size:12px;color:#6c7c8f;margin:10px 12px 0}
+.pickup-point-heading{display:flex;justify-content:space-between;align-items:baseline}.pickup-point-heading span{color:#e60023}.order-point-row button{border:1px solid #e1e4e9;background:#fff;min-height:48px;font-size:14px;font-weight:700;cursor:pointer}@media(max-width:1100px){.order-point-row{grid-template-columns:170px minmax(0,1fr) 100px}}@media(max-width:800px){.order-point-row{grid-template-columns:minmax(0,1fr) 90px;padding:0}.order-point-row label{grid-column:1/-1}}
+</style>
 </head>
 <body>
     <%@ include file="../common/header.jspf" %>
@@ -365,6 +367,7 @@
                             <p class="pickup-note">방문할 매장과 수령인 연락처를 확인해 주세요.</p>
                         </div>
                     </section>
+                    
                     <section aria-labelledby="pickup-order-items-title">
                         <h2 id="pickup-order-items-title">주문상품 <span class="pickup-item-count"><%= pickupOrderItems.size() %>개</span></h2>
                         <ul class="pickup-order-items">
@@ -382,8 +385,27 @@
                         <% } %>
                         </ul>
                     </section>
-                    <section aria-labelledby="pickup-payment-method-title">
+                    <section aria-labelledby="pickup-point-title">
+<div class="pickup-point-heading"><h2 id="pickup-point-title">다이소 포인트</h2><span id="pickup-discount">0원</span></div>
+<div class="order-point-row">
+    <label for="daiso-points">다이소 포인트 ⓘ</label>
+    <div class="order-point-input">
+        <input id="daiso-points" type="number" min="0" step="1" value="0"
+               max="<%= Math.min(((Number) request.getAttribute("pickupSubtotal")).longValue(),
+                   ((Number) request.getAttribute("pickupPointBalance")).longValue()) %>">
+        <span>P</span>
+        <p class="order-point-balance">
+            보유 <%= pickupMoney.format(request.getAttribute("pickupPointBalance")) %>P
+        </p>
+    </div>
+    <button id="use-all-daiso-points" class="order-small-button" type="button">
+        전액사용
+    </button>
+</div>
+</section>
+<section aria-labelledby="pickup-payment-method-title">
                         <h2 id="pickup-payment-method-title">결제수단</h2>
+                        
                         <%-- ===== 결제수단 타일 ===== --%>
                         <ul class="pickup-method-grid" aria-label="결제수단">
                             <li class="pickup-method-option">
@@ -502,6 +524,26 @@
             	<%} %>
             <script>
                 (() => {
+                    // 사용 포인트와 픽업 결제 예정 금액을 함께 갱신한다.
+                    const points = document.getElementById("daiso-points");
+                    const expected = document.querySelector('#pickup-toss-order [name="expectedAmount"]');
+                    const original = <%= pickupPaymentAmount %>;
+                    const money = new Intl.NumberFormat("ko-KR");
+                    function updatePoints() {
+                        const value = Math.min(Number(points.max), Math.max(0, Math.floor(points.valueAsNumber || 0)));
+                        points.value = String(value);
+                        expected.value = String(original - value);
+                        const label = money.format(original - value) + "원";
+                        document.getElementById("pickup-discount").textContent = value ? "-" + money.format(value) + "원" : "0원";
+                        document.querySelector(".pickup-final dd").textContent = label;
+                        document.querySelectorAll("[data-pickup-pay]").forEach(button => button.textContent = label + " 결제하기");
+                    }
+                    points.addEventListener("input", updatePoints);
+                    document.getElementById("use-all-daiso-points").addEventListener("click", () => {
+                        points.value = points.max;
+                        updatePoints();
+                    });
+                    window.addEventListener("pageshow", updatePoints);
                     const paymentOptions = Array.from(document.querySelectorAll('input[name="pickup-payment-method"]'));
                     const paymentNames = { kakao: "카카오페이", "toss-pay": "토스페이" };
                     const paymentNote = document.getElementById("pickup-payment-note");
@@ -510,7 +552,8 @@
 						const form=document.getElementById("pickup-toss-order");
 						const body = new URLSearchParams(new FormData(form));
 						
-						body.set("recipient", document.getElementById("pickup-recipient-name").value.trim());
+						body.set("usedPoints", points.value);
+                        body.set("recipient", document.getElementById("pickup-recipient-name").value.trim());
 						body.set("phone", document.getElementById("pickup-recipient-phone").value.trim());
 						return body;
 						
