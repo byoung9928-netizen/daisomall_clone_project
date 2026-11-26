@@ -18,6 +18,7 @@ import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.Location;
 import daiso.product.dao.StoreInventoryDAO.StockAvailability;
 import daiso.order.db.OrderDAO;
+import daiso.product.service.FaqService;
 
 @DaisoController
 public final class StoreFinderController {
@@ -121,6 +122,11 @@ public final class StoreFinderController {
         if (question.isEmpty()) {
             return "매장 이름과 상품 이름을 입력해 주세요.";
         }
+        
+        String faqAnswer = FaqService.findAnswer(request.getParameter("faqId"), question);
+        if (faqAnswer != null) {
+            return faqAnswer;
+        }
 
         synchronized (session) {
             long now = System.currentTimeMillis();
@@ -184,13 +190,11 @@ public final class StoreFinderController {
         	String kind = terms.get("kind").getAsString();
 
         	if ("shipping_policy".equals(kind)) {
-        	    return "택배 배송비는 상품 합계가 30,000원 미만이면 3,000원이고, "
-        	            + "30,000원 이상이면 무료예요. 매장픽업 수수료는 200원이에요.";
+        	    return FaqService.findAnswer("shipping_fee", question);
         	}
 
         	if ("return_policy".equals(kind)) {
-        	    return "마이페이지 → 주문내역에서 해당 주문을 열고 [반품 신청]을 눌러 주세요. "
-        	            + "배송이 완료되고 결제가 승인된 본인 주문에서 신청할 수 있어요.";
+        	    return FaqService.findAnswer("return_policy", question);
         	}
         	
         	if ("general".equals(terms.get("kind").getAsString())) {
@@ -216,11 +220,8 @@ public final class StoreFinderController {
         	        }
 
         	        if (found.total > 1) {
-        	            return "어느 상품을 찾으시나요? 아래 후보의 품번을 알려주세요.\n"
-        	                    + found.products.stream()
-        	                            .map(product -> "• " + product.getName()
-        	                                    + " (품번 " + product.getProductCode() + ")")
-        	                            .collect(Collectors.joining("\n"));
+        	            return chatProductChoices(response, found.products,
+        	                    "상품명을 누르면 상세 페이지로 이동해요.");
         	        }
 
         	        ProductDTO product = found.products.get(0);
@@ -277,11 +278,8 @@ public final class StoreFinderController {
                     return "일치하는 상품을 찾지 못했어요. 짧은 상품명이나 품번으로 다시 질문해 주세요.";
                 }
                 if (found.total > 1) {
-                    return "어느 상품인가요? 아래 후보 중 상품명이나 품번을 매장명과 함께 적어 주세요.\n"
-                            + found.products.stream()
-                                    .map(product -> "• " + product.getName()
-                                            + " (품번 " + product.getProductCode() + ")")
-                                    .collect(Collectors.joining("\n"));
+                    return chatProductChoices(response, found.products,
+                            "상품명을 누르면 상세 페이지로 이동해요.");
                 }
 
                 ProductDTO product = found.products.get(0);
@@ -304,6 +302,27 @@ public final class StoreFinderController {
             return "지금은 재고를 조회할 수 없어요. 잠시 후 다시 시도해 주세요.";
         }
     }
+    
+    private static String chatProductChoices(HttpServletResponse response,
+            List<ProductDTO> products, String answer) {
+        com.google.gson.JsonArray choices = new com.google.gson.JsonArray();
+
+        for (ProductDTO product : products) {
+            com.google.gson.JsonObject choice = new com.google.gson.JsonObject();
+            choice.addProperty("id", product.getProductId());
+            choice.addProperty("name", product.getName());
+            choice.addProperty("code", product.getProductCode());
+            choices.add(choice);
+        }
+
+        com.google.gson.JsonObject payload = new com.google.gson.JsonObject();
+        payload.addProperty("answer", answer);
+        payload.add("products", choices);
+
+        response.setHeader("X-Daiso-Chat-Format", "product-choices");
+        return payload.toString();
+    }
+    
     private static String chatOrderStatusLabel(String status) {
         switch (status) {
             case "PENDING": return "결제 대기";

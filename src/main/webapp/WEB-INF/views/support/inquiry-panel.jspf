@@ -1,0 +1,279 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.List,java.util.Map,daiso.product.controller.ProductView" %>
+<%
+List<Map<String, Object>> customerInquiries =
+        (List<Map<String, Object>>) request.getAttribute("myInquiries");
+%>
+<% boolean historyView = Boolean.TRUE.equals(request.getAttribute("inquiryHistoryView")); %>
+<h1><%= historyView ? "1:1 문의내역" : "1:1 문의" %></h1>
+<% if (!historyView) { %>
+
+    <section id="inquiry-form" aria-labelledby="inquiry-form-title">
+        <h2 id="inquiry-form-title">문의 작성</h2>
+        <% if (request.getAttribute("inquiryError") != null) { %>
+            <p role="alert"><%= ProductView.escape(request.getAttribute("inquiryError")) %></p>
+        <% } %>
+
+        <form method="post" action="${pageContext.request.contextPath}/app/support/inquiries">
+            <input type="hidden" name="csrfToken"
+                   value="<%= ProductView.escape(request.getAttribute("supportInquiryCsrf")) %>"> 
+                   <fieldset class="my-inquiry-classification">
+    <legend>문의 분류</legend>
+    <div class="my-inquiry-classification-grid">
+        <div>
+            <label for="inquiry-channel">문의채널</label>
+            <select id="inquiry-channel" name="channel" required>
+                <option value="">채널을 선택해 주세요</option>
+                <option value="다이소몰">다이소몰</option>
+                <option value="매장">매장</option>
+            </select>
+        </div>
+        <div>
+            <label for="inquiry-category">문의유형</label>
+            <select id="inquiry-category" name="category" required disabled></select>
+        </div>
+        <div>
+            <label for="inquiry-subcategory">상세유형</label>
+            <select id="inquiry-subcategory" name="subcategory" required disabled></select>
+        </div>
+    </div>
+</fieldset>
+<fieldset id="inquiry-store-fields" class="my-inquiry-classification" hidden disabled>
+    <legend>매장·상품 정보 (선택)</legend>
+
+    <label for="inquiry-store">매장</label>
+    <select id="inquiry-store" name="storeId">
+        <option value="">매장을 선택해 주세요</option>
+        <%
+        Object storeOptions = request.getAttribute("inquiryStores");
+        if (storeOptions instanceof List<?>) {
+            for (Object option : (List<?>) storeOptions) {
+                daiso.product.dao.StoreInventoryDAO.Location store =
+                        (daiso.product.dao.StoreInventoryDAO.Location) option;
+        %>
+            <option value="<%= ProductView.escape(store.id) %>">
+                <%= ProductView.escape(store.name) %>
+            </option>
+        <%  }
+        } %>
+    </select>
+
+    <% if (request.getAttribute("inquiryStoresError") != null) { %>
+        <p role="status"><%= ProductView.escape(request.getAttribute("inquiryStoresError")) %></p>
+    <% } %>
+
+    <label for="inquiry-selected-product">문의 상품 (선택)</label>
+<div class="inquiry-product-controls">
+    <input id="inquiry-selected-product" type="text" readonly
+           placeholder="선택한 상품이 없어요">
+    <button type="button" id="inquiry-product-search">상품 검색</button>
+    <button type="button" id="inquiry-product-clear" hidden>선택 해제</button>
+</div>
+<input type="hidden" id="inquiry-product" name="productId">
+</fieldset>
+		<label for="inquiry-title">제목</label>
+            <input id="inquiry-title" name="title" maxlength="120" required
+                   value="<%= ProductView.escape(request.getAttribute("draftTitle")) %>">
+
+            <label for="inquiry-content">내용</label>
+            <textarea id="inquiry-content" name="content" rows="6"
+                      maxlength="2000" required><%= ProductView.escape(request.getAttribute("draftContent")) %></textarea>
+
+            <button type="submit">문의 등록</button>
+        </form>
+        <dialog id="inquiry-product-dialog" class="inquiry-product-dialog"
+        aria-labelledby="inquiry-product-heading">
+    <div class="inquiry-product-dialog-heading">
+        <h2 id="inquiry-product-heading">문의할 상품 찾기</h2>
+        <button type="button" id="inquiry-product-close">닫기</button>
+    </div>
+
+    <form id="inquiry-product-search-form" role="search"
+          action="${pageContext.request.contextPath}/api/products/">
+        <label for="inquiry-product-query" class="visually-hidden">상품명 또는 품번</label>
+        <input id="inquiry-product-query" type="search" maxlength="100"
+               placeholder="예시 네임펜, 수납함">
+        <button type="submit">검색</button>
+    </form>
+
+    <p id="inquiry-product-status" role="status"></p>
+    <div id="inquiry-product-results" class="inquiry-product-results"></div>
+</dialog>
+    </section>
+    <script>
+(() => {
+    const channel = document.getElementById('inquiry-channel');
+    const category = document.getElementById('inquiry-category');
+    const subcategory = document.getElementById('inquiry-subcategory');
+
+    const types = {
+        '다이소몰': {
+            '주문·배송': ['배송 일정', '주문 취소'],
+            '반품·환불': ['반품 신청', '환불 진행']
+        },
+        '매장': {
+            '매장픽업': ['픽업 준비', '상품 수령'],
+            '매장 이용': ['재고 문의', '매장 정보']
+        }
+    };
+
+    function setOptions(select, items, placeholder) {
+        select.replaceChildren(new Option(placeholder, ''));
+        items.forEach(item => select.add(new Option(item, item)));
+        select.disabled = items.length === 0;
+    }
+
+    function updateSubcategories() {
+        const items = types[channel.value]?.[category.value] ?? [];
+        setOptions(subcategory, items,
+            category.value ? '상세유형을 선택해 주세요' : '문의유형을 먼저 선택해 주세요');
+    }
+
+    function updateCategories() {
+        const items = Object.keys(types[channel.value] ?? {});
+        setOptions(category, items,
+            channel.value ? '문의유형을 선택해 주세요' : '채널을 먼저 선택해 주세요');
+        updateSubcategories();
+    }
+
+    const storeFields = document.getElementById('inquiry-store-fields');
+    const store = document.getElementById('inquiry-store');
+    const dialog = document.getElementById('inquiry-product-dialog');
+    const searchForm = document.getElementById('inquiry-product-search-form');
+    const query = document.getElementById('inquiry-product-query');
+    const results = document.getElementById('inquiry-product-results');
+    const status = document.getElementById('inquiry-product-status');
+    const selectedId = document.getElementById('inquiry-product');
+    const selectedName = document.getElementById('inquiry-selected-product');
+    const clearButton = document.getElementById('inquiry-product-clear');
+    const money = new Intl.NumberFormat('ko-KR');
+    let activeSearch;
+
+    function clearProduct() {
+        selectedId.value = '';
+        selectedName.value = '';
+        clearButton.hidden = true;
+    }
+
+    async function searchProducts() {
+        activeSearch?.abort();
+        const search = new AbortController();
+        activeSearch = search;
+
+        const url = new URL(searchForm.action);
+        const keyword = query.value.trim();
+        if (keyword) url.searchParams.set('q', keyword);
+        url.searchParams.set('limit', '12');
+
+        results.replaceChildren();
+        status.textContent = '상품을 찾고 있어요.';
+
+        try {
+            const response = await fetch(url, { signal: search.signal });
+            if (!response.ok) throw new Error('상품 조회 실패');
+
+            const result = await response.json();
+            if (search.signal.aborted) return;
+
+            result.items.forEach(product => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'inquiry-product-card';
+
+                const image = document.createElement('img');
+                image.src = product.imageUrl;
+                image.alt = '';
+                image.loading = 'lazy';
+
+                const name = document.createElement('strong');
+                name.textContent = product.name;
+
+                const info = document.createElement('span');
+                info.textContent = money.format(product.price) + '원'
+                    + (product.code ? ' · 품번 ' + product.code : '');
+
+                card.append(image, name, info);
+                card.addEventListener('click', () => {
+                    selectedId.value = product.id;
+                    selectedName.value = product.name;
+                    clearButton.hidden = false;
+                    dialog.close();
+                });
+                results.appendChild(card);
+            });
+
+            status.textContent = result.items.length
+                ? (keyword ? '검색 결과 ' + result.total + '개 중 '
+                    + result.items.length + '개 표시' : '상품을 고르거나 이름으로 검색해 보세요.')
+                : '검색 결과가 없어요. 이름 일부나 품번으로 다시 검색해 주세요.';
+        } catch (error) {
+            if (!search.signal.aborted) {
+                status.textContent = '상품을 불러오지 못했어요. 다시 검색해 주세요.';
+            }
+        }
+    }
+
+    channel.addEventListener('change', () => {
+        updateCategories();
+        const isStore = channel.value === '매장';
+        storeFields.hidden = !isStore;
+        storeFields.disabled = !isStore;
+
+        if (!isStore) {
+            store.value = '';
+            clearProduct();
+        }
+    });
+
+    document.getElementById('inquiry-product-search').addEventListener('click', () => {
+        query.value = '';
+        dialog.showModal();
+        query.focus();
+        searchProducts();
+    });
+
+    document.getElementById('inquiry-product-close').addEventListener('click', () => {
+        dialog.close();
+    });
+
+    clearButton.addEventListener('click', clearProduct);
+    dialog.addEventListener('close', () => activeSearch?.abort());
+
+    searchForm.addEventListener('submit', event => {
+        event.preventDefault();
+        searchProducts();
+    });
+    category.addEventListener('change', updateSubcategories);
+    updateCategories();
+})();
+</script>
+    <% } else { %>
+
+    <section id="inquiry-history" aria-labelledby="inquiry-history-title">
+        <h2 id="inquiry-history-title">내 문의내역</h2>
+        <% if ("1".equals(request.getParameter("created"))) { %>
+            <p role="status">문의가 접수됐어요.</p>
+        <% } %>
+
+        <% if (request.getAttribute("inquiryLoadError") != null) { %>
+            <p role="alert"><%= ProductView.escape(request.getAttribute("inquiryLoadError")) %></p>
+       <% } else if (customerInquiries == null || customerInquiries.isEmpty()) { %>
+            <p>등록한 문의가 없어요.</p>
+        <% } else {
+        	for (Map<String, Object> inquiry : customerInquiries) { %>
+                <details>
+                    <summary>
+                        <%= ProductView.escape(inquiry.get("title")) %>
+                        · <%= "ANSWERED".equals(inquiry.get("status")) ? "답변 완료" : "답변 대기" %>
+                    </summary>
+                    <p><%= ProductView.escape(inquiry.get("createdAt")) %></p>
+                    <p class="inquiry-text"><%= ProductView.escape(inquiry.get("content")) %></p>
+                    <% if ("ANSWERED".equals(inquiry.get("status"))) { %>
+                        <h3>관리자 답변</h3>
+                        <p class="inquiry-text"><%= ProductView.escape(inquiry.get("answer")) %></p>
+                    <% } %>
+                </details>
+            <% }
+        } %>
+    </section>
+    <% } %>
