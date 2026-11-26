@@ -294,7 +294,20 @@ public class TossPayController {
             return error("픽업 장바구니가 변경됐어요. 상품을 다시 선택해 주세요.");
         }
 
-        long amount =subtotal+200;
+        // 픽업 수수료는 그대로 두고 상품 금액에서 사용 포인트를 차감한다.
+        String pointValue = request.getParameter("usedPoints");
+        int usedPoints;
+        try {
+            usedPoints = pointValue == null ? 0 : Integer.parseInt(pointValue);
+        } catch (NumberFormatException e) {
+            return error("사용 포인트는 정수로 입력해 주세요.");
+        }
+
+        if (usedPoints < 0 || usedPoints > subtotal) {
+            return error("사용 포인트가 상품 금액 범위를 벗어났습니다.");
+        }
+
+        long amount = subtotal - usedPoints + 200;
         if (subtotal <= 0 || amount > Integer.MAX_VALUE
                 || !Long.toString(amount).equals(request.getParameter("expectedAmount"))) {
             return error("픽업 결제 금액이 변경됐어요. 주문서를 새로고침해 주세요.");
@@ -316,6 +329,7 @@ public class TossPayController {
         order.setPhone(phone.trim());
         order.setSubtotalAmount(Math.toIntExact(subtotal));
         order.setShippingFee(0);
+        order.setUsedPoints(usedPoints);
         order.setTotalAmount(Math.toIntExact(amount));
         order.setItems(selectedItems);
 

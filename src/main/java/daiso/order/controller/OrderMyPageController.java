@@ -71,10 +71,33 @@ public class OrderMyPageController {
         );
         OrderDAO dao = new OrderDAO();
         request.setAttribute("daisoPointBalance", dao.getDaisoPointBalance(memberId));
+        //다이소 포인트 메뉴를 열었을 때 로그인한 회원의 최근 내역을 조회한다.
+        if("points".equals(request.getParameter("section"))) {
+        	request.setAttribute("myPageSection", "points");
+        	request.setAttribute("pointHistory", dao.getMyPointHistory(memberId));
+        }
 
         // DB에서 본인의 최근 주문 목록 조회
-        List<Map<String, Object>> orders =
-            dao.getMyOrders(memberId);
+        List<Map<String, Object>> summaryOrders = dao.getMyOrders(memberId);
+        boolean claims = "claims".equals(request.getParameter("section"));
+        String orderNo = request.getParameter("orderNo");
+        Map<String, Object> requested = null;
+        if (orderNo != null && !orderNo.isBlank()) {
+            requested = dao.getMyOrderDetail(memberId, orderNo);
+            if (requested != null) {
+                Object status = requested.get("status");
+                boolean requestedClaim = "CANCELLED".equals(status) || "CANCELLING".equals(status)
+                        || requested.get("returnStatus") != null;
+                if (request.getParameter("section") == null) {
+                    claims = requestedClaim;
+                } else if (claims != requestedClaim) {
+                    requested = null;
+                    orderNo = null;
+                }
+            }
+        }
+        if (claims) request.setAttribute("myPageSection", "claims");
+        List<Map<String, Object>> orders = dao.getMyOrders(memberId, claims);
         
         try {
             byte[] photo = new daiso.member.controller.MemberDAO().findProfilePhoto(memberId);
@@ -97,16 +120,15 @@ public class OrderMyPageController {
             Timestamp approvedAt =
                 (Timestamp) order.get("approvedAt");
 
+            Timestamp claimAt = (Timestamp) order.get("claimAt");
             Timestamp displayTime =
-                approvedAt == null ? createdAt : approvedAt;
+                claimAt != null ? claimAt : (approvedAt == null ? createdAt : approvedAt);
 
             order.put(
                 "paidAt",
                 displayTime.toLocalDateTime().format(formatter)
             );
         }
-
-        String orderNo = request.getParameter("orderNo");
 
         // 별도 선택이 없으면 가장 최근 주문 표시
         if ((orderNo == null || orderNo.isBlank())
@@ -117,7 +139,7 @@ public class OrderMyPageController {
         Map<String, Object> selected = null;
 
         if (orderNo != null && !orderNo.isBlank()) {
-            selected = dao.getMyOrderDetail(memberId, orderNo);
+            selected = requested == null ? dao.getMyOrderDetail(memberId, orderNo) : requested;
 
             if (selected == null) {
                 request.setAttribute(
@@ -150,7 +172,7 @@ public class OrderMyPageController {
         long purchaseCount = 0;
         long purchaseAmount = 0;
 
-        for (Map<String, Object> order : orders) {
+        for (Map<String, Object> order : summaryOrders) {
             Timestamp approvedAt =
                 (Timestamp) order.get("approvedAt");
 
