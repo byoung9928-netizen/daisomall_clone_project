@@ -9,48 +9,67 @@
 <html lang="ko">
 <head>
     <%@ include file="../common/admin-head.jspf" %>
+<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/store-pickup.css">
 </head>
 <body class="admin-body">
-    <main class="admin-content">
+    <main class="admin-content pickup-page">
         <h1 class="page-title">
             <%= ProductView.escape(request.getAttribute("storeManagerName")) %> 픽업 주문
         </h1>
 
-        <nav aria-label="매장 관리자 메뉴">
+        <nav class="pickup-nav" aria-label="매장 관리자 메뉴">
             <a class="button secondary"
                href="${pageContext.request.contextPath}/app/store-manager/inventory">매장 재고</a>
-            <a class="button secondary" aria-current="page"
+            <a class="button primary" aria-current="page"
                href="${pageContext.request.contextPath}/app/store-manager/pickup-orders">픽업 주문</a>
         </nav>
 
-        <p>최근 결제 완료 주문 · 최대 50건</p>
-        <div class="admin-table-scroll">
-            <button type="button" id="startPickupScan">픽업 QR 스캔</button>
-<button type="button" id="stopPickupScan" hidden>카메라 닫기</button>
-<video id="pickupCamera" playsinline muted hidden width="320"></video>
-<p id="pickupScanMessage" role="status"></p>
+        <section class="pickup-panel" aria-labelledby="pickup-heading">
+            <div class="pickup-toolbar">
+                <h2 id="pickup-heading">픽업 수령 확인</h2>
+                <div class="pickup-actions">
+                    <button type="button" class="button primary" id="startPickupScan">픽업 QR 스캔</button>
+                    <button type="button" class="button secondary" id="stopPickupScan" hidden>카메라 닫기</button>
+                </div>
+            </div>
+            <video id="pickupCamera" playsinline muted hidden width="320" aria-label="픽업 QR 스캔 카메라"></video>
+            <details class="pickup-manual">
+                <summary>픽업 코드 직접 입력</summary>
+                <form id="manualPickupForm">
+                    <label class="pickup-field">
+                        픽업 코드 (43자)
+                        <input type="text" name="token" minlength="43" maxlength="43"
+                               pattern="[A-Za-z0-9_\-]{43}" autocomplete="off" spellcheck="false" required>
+                    </label>
+                    <button class="button secondary" type="submit">주문 확인</button>
+                </form>
+            </details>
+            <p id="pickupScanMessage" role="status"></p>
+        </section>
 
-		<dialog id="pickupApproval">
-		    <form id="pickupApprovalForm" method="post"
-		          action="${pageContext.request.contextPath}/app/store-manager/pickup-orders/status"
-		          data-scan-url="${pageContext.request.contextPath}/app/store-manager/pickup-orders/scan">
-		        <h2>픽업 수령 승인</h2>
-		        <p id="pickupApprovalOrder"></p>
-		        <input type="hidden" name="csrf"
-		               value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
-		        <input type="hidden" name="orderNo">
-		        <input type="hidden" name="pickupToken">
-		        <input type="hidden" name="action" value="complete">
-		
-		        <label>
-		            매장 관리자 비밀번호
-		            <input type="password" name="approvalPassword"
-		                   autocomplete="current-password" required>
-		        </label>
-		        <button type="button" id="cancelPickupApproval">취소</button>
-		        <button type="submit">수령 완료</button>
-		    </form>
-		</dialog>
+        <dialog id="pickupApproval" class="pickup-dialog" aria-labelledby="pickup-approval-title">
+            <form id="pickupApprovalForm" method="post"
+                  action="${pageContext.request.contextPath}/app/store-manager/pickup-orders/status"
+                  data-scan-url="${pageContext.request.contextPath}/app/store-manager/pickup-orders/scan">
+                <h2 id="pickup-approval-title">픽업 수령 승인</h2>
+                <p id="pickupApprovalOrder"></p>
+                <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
+                <input type="hidden" name="orderNo">
+                <input type="hidden" name="pickupToken">
+                <input type="hidden" name="action" value="complete">
+                <label class="pickup-field">
+                    매장 관리자 승인 비밀번호
+                    <input type="password" name="approvalPassword" autocomplete="current-password" required>
+                </label>
+                <div class="pickup-actions">
+                    <button type="button" class="button secondary" id="cancelPickupApproval">취소</button>
+                    <button type="submit" class="button primary">수령 완료</button>
+                </div>
+            </form>
+        </dialog>
+
+        <p class="pickup-list-caption">최근 결제 완료 주문 · 최대 50건</p>
+        <div class="admin-table-scroll">
             <table class="admin-table">
                 <thead>
                     <tr>
@@ -86,41 +105,24 @@
 
 <td><%= ProductView.escape(order.get("approvedAt")) %></td>
                             <td>결제 완료</td>
-						<td>
-    <% String pickupStatus = (String) order.get("pickupStatus"); %>
-    <%= "PICKED_UP".equals(pickupStatus) ? "수령 완료"
-            : "READY".equals(pickupStatus) ? "수령 대기" : "준비 대기" %>
-
-    <% if (pickupStatus == null || "READY".equals(pickupStatus)) { %>
-        <form method="post"
-              action="${pageContext.request.contextPath}/app/store-manager/pickup-orders/status">
-            <input type="hidden" name="csrf"
-                   value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
-            <input type="hidden" name="orderNo"
-                   value="<%= ProductView.escape(order.get("orderNo")) %>">
-                   <% if ("READY".equals(pickupStatus)) { %>
-		    <label>
-		        픽업 QR 토큰
-		        <input type="text" name="pickupToken"
-		               minlength="43" maxlength="43"
-		               pattern="[A-Za-z0-9_\-]{43}"
-		               autocomplete="off" spellcheck="false" required>
-		    </label>
-		
-		    <label>
-		        매장 관리자 승인 비밀번호
-		        <input type="password" name="approvalPassword"
-		               autocomplete="current-password" required>
-		    </label>
-					<% } %>
-            <button type="submit" class="button secondary" name="action"
-                    value="<%= pickupStatus == null ? "ready" : "complete" %>">
-                <%= pickupStatus == null ? "준비 완료" : "수령 완료" %>
-            </button>
-        </form>
-    <% } %>
-</td>
-					</tr>
+                            <td>
+                                <% String pickupStatus = (String) order.get("pickupStatus"); %>
+                                <span class="pickup-state <%= "READY".equals(pickupStatus) ? "pickup-ready" : "" %>">
+                                    <%= "PICKED_UP".equals(pickupStatus) ? "수령 완료"
+                                            : "READY".equals(pickupStatus) ? "수령 대기" : "준비 대기" %>
+                                </span>
+                                <% if (pickupStatus == null) { %>
+                                    <form method="post" class="pickup-ready-form"
+                                          action="${pageContext.request.contextPath}/app/store-manager/pickup-orders/status">
+                                        <input type="hidden" name="csrf"
+                                               value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
+                                        <input type="hidden" name="orderNo"
+                                               value="<%= ProductView.escape(order.get("orderNo")) %>">
+                                        <button type="submit" class="button secondary" name="action" value="ready">준비 완료</button>
+                                    </form>
+                                <% } %>
+                            </td>
+                        </tr>
                     <%  }
                     } %>
                 </tbody>
@@ -136,6 +138,14 @@
     const approval = document.getElementById("pickupApproval");
     const form = document.getElementById("pickupApprovalForm");
 
+    const manualForm = document.getElementById("manualPickupForm");
+    const manualSubmit = manualForm.querySelector("button");
+    manualForm.addEventListener("submit", event => {
+        event.preventDefault();
+        if (startButton.disabled) return;
+        void openApproval(manualForm.elements.token.value);
+    });
+
     let scanning = false;
     let controls;
 
@@ -146,11 +156,13 @@
         camera.hidden = true;
         stopButton.hidden = true;
         startButton.disabled = false;
+        manualSubmit.disabled = false;
     }
 
     async function openApproval(pickupToken) {
         message.textContent = "픽업 주문을 확인하는 중입니다.";
         startButton.disabled = true;
+        manualSubmit.disabled = true;
         try {
             const response = await fetch(form.dataset.scanUrl, {
                 method: "POST",
@@ -171,18 +183,21 @@
             document.getElementById("pickupApprovalOrder").textContent =
                 "주문번호 " + result.trim();
             message.textContent = "";
+            manualForm.reset();
             approval.showModal();
             form.elements.namedItem("approvalPassword").focus();
         } catch {
-            message.textContent = "주문 확인에 실패했습니다. 다시 스캔해 주세요.";
+            message.textContent = "주문 확인에 실패했습니다. 다시 시도해 주세요.";
         } finally {
             startButton.disabled = false;
+            manualSubmit.disabled = false;
         }
     }
 
     startButton.addEventListener("click", async () => {
         scanning = true;
         startButton.disabled = true;
+        manualSubmit.disabled = true;
         camera.hidden = false;
         message.textContent = "";
 

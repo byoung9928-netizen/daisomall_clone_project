@@ -1,0 +1,57 @@
+.pickup-page { max-width: 1440px; margin-inline: auto; }
+.pickup-nav, .pickup-toolbar, .pickup-actions, .pickup-manual form {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.pickup-panel, .pickup-dialog {
+    padding: clamp(16px, 2vw, 24px);
+    background: white;
+    border: 1px solid var(--admin-line);
+    border-radius: 10px;
+}
+.pickup-panel { margin-block: 20px 28px; }
+.pickup-toolbar { justify-content: space-between; gap: 12px; }
+.pickup-panel h2, .pickup-dialog h2 { margin: 0; font-size: 20px; }
+.pickup-manual { margin-top: 14px; }
+.pickup-manual summary { width: fit-content; color: var(--admin-red-strong); font-weight: 700; cursor: pointer; }
+.pickup-manual form { align-items: flex-end; margin-top: 12px; }
+.pickup-field { display: grid; gap: 6px; font-size: 14px; font-weight: 700; }
+.pickup-manual .pickup-field { width: min(100%, 380px); }
+.pickup-field input {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 400;
+}
+.pickup-page :focus-visible { outline: 2px solid var(--admin-red-strong); outline-offset: 2px; }
+.pickup-page [hidden] { display: none; }
+#pickupCamera { display: block; max-width: 100%; margin-top: 16px; border-radius: 6px; }
+#pickupCamera[hidden] { display: none; }
+#pickupScanMessage:not(:empty) { margin-top: 12px; }
+.pickup-dialog { width: min(420px, calc(100% - 32px)); margin: auto; color: var(--color-ink); }
+.pickup-dialog::backdrop { background: #15192199; }
+.pickup-dialog form { display: grid; gap: 16px; }
+.pickup-dialog .pickup-actions { justify-content: flex-end; }
+#pickupApprovalOrder { overflow-wrap: anywhere; }
+.pickup-list-caption { color: var(--color-muted); font-size: 14px; }
+.pickup-page .admin-table-scroll { margin-top: 8px; }
+.pickup-page .admin-table { min-width: 780px; }
+.pickup-page .admin-table td { padding-block: 12px; }
+.pickup-state {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: #f1f3f5;
+    color: #454f5b;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.pickup-ready { background: var(--admin-pink); color: var(--admin-red-strong); }
+.pickup-ready-form { margin-top: 6px; }
+.pickup-ready-form .button { min-height: 36px; padding: 4px 12px; }
