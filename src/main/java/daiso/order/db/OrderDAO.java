@@ -1,6 +1,7 @@
 package daiso.order.db;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Map;
 import java.util.HashMap;
 import java.sql.Connection;
@@ -13,7 +14,8 @@ import javax.naming.NamingException;
 import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.sql.Statement;
-
+import java.security.SecureRandom;
+import java.util.Base64;
 import daiso.cart.db.CartBean;
 import daiso.order.payment.kakaoPayClient;
 
@@ -1094,9 +1096,35 @@ public class OrderDAO {
 				statement.executeUpdate();
 			}
 		}
+		private static final SecureRandom PICKUP_TOKEN_RANDOM = new SecureRandom();
 		
+		//준비 완료된 주문에 QR로 사용할 무작위 코드와 만료 시각을 저장한다.
+		private void issuePickupToken(Connection connection, String storeId, String orderNo)
+				throws SQLException{
+			byte[]randomBytes = new byte[32];
+			PICKUP_TOKEN_RANDOM.nextBytes(randomBytes);
+			String token = Base64.getUrlEncoder().withoutPadding()
+					.encodeToString(randomBytes);
+			
+			String sql = "UPDATE orders "
+					+"SET pickup_token = ?, "
+					+" 	  pickup_token_expires_at = DATE_ADD(NOW(), INTERVAL 3 DAY) "
+					+"WHERE order_no = ? AND pickup_store_id = ? "
+					+"AND pickup_status = 'READY' AND pickup_token IS NULL";
+			
+			try (PreparedStatement statement = connection.prepareStatement(sql)){
+				statement.setString(1, token);
+				statement.setString(2, orderNo);
+				statement.setString(3, storeId);
+				if(statement.executeUpdate() != 1) {
+					throw new SQLException("픽업 QR코드를 발급하지 못했습니다.");
+				}
+			}
+		}
 		public boolean advancePickupStatus(Connection connection, String storeId,
-		        String orderNo, boolean markPickedUp) throws SQLException {
+		        
+				String orderNo, boolean markPickedUp,String pickupToken) throws SQLException {
+			
 		    String sql = "UPDATE orders o SET o.pickup_status = ? "
 		            + "WHERE o.order_no = ? AND o.pickup_store_id = ? "
 		            + "AND o.fulfillment_type = 'PICKUP' AND o.status = 'PAID' "
@@ -1108,7 +1136,11 @@ public class OrderDAO {
 		            + "        SELECT MAX(p2.payment_id) FROM payment_attempts p2 "
 		            + "        WHERE p2.order_id = o.order_id"
 		            + "    )"
-		            + ")";
+		            + ")"
+		            +(markPickedUp
+		            		?"AND o.pickup_token=? AND o.pickup_token_expires_at>NOW()"
+		            		:"");
+		            
 
 		    try (PreparedStatement statement = connection.prepareStatement(sql)) {
 		        statement.setString(1, markPickedUp ? "PICKED_UP" : "READY");
@@ -1116,15 +1148,40 @@ public class OrderDAO {
 		        statement.setString(3, storeId);
 		        if (markPickedUp) {
 		            statement.setString(4, "READY");
+		            statement.setString(5, pickupToken);
 		        } else {
 		            statement.setNull(4, java.sql.Types.VARCHAR);
 		        }
 		       boolean changed = statement.executeUpdate()==1;
 		       if(changed && ! markPickedUp) {
+		    	   issuePickupToken(connection, storeId, orderNo);
 		    	   enqueuePickupReadyEmail(connection,orderNo);
 		       }
 		       return changed;
 		    }
+		}
+		
+		//담당 매장에서 아직 수령할수 있는 QR의 주문번호를 찾는다.
+		public String findReadyPickupOrderNoByToken(
+				Connection connection, String storeId,String pickupToken)
+				throws SQLException{
+			if(pickupToken == null || ! pickupToken.matches("[A-Za-z0-9_-]{43}")) {
+				return null;
+			}
+			String sql = "SELECT o.order_no FROM orders o "
+					+"WHERE o.pickup_token = ? AND o.pickup_store_id = ? "
+					+"AND o.fulfillment_type = 'PICKUP' AND o.status = 'PAID' "
+					+"AND o.pickup_status = 'READY' AND o.canceled_at IS NULL "
+		            +"AND o.pickup_token_expires_at > NOW()";
+			
+			try (PreparedStatement statement=connection.prepareStatement(sql)){
+				statement.setString(1, pickupToken);
+				statement.setString(2, storeId);
+				
+				try(ResultSet result= statement.executeQuery()){
+					return result.next() ? result.getString("order_no"):null;
+				}
+			}
 		}
 		
 		public List<Map<String, Object>> findPaidPickupOrders(
