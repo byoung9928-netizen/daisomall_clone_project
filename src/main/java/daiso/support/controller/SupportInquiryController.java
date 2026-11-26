@@ -13,6 +13,9 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.support.db.SupportInquiryDAO;
+import javax.servlet.ServletException;
+import javax.servlet.http.Part;
+import daiso.product.controller.ReviewPhotoUpload;
 
 @DaisoController
 public class SupportInquiryController {
@@ -83,6 +86,19 @@ public class SupportInquiryController {
         if (!(memberId instanceof String)) {
         	return "redirect:/member/login";
         }
+        
+        Part photoPart = null;
+        String contentType = request.getContentType();
+
+        if (contentType != null && contentType.startsWith("multipart/form-data")) {
+            try {
+                photoPart = request.getPart("inquiryPhoto");
+            } catch (IOException | ServletException | IllegalStateException error) {
+                response.setStatus(400);
+                request.setAttribute("inquiryError", "2MB 이하의 JPG 또는 PNG 사진을 선택해 주세요.");
+                return inquiries(request, response);
+            }
+        }
 
         Object expected = session.getAttribute("supportInquiryCsrf");
         if (!(expected instanceof String) || !expected.equals(request.getParameter("csrfToken"))) {
@@ -124,16 +140,67 @@ public class SupportInquiryController {
             request.setAttribute("inquiryError", "매장이나 상품을 다시 선택해 주세요.");
             return inquiries(request, response);
         }
+        
+        byte[] photo = null;
+        if (photoPart != null && photoPart.getSubmittedFileName() != null
+                && !photoPart.getSubmittedFileName().isBlank()) {
+            try {
+                photo = ReviewPhotoUpload.normalize(photoPart);
+            } catch (IOException | IllegalArgumentException error) {
+                response.setStatus(400);
+                request.setAttribute("inquiryError", "2MB 이하의 정상적인 JPG 또는 PNG 사진을 선택해 주세요.");
+                return inquiries(request, response);
+            }
+        }
 
         try {
-            dao.insert((String) memberId, title, content, channel, category, subcategory,
-                    storeId, productId);
+        	dao.insert((String) memberId, title, content, channel, category, subcategory,
+        	        storeId, productId, photo);
             return "redirect:/support/inquiries?view=history&created=1";
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("문의 등록 실패", error);
             response.setStatus(503);
             request.setAttribute("inquiryError", "문의를 저장하지 못했어요. 다시 시도해 주세요.");
             return inquiries(request, response);
+        }
+    }
+    @DaisoGetMapping("/support/inquiries/photo")
+    public String inquiryPhoto(HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        response.setHeader("Cache-Control", "private, no-store");
+
+        HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+        if (!(memberId instanceof String)) {
+            response.sendError(404);
+            return null;
+        }
+
+        long inquiryId;
+        try {
+            inquiryId = Long.parseLong(request.getParameter("id"));
+        } catch (NumberFormatException error) {
+            response.sendError(404);
+            return null;
+        }
+
+        try {
+            byte[] photo = dao.findPhoto(inquiryId, (String) memberId);
+            if (photo == null) {
+                response.sendError(404);
+                return null;
+            }
+
+            response.setContentType("image/jpeg");
+            response.setHeader("X-Content-Type-Options", "nosniff");
+            response.setContentLength(photo.length);
+            response.getOutputStream().write(photo);
+            response.flushBuffer();
+            return null;
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("문의 사진 조회 실패", error);
+            response.sendError(503);
+            return null;
         }
     }
 }

@@ -39,7 +39,7 @@
                     <button type="button" data-shopping-route="orders" data-unavailable>주문조회</button>
                     <button type="button" data-unavailable>취소/교환/반품 신청</button>
                     <button type="button" data-unavailable>공지사항</button>
-                    <button type="button" data-unavailable>FAQ</button>
+                    <a href="${pageContext.request.contextPath}/app/support/faq">FAQ</a>
                     <button type="button" data-unavailable>1:1 문의</button>
                 </div>
             </section>

@@ -326,6 +326,9 @@ public class OrderMyPageController {
                 );
             }
 		}
+        if ("faq".equals(request.getParameter("section"))) {
+            request.setAttribute("myPageSection", "faq");
+        }
 		return "order/mypage-detail";
     }
 

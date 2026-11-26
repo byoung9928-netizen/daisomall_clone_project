@@ -26,9 +26,21 @@
             <a data-navigation-key="health" href="${pageContext.request.contextPath}/app/products?collection=health">건강식품</a>
         </div>
         <div class="delivery-links">
-            <button type="button" data-navigation-key="pickup" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg" alt="" width="16" height="16">매장픽업</button>
-            <button type="button" data-navigation-key="today-delivery" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-today.svg" alt="" width="16" height="16">오늘배송</button>
-            <button type="button" data-navigation-key="bulk-order" data-unavailable><img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-bulk.svg" alt="" width="16" height="16">대량주문</button>
+            <a data-navigation-key="pickup"
+   href="${pageContext.request.contextPath}/app/stores/products">
+    <img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg"
+         alt="" width="16" height="16">매장픽업
+</a>
+<a data-navigation-key="today-delivery"
+   href="${pageContext.request.contextPath}/app/products?delivery=today">
+    <img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-today.svg"
+         alt="" width="16" height="16">오늘배송
+</a>
+<a data-navigation-key="bulk-order"
+   href="${pageContext.request.contextPath}/app/products?delivery=bulk">
+    <img class="delivery-icon" src="${pageContext.request.contextPath}/assets/images/home/service-bulk.svg"
+         alt="" width="16" height="16">대량주문
+</a>
         </div>
     </nav>
     <% Object productNavigation = request.getAttribute("productCategories");

@@ -2200,8 +2200,9 @@ label.my-avatar {
 				<section class="my-menu-group">
 					<h2>고객센터</h2>
 					<button type="button" data-my-unavailable>공지사항</button>
-					<button type="button" data-my-unavailable>FAQ</button>
-					<a href="<%= myContext %>/app/support/inquiries?view=history">1:1 문의내역</a>
+					<a href="<%=myContext%>/app/order/mypage?section=faq"
+						<%if ("faq".equals(request.getAttribute("myPageSection"))) {%>
+						class="my-current" aria-current="page" <%}%>>FAQ</a> <a href="<%= myContext %>/app/support/inquiries?view=history">1:1 문의내역</a>
 					<a href="<%= myContext %>/app/support/inquiries?view=write">1:1 문의</a>
 					<form class="my-logout" method="post"
 						action="<%=myContext%>/app/member/logout">
@@ -2227,7 +2228,11 @@ label.my-avatar {
 						본</a>
 				</nav>
 				<%
-				if ("support".equals(request.getAttribute("myPageSection"))) {
+				if ("faq".equals(request.getAttribute("myPageSection"))) {
+					%>
+					    <%@ include file="../support/faq-panel.jspf" %>
+					<%
+					} else if ("support".equals(request.getAttribute("myPageSection"))) {
 					%>
 					    <div class="my-inquiry-panel">
 					        <%@ include file="../support/inquiry-panel.jspf" %>
@@ -3322,8 +3327,6 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 					
 					<% } %>
 					
-					<button class="my-outline-button" type="button" data-my-unavailable>
-						문의하기</button>
 				</div>
 				<section class="my-section" aria-labelledby="my-delivery-title">
 					<div class="my-section-heading">

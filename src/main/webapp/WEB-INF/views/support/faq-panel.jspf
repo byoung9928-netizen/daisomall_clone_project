@@ -1,0 +1,89 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.service.FaqService,daiso.product.controller.ProductView" %>
+<%
+java.util.List<FaqService.Entry> faqEntries = FaqService.entries();
+java.util.Set<String> faqCategories = new java.util.LinkedHashSet<>();
+for (FaqService.Entry entry : faqEntries) {
+    faqCategories.add(entry.category);
+}
+%>
+
+<section class="faq-panel" aria-labelledby="faq-title">
+    <h2 id="faq-title">자주 묻는 질문</h2>
+
+    <div class="faq-filters">
+        <label for="faq-query">FAQ 검색</label>
+        <input id="faq-query" type="search" placeholder="예시 무료배송, 반품, 비밀번호">
+
+        <label for="faq-category">분류</label>
+        <select id="faq-category">
+            <option value="">전체</option>
+            <% for (String category : faqCategories) { %>
+                <option value="<%= ProductView.escape(category) %>">
+                    <%= ProductView.escape(category) %>
+                </option>
+            <% } %>
+        </select>
+    </div>
+
+    <p id="faq-result-count" role="status"></p>
+
+    <% for (FaqService.Entry entry : faqEntries) { %>
+        <details class="faq-entry" data-category="<%= ProductView.escape(entry.category) %>">
+            <summary>
+                <span class="faq-category"><%= ProductView.escape(entry.category) %></span>
+                <strong><%= ProductView.escape(entry.question) %></strong>
+            </summary>
+            <p><%= ProductView.escape(entry.answer) %></p>
+        </details>
+    <% } %>
+
+    <button type="button" id="faq-more" hidden>질문 더 보기</button>
+</section>
+
+<script>
+(() => {
+    const panel = document.querySelector('.faq-panel');
+    const query = panel.querySelector('#faq-query');
+    const category = panel.querySelector('#faq-category');
+    const count = panel.querySelector('#faq-result-count');
+    const more = panel.querySelector('#faq-more');
+    const entries = [...panel.querySelectorAll('.faq-entry')];
+    const pageSize = 5;
+    let limit = pageSize;
+
+    function normalize(text) {
+        return text.toLowerCase().replace(/\s+/g, '');
+    }
+
+    function render() {
+        const keyword = normalize(query.value);
+        const matching = entries.filter(entry =>
+            (!category.value || entry.dataset.category === category.value)
+            && normalize(entry.textContent).includes(keyword)
+        );
+        const visible = new Set(matching.slice(0, limit));
+
+        entries.forEach(entry => {
+            entry.hidden = !visible.has(entry);
+        });
+        count.textContent = matching.length
+            ? `검색 결과 ${matching.length}개`
+            : '조건에 맞는 질문이 없어요.';
+        more.hidden = matching.length <= limit;
+    }
+
+    function resetResults() {
+        limit = pageSize;
+        render();
+    }
+
+    query.addEventListener('input', resetResults);
+    category.addEventListener('change', resetResults);
+    more.addEventListener('click', () => {
+        limit += pageSize;
+        render();
+    });
+    render();
+})();
+</script>

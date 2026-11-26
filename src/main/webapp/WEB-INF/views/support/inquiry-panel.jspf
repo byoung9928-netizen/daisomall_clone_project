@@ -14,7 +14,8 @@ List<Map<String, Object>> customerInquiries =
             <p role="alert"><%= ProductView.escape(request.getAttribute("inquiryError")) %></p>
         <% } %>
 
-        <form method="post" action="${pageContext.request.contextPath}/app/support/inquiries">
+        <form method="post" enctype="multipart/form-data"
+      action="${pageContext.request.contextPath}/app/support/inquiries">
             <input type="hidden" name="csrfToken"
                    value="<%= ProductView.escape(request.getAttribute("supportInquiryCsrf")) %>"> 
                    <fieldset class="my-inquiry-classification">
@@ -78,6 +79,11 @@ List<Map<String, Object>> customerInquiries =
             <label for="inquiry-content">내용</label>
             <textarea id="inquiry-content" name="content" rows="6"
                       maxlength="2000" required><%= ProductView.escape(request.getAttribute("draftContent")) %></textarea>
+                      
+                      <label for="inquiry-photo">사진 첨부 (선택)</label>
+<input id="inquiry-photo" name="inquiryPhoto" type="file"
+       accept="image/jpeg,image/png" aria-describedby="inquiry-photo-help">
+<small id="inquiry-photo-help">JPG 또는 PNG 사진 한 장, 최대 2MB</small>
 
             <button type="submit">문의 등록</button>
         </form>
@@ -268,6 +274,12 @@ List<Map<String, Object>> customerInquiries =
                     </summary>
                     <p><%= ProductView.escape(inquiry.get("createdAt")) %></p>
                     <p class="inquiry-text"><%= ProductView.escape(inquiry.get("content")) %></p>
+                    <% if (Boolean.TRUE.equals(inquiry.get("hasPhoto"))) { %>
+    <p>
+        <a href="${pageContext.request.contextPath}/app/support/inquiries/photo?id=<%= inquiry.get("inquiryId") %>"
+           target="_blank" rel="noopener">첨부 사진 보기</a>
+    </p>
+<% } %>
                     <% if ("ANSWERED".equals(inquiry.get("status"))) { %>
                         <h3>관리자 답변</h3>
                         <p class="inquiry-text"><%= ProductView.escape(inquiry.get("answer")) %></p>
