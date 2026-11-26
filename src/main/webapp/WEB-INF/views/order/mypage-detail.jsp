@@ -101,7 +101,11 @@ java.text.NumberFormat myMoney = java.text.NumberFormat.getIntegerInstance(java.
 <head>
 <%@ include file="../common/head.jspf"%>
 <link rel="stylesheet"
-	href="${pageContext.request.contextPath}/assets/css/my-product-activity.css">
+	href="${pageContext.request.contextPath}/assets/css/my-product-activity.css?v=my-review-list">
+<% if (!orderReviewStates.isEmpty() || "reviews".equals(productActivity)) { %>
+<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/product-reviews.css?v=my-review-list">
+<script defer src="${pageContext.request.contextPath}/assets/js/common/product-review-editor.js?v=my-review-list"></script>
+<% } %>
 <% if (Set.of("wishlist", "recent", "frequent").contains(productActivity)) { %>
 <link rel="stylesheet"
 	href="${pageContext.request.contextPath}/assets/css/product-wishlist.css">
@@ -3112,9 +3116,9 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 					<div class="my-item-actions">
 						<% Boolean reviewWritten = orderReviewStates.get(item.getProductId());
 						   if (reviewWritten != null) { %>
-							<a class="my-review-action"
+							<a class="my-review-action" data-order-review="<%= ProductView.escape(item.getProductId()) %>"
 							   href="<%= ProductView.url(myContext, "/app/products/reviews",
-							        Map.of("id", item.getProductId(), "from", "order", "orderNo", (String) myOrder.get("orderNo"))) %>"><%= reviewWritten ? "리뷰 수정" : "리뷰 작성" %></a>
+							        Map.of("id", item.getProductId(), "from", "order", "orderNo", (String) myOrder.get("orderNo"))) %>"><%= reviewWritten ? "리뷰 수정/삭제" : "리뷰 작성" %></a>
 						<% } %>
 						<button class="my-add-cart" type="button"
 							data-my-add="<%=ProductView.escape(item.getProductId())%>">♧

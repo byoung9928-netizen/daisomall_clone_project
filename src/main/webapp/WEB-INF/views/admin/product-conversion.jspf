@@ -1,0 +1,49 @@
+<%@ page pageEncoding="UTF-8" %>
+<section class="admin-panel performance-conversion" aria-labelledby="performance-conversion-title">
+    <h2 id="performance-conversion-title">구매 전환 및 이탈</h2>
+    <% Metrics flow = performance.conversion; %>
+    <% if (performance.hasBehavior && flow.viewed == 0) { %>
+        <p class="performance-notice">선택 조건에 연결할 상세 조회가 없어 조회 기준 전환율을 계산할 수 없습니다.</p>
+    <% } else if (flow.viewed > 0 && flow.viewed < AdminProductPerformanceController.LOW_VIEW_SAMPLE) { %>
+        <p class="performance-notice">조회 회원 표본 부족 (10명 미만)</p>
+    <% } %>
+    <div class="performance-conversion-grid">
+        <figure class="performance-funnel" aria-label="조회에서 장바구니 경유 결제까지의 회원 수">
+            <figcaption>구매 단계별 회원 수</figcaption>
+            <ol>
+                <% String[] labels = {"상세 조회", "조회 후 장바구니", "장바구니 경유 결제"};
+                   long[] counts = {flow.viewed, flow.cartAfterView, flow.viaCart};
+                   for (int stage = 0; stage < labels.length; stage++) { %>
+                <li>
+                    <span><%= labels[stage] %></span>
+                    <strong><%= flow.viewed == 0 ? "—" : number(counts[stage]) + "명 · " + percentage(counts[stage], flow.viewed) %></strong>
+                    <meter min="0" max="<%= Math.max(flow.viewed, 1) %>" value="<%= counts[stage] %>" aria-label="<%= labels[stage] %>"></meter>
+                </li>
+                <% } %>
+            </ol>
+            <p>직접 결제 <strong><%= flow.viewed == 0 ? "—" : number(flow.direct) + "명" %></strong>
+                <small>조회와 주문 사이의 장바구니 등록 기록으로 회원별 첫 결제 경로를 분류합니다. 여러 상품을 함께 결제한 경우 장바구니 경유를 우선합니다.</small></p>
+        </figure>
+        <div class="performance-conversion-groups">
+        <h3 class="performance-group-title">조회와 관심</h3>
+        <dl class="performance-conversion-metrics">
+            <div><dt>조회 대비 결제 전환율</dt><dd data-conversion="view"><%= percentage(flow.viewPaid, flow.viewed) %></dd><small><%= fraction(flow.viewPaid, flow.viewed, "명") %></small></div>
+            <div><dt>조회 대비 순구매율</dt><dd data-conversion="net"><%= percentage(flow.viewNet, flow.viewed) %></dd><small><%= fraction(flow.viewNet, flow.viewed, "명") %></small></div>
+            <div><dt>조회 대비 찜 등록률</dt><dd data-conversion="wish"><%= percentage(flow.wished, flow.viewed) %></dd><small>별도 관심 지표 · <%= fraction(flow.wished, flow.viewed, "명") %></small></div>
+            <div><dt>조회 대비 장바구니 등록률</dt><dd data-conversion="view-cart"><%= percentage(flow.cartAfterView, flow.viewed) %></dd><small><%= fraction(flow.cartAfterView, flow.viewed, "명") %></small></div>
+        </dl>
+        <h3 class="performance-group-title">장바구니</h3>
+        <dl class="performance-conversion-metrics">
+            <div><dt>장바구니 대비 결제 전환율</dt><dd data-conversion="cart"><%= percentage(flow.cartPaid, flow.cart) %></dd><small><%= fraction(flow.cartPaid, flow.cart, "명") %></small></div>
+            <div><dt>장바구니 최종 미구매율</dt><dd data-conversion="lost"><%= percentage(flow.lostCart, flow.matureCart) %></dd><small>7일 관찰 완료자 · <%= fraction(flow.lostCart, flow.matureCart, "명") %></small></div>
+        </dl>
+        <h3 class="performance-group-title">주문 및 결제</h3>
+        <dl class="performance-conversion-metrics">
+            <div><dt>주문 대비 결제 완료율</dt><dd data-conversion="payment"><%= percentage(flow.paid, flow.orders) %></dd><small><%= fraction(flow.paid, flow.orders, "건") %></small></div>
+            <div><dt>결제 실패율</dt><dd data-conversion="failure"><%= percentage(flow.failed, flow.orders) %></dd><small>승인 없이 실패한 주문 · <%= fraction(flow.failed, flow.orders, "건") %></small></div>
+            <div><dt>승인 후 취소율</dt><dd data-conversion="cancellation"><%= percentage(flow.cancelled, flow.paid) %></dd><small><%= fraction(flow.cancelled, flow.paid, "건") %></small></div>
+            <div><dt>승인 후 환불율</dt><dd data-conversion="refund"><%= percentage(flow.refunded, flow.paid) %></dd><small><%= fraction(flow.refunded, flow.paid, "건") %></small></div>
+        </dl>
+        </div>
+    </div>
+</section>

@@ -1,5 +1,8 @@
 package daiso.product.controller;
 
+import daiso.product.service.ProductBehaviorRecorder;
+import daiso.product.service.ProductBehaviorRecorder.Type;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -114,7 +117,9 @@ public final class WishlistController {
                 return fail(response, HttpServletResponse.SC_FORBIDDEN, "CSRF_INVALID");
             }
             String productId = parameter(request, "productId", 100, true);
-            SERVICE.setSelected(memberId, productId, selected);
+            if (SERVICE.setSelected(memberId, productId, selected)) {
+                ProductBehaviorRecorder.record(request, selected ? Type.WISHLIST_ADD : Type.WISHLIST_REMOVE, productId);
+            }
             return selected ? "ADDED" : "REMOVED";
         } catch (IllegalArgumentException error) {
             return fail(response, HttpServletResponse.SC_BAD_REQUEST, "INVALID_PRODUCT");

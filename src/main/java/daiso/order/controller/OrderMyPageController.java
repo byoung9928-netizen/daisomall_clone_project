@@ -152,7 +152,7 @@ public class OrderMyPageController {
                     statusLabel((String) selected.get("status"))
                 );
                 selected.put("returnStatusLabel", returnStatusLabel((String)selected.get("returnStatus")));
-                if ("PAID".equals(selected.get("status")) && !"profile".equals(request.getParameter("section"))
+                if (!"profile".equals(request.getParameter("section"))
                         && (request.getParameter("productActivity") == null || request.getParameter("productActivity").isBlank())) {
                     try {
                         request.setAttribute("orderReviewStates", reviews.orderReviewStates(memberId, orderNo));

@@ -1,5 +1,8 @@
 package daiso.product.controller;
 
+import daiso.product.service.ProductBehaviorRecorder;
+import daiso.product.service.ProductBehaviorRecorder.Type;
+
 import daiso.cart.db.CartDAO;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoPostMapping;
@@ -34,7 +37,9 @@ public final class ProductCartController {
             return "상품 번호를 확인해 주세요.";
         }
         try {
-            new CartDAO().addSoldOutProduct((String) member, ids[0]);
+            if (new CartDAO().addSoldOutProduct((String) member, ids[0])) {
+                ProductBehaviorRecorder.record(request, Type.CART_ADD, ids[0]);
+            }
             return "OK";
         } catch (IllegalArgumentException error) {
             response.setStatus(HttpServletResponse.SC_CONFLICT);

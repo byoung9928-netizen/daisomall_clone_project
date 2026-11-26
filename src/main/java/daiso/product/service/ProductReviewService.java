@@ -57,7 +57,7 @@ public final class ProductReviewService {
             int page = (int) Math.max(1, Math.min(requestedPage, pages));
             ProductReview ownReview = publicDetails || memberId == null ? null : dao.findOwn(connection, productId, memberId);
             boolean canWrite = !publicDetails && memberId != null && ownReview == null
-                    && dao.findPaidItem(connection, memberId, productId, false).isPresent();
+                    && dao.findEligibleItem(connection, memberId, productId, false).isPresent();
             List<ProductReview> items = dao.list(connection, productId, memberId, sort, PAGE_SIZE, (page - 1L) * PAGE_SIZE);
             List<Long> ids = items.stream().map(review -> review.id).collect(Collectors.toList());
             if (ownReview != null && !ids.contains(ownReview.id)) ids.add(ownReview.id);
@@ -151,10 +151,10 @@ public final class ProductReviewService {
         String cleaned = validate(rating, content);
         try {
             return write(connection -> {
-                OptionalLong paidItem = dao.findPaidItem(connection, memberId, productId, orderNo, true);
-                if (paidItem.isEmpty()) return Result.PURCHASE_REQUIRED;
+                OptionalLong eligibleItem = dao.findEligibleItem(connection, memberId, productId, orderNo, true);
+                if (eligibleItem.isEmpty()) return Result.PURCHASE_REQUIRED;
                 if (submission != null && !extras.available(connection)) return Result.EXTRAS_UNAVAILABLE;
-                long id = dao.insert(connection, productId, memberId, paidItem.getAsLong(), rating, cleaned);
+                long id = dao.insert(connection, productId, memberId, eligibleItem.getAsLong(), rating, cleaned);
                 if (submission != null) saveExtras(connection, productId, id, submission);
                 return Result.SAVED;
             });

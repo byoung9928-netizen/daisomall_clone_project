@@ -60,6 +60,10 @@ final class AdminProductFilter {
         return new AdminProductFilter(Normalizer.normalize(keyword, Normalizer.Form.NFC), productId, category, "", stock, null, order, true);
     }
 
+    static AdminProductFilter performanceScope(String category, String productId) {
+        return new AdminProductFilter("", productId, category, "", Stock.ALL, null, Sort.NEWEST, false);
+    }
+
     static AdminProductFilter defaults() {
         return new AdminProductFilter("", "", "", Stock.ALL, null, Sort.NEWEST);
     }
