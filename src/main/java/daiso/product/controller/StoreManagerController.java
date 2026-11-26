@@ -13,15 +13,17 @@ import javax.servlet.http.HttpSession;
 
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
+import daiso.common.annotation.DaisoPostMapping;
+import daiso.member.controller.MemberService;
+import daiso.order.db.OrderDAO;
 import daiso.product.dao.StoreInventoryDAO;
-import daiso.product.dao.StoreInventoryDAO.State;
+import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.HistoryFilter;
 import daiso.product.dao.StoreInventoryDAO.InventoryFilter;
 import daiso.product.dao.StoreInventoryDAO.Sort;
-import daiso.common.annotation.DaisoPostMapping;
-import daiso.product.dao.StoreInventoryDAO.Change;
+import daiso.product.dao.StoreInventoryDAO.State;
 import daiso.product.dao.StoreInventoryDAO.Stock;
-import daiso.order.db.OrderDAO;
+import daiso.common.annotation.DaisoResponseBody;
 
 @DaisoController
 public class StoreManagerController {
@@ -151,6 +153,62 @@ public class StoreManagerController {
         }
     }
     
+ // 스캔한 QR이 로그인한 관리자의 담당 매장 주문인지 조회한다.
+    @DaisoPostMapping("/store-manager/pickup-orders/scan")
+    @DaisoResponseBody
+    public String scanPickupOrder(HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        response.setHeader("Cache-Control", "no-store");
+
+        HttpSession session = request.getSession(false);
+        Object memberId = session == null ? null : session.getAttribute("member_id");
+
+        if (!(memberId instanceof String)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return "매장 관리자 계정으로 로그인해 주세요.";
+        }
+
+        if (!AdminProductController.validToken(request, session)) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            return "픽업 주문 화면을 다시 열어 주세요.";
+        }
+
+        String pickupToken = request.getParameter("pickupToken");
+        if (pickupToken == null || !pickupToken.matches("[A-Za-z0-9_-]{43}")) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return "픽업 QR을 다시 스캔해 주세요.";
+        }
+
+        try (Connection connection = ProductQueries.connect();
+                PreparedStatement assignment = connection.prepareStatement(ASSIGNMENT_SQL)) {
+            assignment.setString(1, (String) memberId);
+
+            String storeId;
+            try (ResultSet result = assignment.executeQuery()) {
+                if (!result.next()) {
+                    connection.rollback();
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    return "배정된 매장이 있는 관리자만 이용할 수 있습니다.";
+                }
+                storeId = result.getString("store_id");
+            }
+
+            String orderNo = new OrderDAO().findReadyPickupOrderNoByToken(
+                    connection, storeId, pickupToken);
+            connection.commit();
+
+            if (orderNo == null) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return "이 QR로 수령할 수 있는 주문을 찾지 못했습니다.";
+            }
+
+            return orderNo;
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("픽업 QR 주문 조회 실패", error);
+            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            return "픽업 주문을 확인하지 못했습니다.";
+        }
+    }
     @DaisoPostMapping("/store-manager/pickup-orders/status")
     public String updatePickupStatus(HttpServletRequest request,
             HttpServletResponse response) throws IOException {
@@ -188,8 +246,32 @@ public class StoreManagerController {
                 }
             }
 
-            boolean changed = new OrderDAO().advancePickupStatus(
-                    connection, storeId, orderNo, "complete".equals(action));
+            boolean completing = "complete".equals(action);
+            String pickupToken =null;
+            if(completing) {
+            	pickupToken=request.getParameter("pickupToken");
+            	if(pickupToken ==null||!pickupToken.matches("[A-Za-z0-9__-]{43}")) {
+            		connection.rollback();
+            		response.sendError(400,"픽업QR을 다시 스캔해 주세요.");
+            		return null;
+            	}
+            	boolean passwordVerified;
+            	try {
+            		passwordVerified=new MemberService().verifyStoreManagerPassword((String)memberId, request.getParameter("approvalPassword"));
+            	}catch(Exception error) {
+            		connection.rollback();
+            		request.getServletContext().log("픽업 승인정보 확인 실패", error);
+            		response.sendError(503,"승인 정보를 확인하지 못했습니다.");
+            		return null;
+            	}
+            	if(!passwordVerified) {
+            		connection.rollback();
+            		response.sendError(403,"매장 관리자비밀번호가 올바르지 않습니다.");
+            		return null;
+            	}
+            }
+            boolean changed=new OrderDAO().advancePickupStatus(
+            		connection, storeId,orderNo,completing,pickupToken);
             if (!changed) {
                 connection.rollback();
                 response.sendError(409, "처리할 수 없는 주문입니다. 목록을 새로고침해 주세요.");
