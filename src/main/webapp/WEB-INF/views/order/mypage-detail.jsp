@@ -1908,6 +1908,164 @@ label.my-avatar {
 #continueWithdrawal:disabled {
     opacity: 0.5;
 }
+.inquiry-product-controls,
+.inquiry-product-dialog-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.inquiry-product-controls input {
+    flex: 1 1 220px;
+}
+
+.inquiry-product-dialog {
+    width: min(640px, calc(100vw - 32px));
+    max-height: 82vh;
+    padding: 20px;
+    border: 1px solid #dce3eb;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.inquiry-product-dialog::backdrop {
+    background: rgb(23 33 42 / 50%);
+}
+
+.inquiry-product-dialog-heading {
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+#inquiry-product-search-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.inquiry-product-controls button,
+.inquiry-product-dialog-heading button {
+    padding: 8px 12px;
+    border: 1px solid #ccd1d8;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.inquiry-product-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+.inquiry-product-card {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid #dce3eb;
+    border-radius: 8px;
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+}
+
+.inquiry-product-card:hover {
+    border-color: #52647b;
+}
+
+.inquiry-product-card img {
+    width: 100%;
+    height: 108px;
+    object-fit: contain;
+    background: #f4f6f8;
+}
+.my-inquiry-panel {
+    padding: clamp(16px, 3vw, 28px);
+    border: 1px solid #e0e5eb;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.my-inquiry-panel form {
+    display: grid;
+    gap: 10px;
+}
+.my-inquiry-classification {
+    min-width: 0;
+    margin: 0 0 12px;
+    padding: 16px;
+    border: 1px solid #e0e5eb;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.my-inquiry-classification legend {
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+.my-inquiry-classification-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.my-inquiry-classification-grid label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.my-inquiry-panel select {
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid #ccd1d8;
+    border-radius: 6px;
+    background-color: #fff;
+    color: #17212a;
+    font: inherit;
+}
+
+.my-inquiry-panel select:disabled {
+    background-color: #eef1f5;
+    color: #606c7a;
+}
+
+@media (max-width: 880px) {
+    .my-inquiry-classification-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.my-inquiry-panel input:not([type="hidden"]),
+.my-inquiry-panel textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccd1d8;
+    border-radius: 6px;
+    font: inherit;
+}
+
+.my-inquiry-panel button[type="submit"] {
+    justify-self: end;
+    padding: 10px 24px;
+    border: 0;
+    border-radius: 6px;
+    background: #17212a;
+    color: #fff;
+    cursor: pointer;
+}
+
+.my-inquiry-panel details {
+    padding: 12px 0;
+    border-bottom: 1px solid #e0e5eb;
+}
+
+.my-inquiry-panel summary { cursor: pointer; }
+.my-inquiry-panel .inquiry-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
 .points-panel h2 {font-size:32px;margin:0 0 24px}
 .points-balance {background:#18212a;color:white;padding:24px 32px;display:flex;align-items:center;justify-content:space-between}
 .points-balance strong {font-size:28px}
@@ -2043,8 +2201,8 @@ label.my-avatar {
 					<h2>고객센터</h2>
 					<button type="button" data-my-unavailable>공지사항</button>
 					<button type="button" data-my-unavailable>FAQ</button>
-					<button type="button" data-my-unavailable>1:1 문의내역</button>
-					<button type="button" data-my-unavailable>1:1 문의</button>
+					<a href="<%= myContext %>/app/support/inquiries?view=history">1:1 문의내역</a>
+					<a href="<%= myContext %>/app/support/inquiries?view=write">1:1 문의</a>
 					<form class="my-logout" method="post"
 						action="<%=myContext%>/app/member/logout">
 						<button type="submit">로그아웃</button>
@@ -2069,7 +2227,13 @@ label.my-avatar {
 						본</a>
 				</nav>
 				<%
-				if ("points".equals(request.getAttribute("myPageSection"))) {
+				if ("support".equals(request.getAttribute("myPageSection"))) {
+					%>
+					    <div class="my-inquiry-panel">
+					        <%@ include file="../support/inquiry-panel.jspf" %>
+					    </div>
+					<%
+					} else if ("points".equals(request.getAttribute("myPageSection"))) {
 				    List<Map<String, Object>> pointHistory =
 				            (List<Map<String, Object>>) request.getAttribute("pointHistory");
 				%>

@@ -414,6 +414,36 @@
     border-radius: 8px;
     font: inherit;
 }
+.ai-chat-quick-actions {
+    padding: 0 12px 8px;
+    display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.ai-chat-quick-actions button,
+.ai-chat-quick-actions a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: 1px solid #d7dce3;
+    border-radius: 999px;
+    background: #fff;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+.ai-chat-product-list {
+    margin: 6px 0 0;
+    padding-left: 20px;
+}
+
+.ai-chat-product-list a {
+    color: #1762a5;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
 .ai-chat-form button {
     padding: 0 12px;
     border: 0;

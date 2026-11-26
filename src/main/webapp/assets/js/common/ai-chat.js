@@ -18,26 +18,47 @@
     const send = form.querySelector('button[type="submit"]');
     const history = [];
 
-    function addBubble(text, isUser) {
-        const bubble = document.createElement('p');
-        bubble.className = isUser ? 'ai-chat-bubble ai-chat-user' : 'ai-chat-bubble';
-        bubble.textContent = text;
-        log.appendChild(bubble);
-        log.scrollTop = log.scrollHeight;
-    }
+	function addBubble(text, isUser, products = []) {
+	    const bubble = document.createElement(products.length ? 'div' : 'p');
+	    bubble.className = isUser ? 'ai-chat-bubble ai-chat-user' : 'ai-chat-bubble';
+	    bubble.textContent = text;
 
-    form.addEventListener('submit', async event => {
-        event.preventDefault();
+	    if (products.length) {
+	        const list = document.createElement('ul');
+	        list.className = 'ai-chat-product-list';
 
-        const question = input.value.trim();
-        if (!question || send.disabled) return;
+	        for (const product of products) {
+	            const item = document.createElement('li');
+	            const link = document.createElement('a');
+	            const url = new URL(form.dataset.productDetailUrl, window.location.origin);
+	            url.searchParams.set('id', product.id);
 
-        const data = new URLSearchParams();
-        data.set('question', question);
-        data.set('history', history.join('\n').slice(-1600));
+	            link.href = url.href;
+	            link.textContent = product.name;
+	            item.append(link, document.createTextNode(` (품번 ${product.code})`));
+	            list.appendChild(item);
+	        }
+
+	        bubble.appendChild(list);
+	    }
+
+	    log.appendChild(bubble);
+	    log.scrollTop = log.scrollHeight;
+	}
+
+	async function sendQuestion(question, faqId = '') {
+	if (!question || send.disabled) return;
+
+	const data = new URLSearchParams();
+	data.set('question', question);
+	data.set('history', history.join('\n').slice(-1600));
+
+	if (faqId) {
+	    data.set('faqId', faqId);
+	}
 
         addBubble(question, true);
-        input.value = '';
+        if (!faqId) input.value = '';
         send.disabled = true;
         status.textContent = '답변을 준비하고 있어요.';
 
@@ -48,8 +69,13 @@
                 body: data
             });
 
-            const answer = (await response.text()).trim();
-            addBubble(answer || '답변이 비어 있어요. 다시 질문해 주세요.', false);
+			const hasProducts = response.headers.get('X-Daiso-Chat-Format') === 'product-choices';
+			const reply = hasProducts
+			    ? await response.json()
+			    : { answer: await response.text(), products: [] };
+
+			const answer = reply.answer.trim();
+			addBubble(answer || '답변이 비어 있어요. 다시 질문해 주세요.', false, reply.products);
 
             if (response.ok && answer && response.headers.get('X-Daiso-Chat-Private') !== 'true') {
                 history.push('사용자: ' + question + '\nAI: ' + answer);
@@ -62,5 +88,16 @@
             status.textContent = '';
             if (dialog.open) input.focus();
         }
-    });
+		}
+
+		form.addEventListener('submit', event => {
+		    event.preventDefault();
+		    sendQuestion(input.value.trim());
+		});
+
+		dialog.querySelectorAll('[data-faq-id]').forEach(button => {
+		    button.addEventListener('click', () => {
+		        sendQuestion(button.dataset.faqQuestion, button.dataset.faqId);
+		    });
+		});
 })();
