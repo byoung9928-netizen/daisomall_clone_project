@@ -147,8 +147,19 @@
             <p class="ai-chat-bubble">안녕하세요! 궁금한 걸 물어보세요. 매장 재고도 찾아드려요.</p>
         </div>
         <p id="ai-chat-status" class="visually-hidden" role="status"></p>
-        <form id="ai-chat-form" class="ai-chat-form" method="post"
-              action="${pageContext.request.contextPath}/app/stores/chat">
+		<div class="ai-chat-quick-actions">
+    <button type="button" data-faq-id="shipping_fee"
+            data-faq-question="배송비 얼마야?">배송비 안내</button>
+    <button type="button" data-faq-id="return_policy"
+            data-faq-question="반품 어떻게 해?">반품 방법</button>
+    <button type="button" data-faq-id="pickup_guide"
+            data-faq-question="매장픽업 어떻게 해?">매장픽업 안내</button>
+</div>
+			<button type="button" id="ai-chat-faq-shipping">배송비 안내</button>
+		</div>
+<form id="ai-chat-form" class="ai-chat-form" method="post"
+      action="${pageContext.request.contextPath}/app/stores/chat"
+      data-product-detail-url="${pageContext.request.contextPath}/app/products/detail">
             <label for="ai-chat-question" class="visually-hidden">질문 입력</label>
             <input id="ai-chat-question" name="question" type="text"
                    maxlength="200" required placeholder="무엇이 궁금한가요?">
