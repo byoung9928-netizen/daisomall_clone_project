@@ -1,5 +1,6 @@
 package daiso.order.notification;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,6 +17,8 @@ import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import javax.servlet.annotation.WebListener;
 import javax.sql.DataSource;
+
+import com.google.zxing.WriterException;
 
 @WebListener
 public class OrderEmailWorker implements ServletContextListener {
@@ -49,12 +52,19 @@ public class OrderEmailWorker implements ServletContextListener {
             String testRecipient) {
         boolean testMode = testRecipient != null && !testRecipient.isBlank();
         String selectSql =
-                "SELECT email_id, recipient_email, subject, body "
-              + "FROM order_email_outbox "
-              + "WHERE status = 'PENDING' AND next_attempt_at <= NOW() "
-              + (testMode ? "AND recipient_email = ? " : "")
-              + "ORDER BY next_attempt_at, email_id "
-              + "LIMIT 1 FOR UPDATE SKIP LOCKED";
+        		"SELECT e.email_id, e.recipient_email, e.subject, e.body, "
+			      + "       (SELECT o.pickup_token FROM orders o "
+			      + "        WHERE o.order_id = e.order_id "
+			      + "          AND e.event_type = 'PICKUP_READY' "
+			      + "          AND o.status = 'PAID' "
+			      + "          AND o.pickup_status = 'READY' "
+			      + "          AND o.canceled_at IS NULL "
+			      + "          AND o.pickup_token_expires_at > NOW()) AS pickup_token "
+			      + "FROM order_email_outbox e "
+			      + "WHERE e.status = 'PENDING' AND e.next_attempt_at <= NOW() "
+			      + (testMode ? "AND e.recipient_email = ? " : "")
+			      + "ORDER BY e.next_attempt_at, e.email_id "
+			      + "LIMIT 1 FOR UPDATE SKIP LOCKED";
 
         String sentSql =
                 "UPDATE order_email_outbox "
@@ -78,6 +88,7 @@ public class OrderEmailWorker implements ServletContextListener {
                 String recipient;
                 String subject;
                 String body;
+                String pickupToken;
 
                 // 발송 결과를 저장할 때까지 이 메일 행을 다른 작업이 가져가지 못하게 한다.
                 try (PreparedStatement select = connection.prepareStatement(selectSql)) {
@@ -93,13 +104,15 @@ public class OrderEmailWorker implements ServletContextListener {
                         recipient = rows.getString("recipient_email");
                         subject = rows.getString("subject");
                         body = rows.getString("body");
+                        pickupToken=rows.getString("pickup_token");
                     }
                 }
 
                 String updateSql = sentSql;
                 try {
-                    sender.send(recipient, subject, body);
-                } catch (MessagingException error) {
+                    byte[] qrPng = pickupToken==null ?null: PickupQrImage.toPng(pickupToken);
+                    sender.send(recipient, subject, body,qrPng);
+                } catch (MessagingException|WriterException|IOException error) {
                     updateSql = retrySql;
                     context.log("주문 이메일 발송 실패. email_id=" + emailId
                             + ", 오류 유형=" + error.getClass().getSimpleName());

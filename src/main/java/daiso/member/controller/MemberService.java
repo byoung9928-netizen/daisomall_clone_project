@@ -9,9 +9,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.List;
+
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
@@ -1055,7 +1056,19 @@ public class MemberService {
             );
         }
     }
-
+    
+    //로그인한 매장 관리자가 입력한 비밀번호를 회원DB해시로 검증
+    public boolean verifyStoreManagerPassword(String memberId, String password)
+    		throws Exception{
+    	if(memberId == null || memberId.isBlank()
+    			|| password==null||password.isEmpty()) {
+    		return false;
+    	}
+    	MemberLoginInfo member=memberDAO.findLoginInfoByMemberId(memberId);
+    	return member != null
+    			&&"STORE_MANAGER".equalsIgnoreCase(member.getRole())
+    			&& verifyPassword(password,member.getPasswordHash());
+    }
     private boolean verifyPassword(String password, String storedPasswordHash)
             throws GeneralSecurityException {
         if (storedPasswordHash == null) {
