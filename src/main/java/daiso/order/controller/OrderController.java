@@ -60,6 +60,8 @@ public class OrderController {
         request.setAttribute("pickupStoreName", items.get(0).getStoreName());
         request.setAttribute("pickupSubtotal", subtotal);
         request.setAttribute("pickupFee", 200);
+        long pickupPointBalance= new daiso.order.db.OrderDAO().getDaisoPointBalance(memberId);
+        request.setAttribute("pickupPointBalance", pickupPointBalance);
         //매장픽업 주문서에서 사용할 토스페이 테스트 클라이언트 키 전달
         String tossClientKey = System.getenv("TOSS_PAYMENTS_CLIENT_KEY");
         String tossSecretKey = System.getenv("TOSS_PAYMENTS_SECRET_KEY");

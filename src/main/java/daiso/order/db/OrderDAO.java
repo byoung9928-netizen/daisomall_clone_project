@@ -353,6 +353,35 @@ public class OrderDAO {
 		        }
 		    }
 		}
+		//마이페이지:로그인한 회원의 최근 변동 50건을 최신순으로 조회
+		public List<Map<String,Object>>getMyPointHistory(String memberId) throws SQLException{
+			String sql =
+					"SELECT h.created_at, o.order_no, h.point_type, h.point_amount "
+					+"FROM daiso_point_history h "
+					+"JOIN orders o ON o.order_id = h.order_id "
+					+"WHERE h.member_id = ? "
+					+"ORDER BY h.created_at DESC, h.point_id DESC "
+					+"LIMIT 50";
+			List<Map<String,Object>> history=new ArrayList<>();
+			
+			try(Connection con=ds.getConnection();
+					PreparedStatement pstmt= con.prepareStatement(sql)){
+				pstmt.setString(1, memberId);
+				
+				try(ResultSet rs = pstmt.executeQuery()){
+					while(rs.next()) {
+						Map<String,Object>entry = new HashMap<>();
+						entry.put("createdAt", rs.getTimestamp("created_at"));
+		                entry.put("orderNo", rs.getString("order_no"));
+		                entry.put("pointType", rs.getString("point_type"));
+		                entry.put("pointAmount", rs.getInt("point_amount"));
+		                history.add(entry);
+					}
+				}
+			}
+			return history;		
+		}
+		
 		public void approvePayment(
 		
 				String memberId,
@@ -570,10 +599,24 @@ public class OrderDAO {
 		public List<Map<String, Object>> getMyOrders(String memberId)
 		        throws SQLException {
 
-		    String sql =
+		    return getMyOrders(memberId, null);
+        }
+
+        public List<Map<String, Object>> getMyOrders(String memberId, Boolean claims)
+                throws SQLException {
+            // 취소 주문과 반품 신청 주문은 주문 목록을 자르기 전에 구분한다.
+            String claimCondition = "(o.status IN ('CANCELLED', 'CANCELLING') OR EXISTS "
+                    + "(SELECT 1 FROM order_returns r WHERE r.order_id = o.order_id))";
+            String filter = claims == null ? "" : (claims ? "AND " : "AND NOT ") + claimCondition + " ";
+            String claimDate = "COALESCE(o.canceled_at, "
+                    + "(SELECT MAX(r.requested_at) FROM order_returns r WHERE r.order_id = o.order_id))";
+            boolean claimHistory = Boolean.TRUE.equals(claims);
+            String dateColumn = claimHistory ? claimDate : "NULL";
+            String sortColumn = claimHistory ? "claim_at" : "o.created_at";
+            String sql =
 		        "SELECT o.order_id, o.order_no, o.status, "
 		        + "o.total_amount, o.created_at, "
-		        + "p.approved_at "
+		        + "p.approved_at, " + dateColumn + " AS claim_at "
 		        + "FROM orders o "
 		        + "LEFT JOIN payment_attempts p "
 		        + "ON p.payment_id = ("
@@ -583,7 +626,8 @@ public class OrderDAO {
 		        + ") "
 		        + "WHERE o.member_id = ? "
 		        + "AND o.hidden_at IS NULL "
-		        + "ORDER BY o.created_at DESC, o.order_id DESC "
+                + filter
+		        + "ORDER BY " + sortColumn + " DESC, o.order_id DESC "
 		        + "LIMIT 50";
 
 		    List<Map<String, Object>> orders = new ArrayList<>();
@@ -604,6 +648,7 @@ public class OrderDAO {
 		                order.put("total", rs.getInt("total_amount"));
 		                order.put("createdAt", rs.getTimestamp("created_at"));
 		                order.put("approvedAt", rs.getTimestamp("approved_at"));
+                        order.put("claimAt", rs.getTimestamp("claim_at"));
 
 		                orders.add(order);
 		            }
@@ -618,7 +663,7 @@ public class OrderDAO {
 
 				String sql =
 				    "SELECT o.*, s.store_name, s.city, p.method AS pay_method, p.status AS payment_status, "
-				    + "p.approved_at, r.status AS return_status, "
+				    + "p.approved_at, COALESCE(o.canceled_at, r.requested_at) AS claim_at, r.status AS return_status, "
 				    + "r.admin_note AS return_admin_note "
 				    + "FROM orders o "
 				    + "LEFT JOIN store_locations s ON s.store_id = o.pickup_store_id "
@@ -684,7 +729,12 @@ public class OrderDAO {
 		                order.put("address", address);
 
 		                // 화면에 표시할 주문 날짜와 결제 시각
-		                Timestamp createdAt =
+		                Timestamp claimAt = rs.getTimestamp("claim_at");
+                        if (claimAt != null) {
+                            order.put("claimDate", claimAt.toLocalDateTime().toLocalDate().toString());
+                        }
+
+                        Timestamp createdAt =
 		                    rs.getTimestamp("created_at");
 
 		                Timestamp approvedAt =

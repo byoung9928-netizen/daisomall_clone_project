@@ -7,8 +7,9 @@
 <%@ page import="java.util.Set"%>
 <%
 String myContext = request.getContextPath();
+boolean claimsSelected = "claims".equals(request.getParameter("section")) || "claims".equals(request.getAttribute("myPageSection"));
 String productActivity = request.getParameter("productActivity");
-if (productActivity == null || !Set.of("wishlist", "recent", "frequent", "restock", "reviews").contains(productActivity)
+if (claimsSelected || productActivity == null || !Set.of("wishlist", "recent", "frequent", "restock", "reviews").contains(productActivity)
         || "profile".equals(request.getAttribute("myPageSection"))) {
     productActivity = "";
 }
@@ -287,33 +288,8 @@ label.my-avatar {
 	color: #10253b
 }
 
-.my-club-banner {
-	height: 72px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 20px;
-	background: #08090b;
-	color: #fff;
-	margin-bottom: 60px;
-	font-size: 19px;
-	background-image: radial-gradient(circle at 17% 20%, #b0b6c2 0 1px, transparent 2px),
-		radial-gradient(circle at 78% 62%, #777e89 0 1px, transparent 2px)
-}
 
-.my-club-banner strong {
-	font-size: 25px;
-	color: #d1d4dc
-}
 
-.my-club-banner button {
-	background: transparent;
-	border: 1px solid #c1c6d0;
-	color: #fff;
-	font-size: 12px;
-	padding: 4px 12px;
-	cursor: pointer
-}
 
 .my-layout {
 	display: grid;
@@ -914,19 +890,6 @@ label.my-avatar {
 	.my-points>div {
 		font-size: 11px
 	}
-	.my-club-banner {
-		gap: 8px;
-		font-size: 11px;
-		height: 60px;
-		margin-bottom: 28px
-	}
-	.my-club-banner strong {
-		font-size: 17px
-	}
-	.my-club-banner button {
-		font-size: 10px;
-		padding: 3px 6px
-	}
 	.my-layout {
 		grid-template-columns: 1fr
 	}
@@ -1023,7 +986,7 @@ label.my-avatar {
 
 .my-home-shortcuts {
 	display: grid;
-	grid-template-columns: repeat(7, minmax(0, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	margin-bottom: 12px;
 	padding: 14px 6px;
 	border: 1px solid #dfe4eb;
@@ -1941,6 +1904,18 @@ label.my-avatar {
 #continueWithdrawal:disabled {
     opacity: 0.5;
 }
+.points-panel h2 {font-size:32px;margin:0 0 24px}
+.points-balance {background:#18212a;color:white;padding:24px 32px;display:flex;align-items:center;justify-content:space-between}
+.points-balance strong {font-size:28px}
+.points-panel h3 {margin:32px 0 16px}
+.points-panel small {color:#576574;font-size:13px}
+#point-filter {display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:20px}
+#point-filter label {display:grid;gap:4px;font-size:13px}
+#point-filter input,#point-filter select,#point-filter button {padding:8px;border:1px solid #d1d6db;background:white;color:#17212a}
+.points-panel table {width:100%;border-collapse:collapse}
+.points-panel th,.points-panel td {text-align:left;padding:12px 8px;border-bottom:1px solid #e1e5e9;overflow-wrap:anywhere}
+.points-panel th {background:#f6f7f9}
+.points-panel [data-kind=EARN] td:last-child,.points-panel [data-kind=RESTORE] td:last-child {color:#bd162d;font-weight:700}
 </style>
 </head>
 <body>
@@ -2016,33 +1991,22 @@ label.my-avatar {
 						<span>다이소 포인트</span>
 						<strong><%= myMoney.format(request.getAttribute("daisoPointBalance")) %> P</strong>
 					</div>
-					<div>
-						<span>다이소몰 포인트</span><strong>- P</strong>
-					</div>
 				</div>
 			</div>
 		</section>
-		<div class="my-club-banner">
-			<span><strong>신상클럽</strong> 신상 소식 가장 먼저 받아보세요.</span>
-			<button type="button" data-my-unavailable>무료구독</button>
-		</div>
 		<div class="my-layout">
 			<aside class="my-sidebar" aria-label="마이페이지 메뉴">
 				<section class="my-menu-group">
 					<h2>
 						주문 관리 <small>최근 1년</small>
 					</h2>
-					<a class="<%= productActivity.isEmpty() ? "my-current" : "" %>"
-						href="<%=myContext%>/app/order/mypage">주문내역</a>
-					<button type="button" data-my-unavailable>취소/교환/반품 내역</button>
+					<a <%= "orders".equals(request.getParameter("section")) && productActivity.isEmpty() && request.getAttribute("myPageSection") == null ? "class=\"my-current\" aria-current=\"page\"" : "" %>
+						href="<%=myContext%>/app/order/mypage?section=orders">주문내역</a>
+					<a <%= claimsSelected ? "class=\"my-current\" aria-current=\"page\"" : "" %> href="<%=myContext%>/app/order/mypage?section=claims">취소/교환/반품 내역</a>
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 혜택</h2>
-					<button type="button" data-my-unavailable>신상클럽</button>
-					<button type="button" data-my-unavailable>다이소 포인트</button>
-					<button type="button" data-my-unavailable>다이소몰 포인트</button>
-					<button type="button" data-my-unavailable>쿠폰</button>
-					<button type="button" data-my-unavailable>다이소 상품권</button>
+					<a <%= "points".equals(request.getAttribute("myPageSection")) ? "class=\"my-current\" aria-current=\"page\"" : "" %> href="<%=myContext%>/app/order/mypage?section=points">다이소 포인트</a>					
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 활동</h2>
@@ -2064,11 +2028,11 @@ label.my-avatar {
 				<section class="my-menu-group">
 					<h2>나의 정보</h2>
 					<a
-						class="<%="profile".equals(request.getAttribute("myPageSection")) ? "my-current" : ""%>"
+						<%= "profile".equals(request.getAttribute("myPageSection")) && !"delivery".equals(request.getParameter("manage")) && !"refund".equals(request.getParameter("manage")) ? "class=\"my-current\" aria-current=\"page\"" : "" %>
 						href="<%=myContext%>/app/member/profile">회원정보</a>
 					<button type="button" data-my-unavailable>프로필</button>
-					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=delivery">배송지/픽업매장</a>						
-					<a href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=refund">환불계좌</a>				    
+					<a <%= "profile".equals(request.getAttribute("myPageSection")) && "delivery".equals(request.getParameter("manage")) ? "class=\"my-current\" aria-current=\"page\"" : "" %> href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=delivery">배송지/픽업매장</a>						
+					<a <%= "profile".equals(request.getAttribute("myPageSection")) && "refund".equals(request.getParameter("manage")) ? "class=\"my-current\" aria-current=\"page\"" : "" %> href="<%=myContext%>/app/order/mypage?section=profile&amp;manage=refund">환불계좌</a>				    
 					<button type="button" id="openNotificationNotice" aria-haspopup="dialog">알림목록</button>
 				</section>
 				<section class="my-menu-group">
@@ -2093,8 +2057,88 @@ label.my-avatar {
 			</form>
 			</dialog>
 			<div class="my-content">
+				<nav class="my-home-shortcuts" aria-label="마이페이지 바로가기">
+					<a href="<%=myContext%>/app/order/mypage?section=orders"><span>▤</span>주문내역</a> <a
+						href="<%=myContext%>/app/order/mypage?productActivity=wishlist"><span>♡</span>찜</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=reviews"><span>▧</span>리뷰</a>
+					<a href="<%=myContext%>/app/order/mypage?productActivity=recent"><span>◷</span>최근
+						본</a>
+				</nav>
 				<%
-				if ("reviews".equals(productActivity)) {
+				if ("points".equals(request.getAttribute("myPageSection"))) {
+				    List<Map<String, Object>> pointHistory =
+				            (List<Map<String, Object>>) request.getAttribute("pointHistory");
+				%>
+				    <section class="points-panel" aria-labelledby="point-history-title">
+				        <h2 id="point-history-title">다이소 포인트 내역</h2>
+				        <p class="points-balance">사용 가능 포인트 <strong><%= myMoney.format(request.getAttribute("daisoPointBalance")) %>P</strong></p>
+
+				        <h3>최근 이용내역 <small>최대 50건</small></h3>
+<form id="point-filter">
+<label>시작일 <input type="date" name="start"></label>
+<label>종료일 <input type="date" name="end"></label>
+<label>구분 <select name="kind"><option value="">전체</option><option value="EARN">구매 적립</option><option value="USE">결제 사용</option><option value="REVERSE">적립 회수</option><option value="RESTORE">사용 반환</option></select></label>
+<button>조회</button>
+</form>
+				        <% if (pointHistory.isEmpty()) { %>
+				            <p>아직 포인트 이용내역이 없습니다.</p>
+				        <% } else { %>
+				            <table>
+				                <thead>
+				                    <tr>
+				                        <th scope="col">일시</th>
+				                        <th scope="col">주문번호</th>
+				                        <th scope="col">구분</th>
+				                        <th scope="col">포인트</th>
+				                    </tr>
+				                </thead>
+				                <tbody>
+				                <% for (Map<String, Object> entry : pointHistory) {
+				                    String type = String.valueOf(entry.get("pointType"));
+				                    String label;
+				                    switch (type) {
+				                        case "EARN":    label = "구매 적립"; break;
+				                        case "USE":     label = "결제 사용"; break;
+				                        case "REVERSE": label = "구매 적립 회수"; break;
+				                        case "RESTORE": label = "사용 포인트 반환"; break;
+				                        default:        label = type;
+				                    }
+				                    int amount = ((Number) entry.get("pointAmount")).intValue();
+				                %>
+				                    <tr data-kind="<%= ProductView.escape(type) %>" data-day="<%= ((java.sql.Timestamp) entry.get("createdAt")).toLocalDateTime().toLocalDate() %>">
+				                        <td><%= ProductView.escape(entry.get("createdAt")) %></td>
+				                        <td><%= ProductView.escape(entry.get("orderNo")) %></td>
+				                        <td><%= ProductView.escape(label) %></td>
+				                        <td><%= amount > 0 ? "+" : "" %><%= myMoney.format(amount) %>P</td>
+				                    </tr>
+				                <% } %>
+				                </tbody>
+				            </table><p id="point-empty" hidden>조회 조건에 해당하는 내역이 없습니다.</p>
+				        <% } %>
+				    <script>
+document.getElementById('point-filter').addEventListener('submit', function(event) {
+    event.preventDefault();
+    const start = this.elements.start.value;
+    const end = this.elements.end.value;
+    if (start && end && start > end) {
+        this.elements.end.setCustomValidity('종료일은 시작일 이후로 선택해 주세요.');
+        this.elements.end.reportValidity();
+        this.elements.end.setCustomValidity('');
+        return;
+    }
+    let count = 0;
+    document.querySelectorAll('.points-panel tr[data-day]').forEach(row => {
+        const day = row.dataset.day;
+        row.hidden = Boolean((start && day < start) || (end && day > end) ||
+            (this.elements.kind.value && this.elements.kind.value !== row.dataset.kind));
+        if (!row.hidden) count++;
+    });
+    const empty = document.getElementById('point-empty');
+    if (empty) empty.hidden = count > 0;
+});
+</script></section>
+				<%
+				} else if ("reviews".equals(productActivity)) {
                     %>
 				<%@ include file="../product/my-reviews.jspf"%>
 				<%
@@ -2919,22 +2963,6 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 				<%
 				} else {
 				%>
-				<nav class="my-home-shortcuts" aria-label="마이페이지 바로가기">
-					<a href="<%=myContext%>/app/order/mypage"><span>▤</span>주문내역</a> <a
-						href="<%=myContext%>/app/order/mypage?productActivity=wishlist"><span>♡</span>찜</a>
-					<a href="<%=myContext%>/app/order/mypage?productActivity=reviews"><span>▧</span>리뷰</a>
-					<a href="<%=myContext%>/app/order/mypage?productActivity=recent"><span>◷</span>최근
-						본</a>
-					<button type="button" data-my-unavailable>
-						<span>％</span>쿠폰
-					</button>
-					<button type="button" data-my-unavailable>
-						<span>▣</span>상품권
-					</button>
-					<button type="button" data-my-unavailable>
-						<span>▦</span>멤버십
-					</button>
-				</nav>
 
 				<div class="my-home-notice">
 					<strong>공지</strong> <span>마이페이지 기능을 순차적으로 연결하고 있습니다.</span> <b
@@ -2945,7 +2973,7 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 				%>
 				<div class="my-empty">
 					<p><%=request.getAttribute("myOrderError") == null
-		? "표시할 주문내역이 없습니다."
+		? (claimsSelected ? "취소/교환/반품 내역이 없습니다." : "표시할 주문내역이 없습니다.")
 		: ProductView.escape(request.getAttribute("myOrderError"))%></p>
 					<a href="<%=myContext%>/list.jsp">쇼핑하러 가기</a>
 				</div>
@@ -2979,7 +3007,7 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
                         : "KAKAOPAY".equals(myOrder.get("payMethod")) ? "카카오페이" : "결제수단 미확인";
                 %>
                 <div class="my-order-heading">
-					<h1><%=ProductView.escape(myOrder.get("date"))%><span
+					<h1><%=ProductView.escape(myOrder.get(claimsSelected && myOrder.containsKey("claimDate") ? "claimDate" : "date"))%><span
 							class="my-delivery-tag"><% if (pickup) { %><img src="<%=myContext%>/assets/images/home/service-pickup.svg" width="14" height="16" alt=""> 매장픽업<% } else { %>택배<% } %></span>
 					</h1>
 					<span class="my-order-number">주문번호 <%=ProductView.escape(myOrder.get("orderNo"))%></span>
@@ -2987,7 +3015,11 @@ String demoRefundBank = (String) request.getAttribute("demoRefundBank");
 				<%
 				// DB에서 조회한 주문 상태
 				String myStatus = String.valueOf(myOrder.get("status"));
-				String myStatusLabel = String.valueOf(myOrder.get("statusLabel"));
+				String orderStatus = String.valueOf(myOrder.get("status"));
+                boolean returnClaim = claimsSelected && myOrder.get("returnStatus") != null
+                        && !"CANCELLED".equals(orderStatus) && !"CANCELLING".equals(orderStatus);
+                String myStatusLabel = String.valueOf(
+                        myOrder.get(returnClaim ? "returnStatusLabel" : "statusLabel"));
 
 				// 현재 주문 단계. 결제 대기·취소·실패는 진행 단계가 없음
 				int myCurrentStep = -1;
@@ -4172,6 +4204,18 @@ if (memberConsentForm && memberConsentMessage && memberConsentSaveButton) {
         }
     });
 })();
+</script>
+<script>
+    // 현재 화면에 머무르는 메뉴 버튼도 마지막으로 클릭한 항목만 강조한다.
+    document.querySelector(".my-sidebar")?.addEventListener("click", function (event) {
+        const item = event.target.closest(".my-menu-group a, .my-menu-group button");
+        if (!item) return;
+        this.querySelectorAll(".my-current").forEach(function (previous) {
+            previous.classList.remove("my-current");
+            previous.removeAttribute("aria-current");
+        });
+        item.classList.add("my-current");
+    });
 </script>
 </body>
 </html>
