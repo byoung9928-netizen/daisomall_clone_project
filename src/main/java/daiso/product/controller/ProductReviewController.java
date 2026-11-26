@@ -36,6 +36,8 @@ import javax.servlet.http.Part;
 public final class ProductReviewController {
     private static final String ROUTE = "/products/reviews";
     private static final String VIEW = "product/reviews";
+    private static final String EDITOR = "product/review-editor";
+    private static final String PURCHASE_MESSAGE = "택배는 배송 완료 후, 매장픽업은 유효한 결제 완료 후 리뷰를 작성할 수 있습니다.";
     private static final String TOKEN = "productReviewCsrf";
     private static final String TOKEN_OWNER = "productReviewCsrfOwner";
     private final ProductReviewService service = new ProductReviewService();
@@ -61,25 +63,57 @@ public final class ProductReviewController {
             return error(request, response, 400, "상품 또는 조회 조건을 확인해 주세요.");
         }
         try {
+            HttpSession session = request.getSession(false);
+            String member = memberId(session);
+            boolean fragment = "editor".equals(request.getParameter("fragment"));
+            if (fragment && member == null) return error(request, response, 401, "로그인이 필요합니다.");
+            if (fragment && orderNo == null) return error(request, response, 400, "주문번호를 확인해 주세요.");
+            if (orderNo != null && (member == null || !service.orderReviewStates(member, orderNo).containsKey(productId))) {
+                return error(request, response, 403, PURCHASE_MESSAGE);
+            }
             ProductDTO product;
+            boolean visible;
             try (Connection connection = ProductQueries.connect()) {
                 product = products.findVisibleById(connection, productId);
+                visible = product != null;
+                if (!visible && member != null) product = products.findById(connection, productId);
                 connection.commit();
             }
             if (product == null) return error(request, response, 404, "상품을 찾을 수 없습니다.");
-            request.setAttribute("reviewProduct", product);
-            HttpSession session = request.getSession(false);
-            String member = memberId(session);
-            if (orderNo != null && (member == null || !service.orderReviewStates(member, orderNo).containsKey(productId))) {
-                return error(request, response, 403, "리뷰를 작성할 수 있는 결제 완료 주문을 확인해 주세요.");
+            var reviews = service.page(productId, member, sort, page);
+            if (fragment && !reviews.canWrite && reviews.ownReview == null) {
+                return error(request, response, 403, PURCHASE_MESSAGE);
             }
+            if (!visible && reviews.ownReview == null) {
+                return error(request, response, 404, "상품을 찾을 수 없습니다.");
+            }
+            request.setAttribute("reviewProduct", product);
             request.setAttribute("reviewSignedIn", member != null);
             request.setAttribute("reviewSort", sort);
-            request.setAttribute("reviewPage", service.page(product.getProductId(), member, sort, page));
+            request.setAttribute("reviewPage", reviews);
             if (member != null) request.setAttribute("reviewToken", token(session, member));
-            return VIEW;
+            return fragment ? EDITOR : VIEW;
         } catch (SQLException | NamingException failure) {
             return unavailable(request, response, failure);
+        }
+    }
+
+    @DaisoGetMapping(ROUTE + "/order-state")
+    @DaisoResponseBody
+    public String orderState(HttpServletRequest request, HttpServletResponse response) {
+        response.setHeader("Cache-Control", "private, no-store");
+        String member = memberId(request.getSession(false));
+        if (member == null) return feedbackError(response, 401, "LOGIN");
+        try {
+            String orderNo = orderSource(request);
+            if (orderNo == null) return feedbackError(response, 400, "INVALID_ORDER");
+            Boolean written = service.orderReviewStates(member, orderNo).get(productId(request));
+            return written == null ? "NONE" : written ? "EDIT" : "WRITE";
+        } catch (IllegalArgumentException error) {
+            return feedbackError(response, 400, "INVALID_INPUT");
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("주문 리뷰 상태 조회 실패", error);
+            return feedbackError(response, 503, "UNAVAILABLE");
         }
     }
 
@@ -172,6 +206,10 @@ public final class ProductReviewController {
             request.setAttribute("reviewFromMyPage", fromMyPage);
             String productId = productId(request);
             request.setAttribute("reviewReturnId", productId);
+            if (orderNo != null && action != Action.CREATE
+                    && !Boolean.TRUE.equals(service.orderReviewStates(member, orderNo).get(productId))) {
+                return error(request, response, 403, "해당 주문에서 수정하거나 삭제할 수 없는 리뷰입니다.");
+            }
             long id = action == Action.CREATE ? 0 : Long.parseLong(request.getParameter("reviewId"));
             long version = action == Action.CREATE ? 0 : Long.parseLong(request.getParameter("version"));
             if (version < 0 || (action != Action.CREATE && id < 1)) throw new IllegalArgumentException();
@@ -191,15 +229,14 @@ public final class ProductReviewController {
             }
             switch (result) {
                 case SAVED:
-                    if (orderNo != null) {
-                        return "redirect:/order/mypage?orderNo="
-                                + URLEncoder.encode(orderNo, StandardCharsets.UTF_8) + "#order-product-" + idAnchor(productId);
+                    String target = returnTarget(orderNo, productId, fromMyPage, action);
+                    if (ajax(request)) {
+                        response.setHeader("X-Review-Return", request.getContextPath() + request.getServletPath() + target);
+                        return writeText(response, "SAVED");
                     }
-                    if (fromMyPage) return "redirect:" + MyReviewsController.returnPath(action != Action.DELETE);
-                    return "redirect:/products/detail?id="
-                            + URLEncoder.encode(productId, StandardCharsets.UTF_8) + "#product-reviews";
+                    return "redirect:" + target;
                 case PURCHASE_REQUIRED:
-                    return error(request, response, 403, "취소되지 않은 결제 완료 구매가 있어야 작성할 수 있습니다.");
+                    return error(request, response, 403, PURCHASE_MESSAGE);
                 case DUPLICATE:
                     return error(request, response, 409, "이미 이 상품에 작성한 리뷰가 있습니다.");
                 case EXTRAS_UNAVAILABLE:
@@ -262,6 +299,15 @@ public final class ProductReviewController {
         return orderNo;
     }
 
+    private static String returnTarget(String orderNo, String productId, boolean fromMyPage, Action action) {
+        if (orderNo != null) {
+            return "/order/mypage?orderNo=" + URLEncoder.encode(orderNo, StandardCharsets.UTF_8)
+                    + "#order-product-" + idAnchor(productId);
+        }
+        if (fromMyPage) return MyReviewsController.returnPath(action != Action.DELETE);
+        return "/products/detail?id=" + URLEncoder.encode(productId, StandardCharsets.UTF_8) + "#product-reviews";
+    }
+
     private static String idAnchor(String productId) {
         return URLEncoder.encode(productId, StandardCharsets.UTF_8).replace("+", "%20");
     }
@@ -309,8 +355,25 @@ public final class ProductReviewController {
         return error(request, response, 503, "리뷰를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
 
+    private static boolean ajax(HttpServletRequest request) {
+        return "editor".equals(request.getHeader("X-Review-Request"))
+                || ("GET".equals(request.getMethod()) && "editor".equals(request.getParameter("fragment")));
+    }
+
+    private static String writeText(HttpServletResponse response, String text) {
+        response.setContentType("text/plain;charset=UTF-8");
+        try {
+            response.getWriter().write(text);
+            response.flushBuffer();
+        } catch (IOException failure) {
+            throw new java.io.UncheckedIOException(failure);
+        }
+        return null;
+    }
+
     private static String error(HttpServletRequest request, HttpServletResponse response, int status, String message) {
         response.setStatus(status);
+        if (ajax(request)) return writeText(response, message);
         request.setAttribute("reviewError", message);
         return VIEW;
     }

@@ -28,12 +28,15 @@ public final class ProductReviewDAO {
             + "AND o.status = 'CANCELLED' AND o.canceled_at IS NOT NULL "
             + "AND p.method = 'KAKAOPAY' AND p.status = 'CANCELLED' AND p.approved_at IS NOT NULL "
             + "AND p.tid IS NOT NULL AND p.tid <> '' AND p.amount = o.total_amount) AS refunded";
-    private static final String APPROVED_PURCHASE = ApprovedPurchase.CONDITION;
+    private static final String REVIEW_PURCHASE = ApprovedPurchase.PAYMENT
+            + " AND ((o.fulfillment_type = 'DELIVERY' AND o.status = 'DELIVERED'"
+            + " AND NOT EXISTS (SELECT 1 FROM order_returns ret WHERE ret.order_id = o.order_id AND ret.status = 'REFUNDED'))"
+            + " OR (o.fulfillment_type = 'PICKUP' AND o.status = 'PAID'))";
     private static final String PURCHASE = "SELECT i.order_item_id FROM order_items i "
             + "JOIN orders o ON o.order_id = i.order_id "
             + "JOIN payment_attempts p ON p.order_id = o.order_id "
             + "WHERE o.member_id = ? AND i.product_id = ? "
-            + "AND " + APPROVED_PURCHASE;
+            + "AND " + REVIEW_PURCHASE;
 
     private static final String VISIBLE = "WITH RECURSIVE visible AS ("
             + "SELECT category_id FROM categories WHERE parent_id IS NULL AND is_visible = 1 "
@@ -116,7 +119,7 @@ public final class ProductReviewDAO {
         } else {
             sql = VISIBLE + ", eligible AS (SELECT i.product_id, MAX(p.approved_at) AS event_at "
                     + "FROM order_items i JOIN orders o ON o.order_id = i.order_id "
-                    + "JOIN payment_attempts p ON p.order_id = o.order_id WHERE o.member_id = ? AND " + APPROVED_PURCHASE
+                    + "JOIN payment_attempts p ON p.order_id = o.order_id WHERE o.member_id = ? AND " + REVIEW_PURCHASE
                     + " AND NOT EXISTS(SELECT 1 FROM product_reviews r WHERE r.member_id = o.member_id "
                     + "AND r.product_id = i.product_id AND r.deleted_at IS NULL) GROUP BY i.product_id) "
                     + "SELECT " + MY_PRODUCT + "0 AS review_id, 0 AS rating, NULL AS content, e.event_at, "
@@ -150,11 +153,11 @@ public final class ProductReviewDAO {
         String sql = VISIBLE + "SELECT i.product_id, rv.review_id IS NOT NULL AS written "
                 + "FROM orders o JOIN order_items i ON i.order_id = o.order_id "
                 + "JOIN products pr ON pr.product_id = i.product_id "
-                + "JOIN visible v ON v.category_id = pr.category_id "
+                + "LEFT JOIN visible v ON v.category_id = pr.category_id "
                 + "LEFT JOIN product_reviews rv ON rv.member_id = o.member_id AND rv.product_id = i.product_id "
                 + "AND rv.active_slot = 1 WHERE o.member_id = ? AND o.order_no = ? "
-                + "AND EXISTS (SELECT 1 FROM payment_attempts p WHERE p.order_id = o.order_id AND "
-                + APPROVED_PURCHASE + ")";
+                + "AND (rv.review_id IS NOT NULL OR (v.category_id IS NOT NULL AND EXISTS "
+                + "(SELECT 1 FROM payment_attempts p WHERE p.order_id = o.order_id AND " + REVIEW_PURCHASE + ")))";
         Map<String, Boolean> states = new HashMap<>();
         try (PreparedStatement query = connection.prepareStatement(sql)) {
             query.setString(1, memberId);
@@ -167,12 +170,12 @@ public final class ProductReviewDAO {
     }
 
     // 저장 시 승인 근거 행을 커밋까지 잠가 확인과 등록 사이의 상태 변경을 막는다.
-    public OptionalLong findPaidItem(Connection connection, String memberId, String productId, boolean lock)
+    public OptionalLong findEligibleItem(Connection connection, String memberId, String productId, boolean lock)
             throws SQLException {
-        return findPaidItem(connection, memberId, productId, null, lock);
+        return findEligibleItem(connection, memberId, productId, null, lock);
     }
 
-    public OptionalLong findPaidItem(Connection connection, String memberId, String productId, String orderNo, boolean lock)
+    public OptionalLong findEligibleItem(Connection connection, String memberId, String productId, String orderNo, boolean lock)
             throws SQLException {
         String sql = PURCHASE + (orderNo == null ? "" : " AND o.order_no = ?")
                 + " ORDER BY p.approved_at DESC, i.order_item_id DESC LIMIT 1" + (lock ? " FOR SHARE" : "");
