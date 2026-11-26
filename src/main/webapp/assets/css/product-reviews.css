@@ -244,12 +244,14 @@ body:has(.review-dialog:modal) { overflow: hidden; }
     max-height: min(92vh, 46rem);
     max-height: min(92dvh, 46rem);
     padding: 0;
+    overflow: hidden;
 }
 
 .review-dialog[open]:not(:modal) {
     position: static;
     margin: 1rem 0;
     max-height: none;
+    overflow: visible;
 }
 
 .review-dialog::backdrop { background: #1c222eaa; }
@@ -258,6 +260,11 @@ body:has(.review-dialog:modal) { overflow: hidden; }
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     max-height: inherit;
+}
+
+.review-dialog:modal .review-dialog__form {
+    max-height: min(calc(92vh - 2px), calc(46rem - 2px));
+    max-height: min(calc(92dvh - 2px), calc(46rem - 2px));
 }
 
 .review-dialog__header, .review-dialog__footer {
@@ -347,7 +354,18 @@ body:has(.review-dialog:modal) { overflow: hidden; }
 .review-dialog__previews label img { grid-column: 1 / -1; }
 .review-dialog__previews button { min-height: 36px; border: 1px solid #afb8c2; border-radius: .35rem; background: #fff; cursor: pointer; }
 .review-dialog__footer { border-top: 1px solid #dbe1e7; }
-.review-dialog__footer button { width: 100%; min-height: 48px; }
+.review-dialog__footer button { width: 100%; min-height: 48px; white-space: normal; }
+.review-dialog__footer--editing:has([data-review-delete]:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    gap: .5rem;
+}
+.review-dialog .review-dialog__save { background: #17181b; border-color: #17181b; color: white; }
+.review-dialog .review-dialog__danger { background: var(--editor-accent); border-color: var(--editor-accent); color: white; }
+.review-dialog button:disabled { opacity: .65; }
+.review-dialog--prompt { width: min(100% - 2rem, 24rem); }
+.review-dialog--prompt p { margin: 0; }
+.review-dialog--prompt [type="submit"] { flex: 1; }
 
 .review-dialog :focus-visible, .review-dialog input:focus-visible + span {
     outline: 2px solid #145da0;

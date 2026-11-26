@@ -53,22 +53,24 @@ public final class WishlistService {
     }
 
     // 등록 및 해제: 커밋이 성공한 뒤에만 호출자에게 성공 반환
-    public void setSelected(String memberId, String productId, boolean selected)
+    public boolean setSelected(String memberId, String productId, boolean selected)
             throws SQLException, NamingException {
         identifier(memberId, "회원 정보");
         identifier(productId, "상품 정보");
         try (Connection connection = ProductConnectionFactory.openWriteConnection()) {
             connection.setAutoCommit(false);
             try {
+                boolean changed;
                 if (selected) {
                     if (!dao.lockProduct(connection, productId)) {
                         throw new IllegalArgumentException("존재하지 않는 상품입니다.");
                     }
-                    dao.add(connection, memberId, productId);
+                    changed = dao.add(connection, memberId, productId);
                 } else {
-                    dao.remove(connection, memberId, productId);
+                    changed = dao.remove(connection, memberId, productId);
                 }
                 connection.commit();
+                return changed;
             } catch (SQLException | RuntimeException error) {
                 try { connection.rollback(); }
                 catch (SQLException rollbackError) { error.addSuppressed(rollbackError); }

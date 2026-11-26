@@ -1,4 +1,7 @@
 package daiso.cart.controller;
+
+import daiso.product.service.ProductBehaviorRecorder;
+import daiso.product.service.ProductBehaviorRecorder.Type;
 import daiso.common.annotation.*;
 import javax.servlet.http.HttpSession;
 import java.sql.SQLException;
@@ -97,7 +100,9 @@ public class CartController {
 	        CartDAO dao = new CartDAO();
 	        //로그인 회원번호 상품번호 수량을 전달해 db저장 요청
 	        //판매상태 재고 수량제한은 dao에서 확인
-	        dao.addCart(memberId, productId, quantity);
+	        if (dao.addCartAndCheckNew(memberId, productId, quantity)) {
+	            ProductBehaviorRecorder.record(request, Type.CART_ADD, productId);
+	        }
 	        
 	        
 	        return "OK";
@@ -141,7 +146,9 @@ public class CartController {
 			
 			//DAO에서 선택한 매장의 재고와 이미 담은 수량을 확인한다.
 			CartDAO dao = new CartDAO();
-			dao.addPickupCart(memberId, storeId, productId, quantity);
+			if (dao.addPickupCart(memberId, storeId, productId, quantity)) {
+				ProductBehaviorRecorder.record(request, Type.CART_ADD, productId);
+			}
 			return "OK";
 		}catch (NumberFormatException e) {
 			return"수량은 정수로 입력해 주세요.";
@@ -175,6 +182,7 @@ public class CartController {
 
 		    try {
 		        boolean deleted = new CartDAO().deletePickupCart(memberId, storeId, productId);
+		        if (deleted) ProductBehaviorRecorder.record(request, Type.CART_REMOVE, productId);
 		        return deleted ? "OK" : "삭제할 픽업 상품을 찾을 수 없습니다.";
 		    } catch (SQLException e) {
 		        request.getServletContext().log("픽업 장바구니 삭제 실패", e);
@@ -269,12 +277,12 @@ public class CartController {
 				long cartItemId = Long.parseLong(request.getParameter("cartItemId"));
 				
 				CartDAO dao = new CartDAO();
-				boolean deleted = dao.deleteCart(memberId, cartItemId);
-				
-				if (!deleted) {
+				List<String> removed = dao.deleteCartItems(memberId, new long[] { cartItemId });
+				if (removed.isEmpty()) {
 					return "삭제할 장바구니 상품을 찾을 수 없습니다.";
 				}
 				
+				ProductBehaviorRecorder.record(request, Type.CART_REMOVE, removed);
 				return "OK";
 						
 			}catch (NumberFormatException e) {
@@ -309,11 +317,11 @@ public class CartController {
 					}
 				}
 				CartDAO dao= new CartDAO();
-				int deletedCount = dao.deleteSelectedCart(memberId,cartItemIds);
-				
-				if(deletedCount ==0) {
+				List<String> removed = dao.deleteCartItems(memberId, cartItemIds);
+				if (removed.isEmpty()) {
 					return "삭제할 상품을 찾을 수 없습니다.";
 				}
+				ProductBehaviorRecorder.record(request, Type.CART_REMOVE, removed);
 				return "OK";
 				
 			}catch(NumberFormatException e) {
