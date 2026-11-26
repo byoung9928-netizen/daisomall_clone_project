@@ -182,33 +182,8 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 	color: #10253b
 }
 
-.my-club-banner {
-	height: 72px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 20px;
-	background: #08090b;
-	color: #fff;
-	margin-bottom: 60px;
-	font-size: 19px;
-	background-image: radial-gradient(circle at 17% 20%, #b0b6c2 0 1px, transparent 2px),
-		radial-gradient(circle at 78% 62%, #777e89 0 1px, transparent 2px)
-}
 
-.my-club-banner strong {
-	font-size: 25px;
-	color: #d1d4dc
-}
 
-.my-club-banner button {
-	background: transparent;
-	border: 1px solid #c1c6d0;
-	color: #fff;
-	font-size: 12px;
-	padding: 4px 12px;
-	cursor: pointer
-}
 
 .my-layout {
 	display: grid;
@@ -745,19 +720,6 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 	.my-points>div {
 		font-size: 11px
 	}
-	.my-club-banner {
-		gap: 8px;
-		font-size: 11px;
-		height: 60px;
-		margin-bottom: 28px
-	}
-	.my-club-banner strong {
-		font-size: 17px
-	}
-	.my-club-banner button {
-		font-size: 10px;
-		padding: 3px 6px
-	}
 	.my-layout {
 		grid-template-columns: 1fr
 	}
@@ -1030,32 +992,21 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 					<div>
 						<span>다이소 포인트</span><strong>- P</strong>
 					</div>
-					<div>
-						<span>다이소몰 포인트</span><strong>- P</strong>
-					</div>
 				</div>
 			</div>
 		</section>
-		<div class="my-club-banner">
-			<span><strong>신상클럽</strong> 신상 소식 가장 먼저 받아보세요.</span>
-			<button type="button" data-my-unavailable>무료구독</button>
-		</div>
 		<div class="my-layout">
 			<aside class="my-sidebar" aria-label="마이페이지 메뉴">
 				<section class="my-menu-group">
 					<h2>
 						주문 관리 <small>최근 1년</small>
 					</h2>
-					<a class="my-current" href="<%=myContext%>/app/order/mypage">주문내역</a>
-					<button type="button" data-my-unavailable>취소/교환/반품 내역</button>
+					<a href="<%=myContext%>/app/order/mypage?section=orders">주문내역</a>
+					<a class="my-current" aria-current="page" href="<%=myContext%>/app/order/mypage?section=claims">취소/교환/반품 내역</a>
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 혜택</h2>
-					<button type="button" data-my-unavailable>신상클럽</button>
-					<button type="button" data-my-unavailable>다이소 포인트</button>
-					<button type="button" data-my-unavailable>다이소몰 포인트</button>
-					<button type="button" data-my-unavailable>쿠폰</button>
-					<button type="button" data-my-unavailable>다이소 상품권</button>
+					<a href="<%=myContext%>/app/order/mypage?section=points">다이소 포인트</a>
 				</section>
 				<section class="my-menu-group">
 					<h2>나의 활동</h2>
@@ -1088,7 +1039,7 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 			</aside>
 			<div class="my-content"><div class="cancel-screen">
 <h1 class="cancel-title">주문취소</h1>
-<% if(cancelOrder==null){ %><p class="cancel-error" role="alert"><%= ProductView.escape(request.getAttribute("cancelPageError")) %></p><a href="<%= cancelContext %>/app/order/mypage">주문내역으로</a>
+<% if(cancelOrder==null){ %><p class="cancel-error" role="alert"><%= ProductView.escape(request.getAttribute("cancelPageError")) %></p><a href="<%= cancelContext %>/app/order/mypage?section=orders">주문내역으로</a>
 <% }else{ for(CartBean item:(List<CartBean>)cancelOrder.get("items")){ String img=item.getImageUrl();if(img==null||img.isBlank())img="assets/images/mock-product-0.svg";if(!img.startsWith("https://"))img=cancelContext+"/"+img; %>
 <article class="cancel-item"><img src="<%= ProductView.escape(img) %>" alt=""><div><strong><%= cancelMoney.format(item.getItemTotal()) %>원<small> / <%= item.getQuantity() %>개</small></strong><p><%= ProductView.escape(item.getProductName()) %></p></div></article>
 <% } %>
@@ -1213,6 +1164,18 @@ document.addEventListener('DOMContentLoaded',function(){
 	});
  });
 
+</script>
+<script>
+    // 현재 화면에 머무르는 메뉴 버튼도 마지막으로 클릭한 항목만 강조한다.
+    document.querySelector(".my-sidebar")?.addEventListener("click", function (event) {
+        const item = event.target.closest(".my-menu-group a, .my-menu-group button");
+        if (!item) return;
+        this.querySelectorAll(".my-current").forEach(function (previous) {
+            previous.classList.remove("my-current");
+            previous.removeAttribute("aria-current");
+        });
+        item.classList.add("my-current");
+    });
 </script>
 </body>
 </html>
