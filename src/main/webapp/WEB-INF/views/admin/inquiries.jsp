@@ -79,8 +79,19 @@ List<Map<String, Object>> inquiries =
 					<%=ProductView.escape(inquiry.get("productName"))%></p>
 				<% } %>
 				<p class="admin-inquiry-text"><%= ProductView.escape(inquiry.get("content")) %></p>
+				<%
+				if (Boolean.TRUE.equals(inquiry.get("hasPhoto"))) {
+				%>
+				<p>
+					<a
+						href="${pageContext.request.contextPath}/app/support/inquiries/photo?id=<%= inquiryId %>"
+						target="_blank" rel="noopener">첨부 사진 보기</a>
+				</p>
+				<%
+				}
+				%>
 
-                    <% if (pending) { %>
+				<% if (pending) { %>
                         <form method="post"
                               action="${pageContext.request.contextPath}/app/admin/inquiries/answer">
                             <input type="hidden" name="csrfToken"
