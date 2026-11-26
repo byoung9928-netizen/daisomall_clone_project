@@ -1,0 +1,31 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="java.util.Locale,daiso.product.controller.ProductConversionDAO.Metrics" %>
+<%!
+    private static String number(long value) { return String.format(Locale.KOREA, "%,d", value); }
+    private static String behavior(boolean available, long value) { return available ? number(value) : "—"; }
+    private static String percentage(long numerator, long denominator) {
+        return denominator == 0 ? "—" : Metrics.percent(numerator, denominator).toPlainString() + "%";
+    }
+    private static String fraction(long numerator, long denominator, String unit) {
+        return denominator == 0 ? "집계 기준 회원·주문 없음" : number(numerator) + unit + " / " + number(denominator) + unit;
+    }
+    private static String delta(long current, long previous, boolean comparable) {
+        if (!comparable || previous < 0 || current < 0) return "비교 불가";
+        if (previous == 0) return current == 0 ? "변동 없음" : "신규 발생";
+        if (previous == current) return "변동 없음";
+        return String.format(Locale.KOREA, "%+.1f%%", (current - (double) previous) * 100 / previous);
+    }
+    private static String precisePercent(long numerator, long denominator) {
+        if (denominator == 0) return "—";
+        java.math.BigDecimal value = java.math.BigDecimal.valueOf(numerator).movePointRight(2)
+            .divide(java.math.BigDecimal.valueOf(denominator), 2, java.math.RoundingMode.HALF_UP);
+        return numerator > 0 && value.signum() == 0 ? "0.01% 미만" : value.toPlainString() + "%";
+    }
+    private static String average(long total, int peers) {
+        if (peers == 0) return "—";
+        double value = (double) total / peers;
+        if (value > 0 && value < .01) return "0.01 미만";
+        if (value < 0 && value > -.01) return "-0.01 초과";
+        return String.format(Locale.KOREA, "%,.2f", value);
+    }
+%>

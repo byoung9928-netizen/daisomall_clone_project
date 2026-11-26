@@ -1,0 +1,63 @@
+<%@ page pageEncoding="UTF-8" %>
+<section class="admin-panel performance-popular">
+    <h2>인기 상품 순위</h2>
+    <div class="performance-ranking-filters">
+        <nav class="performance-quick" aria-label="순위 지표">
+            <% for (Rank metric : Rank.values()) { %>
+            <a data-admin-query-link href="<%= performance.rankUrl(metric) %>" <%= metric == performance.rank ? "aria-current=\"page\"" : "" %>><%= metric.label %></a>
+            <% } %>
+        </nav>
+        <nav class="performance-quick" aria-label="순위 범위">
+            <% for (int limit : new int[]{5, 10}) { %>
+            <a data-admin-query-link href="<%= performance.rankLimitUrl(limit) %>" <%= limit == performance.rankingLimit ? "aria-current=\"page\"" : "" %>>TOP <%= limit %></a>
+            <% } %>
+        </nav>
+    </div>
+    <% if (performance.ranking.isEmpty()) { %><p>선택한 지표에 표시할 상품이 없습니다.</p><% } %>
+    <p class="performance-key">실제 표시 <%= performance.ranking.size() %>개 / TOP <%= performance.rankingLimit %> ·
+        막대는 1위 대비 상대 수치입니다.</p>
+    <ol class="performance-ranking" data-metric-color="<%= performance.rank.name() %>">
+        <% for (Ranked item : performance.ranking) { %>
+        <li>
+            <img alt="" width="54" height="54" src="<%= ProductView.image(context, item.imageUrl) %>">
+            <div><a class="performance-rank-name" data-performance-detail-link href="<%= performance.detail(item.id) %>"><%= ProductView.escape(item.name) %></a>
+                <% String categoryPath = performance.categories.getOrDefault(item.category, item.category);
+                   String leaf = categoryPath.substring(categoryPath.lastIndexOf('›') + 1).trim(); %>
+                <small>품번 <%= ProductView.escape(item.code) %> · <span class="performance-rank-category" tabindex="0" aria-label="전체 카테고리 <%= ProductView.escape(categoryPath) %>"
+                    data-category-path="<%= ProductView.escape(categoryPath) %>"><%= ProductView.escape(leaf) %></span></small>
+                <meter min="0" max="<%= performance.ranking.get(0).value %>" value="<%= item.value %>"
+                       aria-label="<%= ProductView.escape(item.name) %> 순위 수치"></meter></div>
+            <strong><%= number(item.value) %><%= performance.rank.unit %></strong>
+        </li>
+        <% } %>
+    </ol>
+</section>
+<section class="admin-panel performance-category-sales">
+    <h2>대분류별 순상품 매출</h2>
+    <% long categoryRevenue = performance.categorySales.stream().mapToLong(row -> row.revenue).sum();
+       boolean negativeCategory = performance.categorySales.stream().anyMatch(row -> row.revenue < 0);
+       boolean categoryChart = categoryRevenue > 0 && !negativeCategory; %>
+    <div class="performance-category-layout">
+    <% if (categoryChart) { %><figure class="performance-donut" data-performance-donut data-total="<%= categoryRevenue %>" aria-label="대분류 매출 상위 5개와 기타"></figure>
+    <% } else { %><p><%= negativeCategory ? "음수 매출이 포함되어 금액 표로 표시합니다." : "순상품 매출 합계가 0원 이하이면 매출 비중을 계산할 수 없습니다." %></p><% } %>
+    <div class="performance-category-detail">
+    <label class="performance-zero-toggle" hidden><input type="checkbox" data-category-show-zero> 0원 카테고리 포함</label>
+    <div class="admin-table-scroll" tabindex="0" role="region" aria-label="카테고리별 매출">
+        <table class="admin-table">
+            <thead><tr><th scope="col">대분류</th><th scope="col" aria-sort="descending"><button type="button" data-category-sort hidden>순상품 매출 ↓</button><span data-category-sort-label>순상품 매출</span></th><th scope="col">매출 비중</th></tr></thead>
+            <tbody>
+                <% for (CategorySales row : performance.categorySales) { %>
+                <tr data-category-revenue="<%= row.revenue %>">
+                    <th scope="row" data-category-label><% if (row.id != null) { %><a data-admin-query-link href="<%= performance.categoryUrl(row.id) %>"><%= ProductView.escape(row.name) %></a>
+                        <% } else { %>미분류<% } %></th><td><%= number(row.revenue) %>원</td>
+                    <td><%= categoryChart ? percentage(row.revenue, categoryRevenue) : "—" %></td>
+                </tr>
+                <% } %><tr data-category-empty hidden><td colspan="3">매출이 발생한 카테고리가 없습니다.</td></tr>
+                <% if (performance.categorySales.isEmpty()) { %><tr><td colspan="3">분석 대상 상품이 없습니다.</td></tr><% } %>
+            </tbody>
+            <tfoot><tr><th scope="row">합계</th><td data-category-total="<%= categoryRevenue %>"><%= number(categoryRevenue) %>원</td>
+                <td><%= categoryChart ? "100.0%" : "—" %></td></tr></tfoot>
+        </table>
+    </div>
+    </div></div>
+</section>
