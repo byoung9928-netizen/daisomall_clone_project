@@ -63,14 +63,16 @@ public final class AdminProductPerformanceController {
     }
 
     public enum Sort {
-        REVENUE("순상품 매출 높은순", "revenue DESC"), UNITS("순판매 수량 많은순", "units DESC"),
-        VIEW("조회 많은순", "views DESC"), WISH("찜 등록 많은순", "wish_add DESC"),
-        CART("장바구니 등록 많은순", "cart_add DESC"), BUYERS("구매 회원 많은순", "buyers DESC"),
-        NAME("상품명순", "name ASC"), STOCK("온라인 재고 적은순", "stock_quantity ASC"),
-        CONVERSION_HIGH("조회 대비 결제 전환율 높은순", "(f_view<" + LOW_VIEW_SAMPLE
-                + "), f_view_paid/NULLIF(f_view,0) DESC"),
-        CONVERSION_LOW("조회 대비 결제 전환율 낮은순", "(f_view<" + LOW_VIEW_SAMPLE
-                + "), f_view_paid/NULLIF(f_view,0) ASC");
+        REVENUE("순상품 매출 높은순", "revenue DESC"), REVENUE_ASC("순상품 매출 낮은순", "revenue ASC"),
+        UNITS("순판매 수량 많은순", "units DESC"), UNITS_ASC("순판매 수량 적은순", "units ASC"),
+        VIEW("조회 많은순", "views DESC"), VIEW_ASC("조회 적은순", "views ASC"),
+        WISH("찜 등록 많은순", "wish_add DESC"), WISH_ASC("찜 등록 적은순", "wish_add ASC"),
+        CART("장바구니 등록 많은순", "cart_add DESC"), CART_ASC("장바구니 등록 적은순", "cart_add ASC"),
+        BUYERS("구매 회원 많은순", "buyers DESC"), BUYERS_ASC("구매 회원 적은순", "buyers ASC"),
+        NAME("상품명 오름차순", "name ASC"), NAME_DESC("상품명 내림차순", "name DESC"),
+        STOCK("온라인 재고 적은순", "stock_quantity ASC"), STOCK_DESC("온라인 재고 많은순", "stock_quantity DESC"),
+        CONVERSION_HIGH("결제 전환율 높은순", conversionOrder("DESC")),
+        CONVERSION_LOW("결제 전환율 낮은순", conversionOrder("ASC"));
 
         public final String label;
         final String order;
@@ -79,6 +81,13 @@ public final class AdminProductPerformanceController {
             this.label = label;
             this.order = order;
         }
+
+        private static String conversionOrder(String direction) {
+            return "(f_view=0), (f_view<" + LOW_VIEW_SAMPLE + "), f_view_paid/NULLIF(f_view,0) " + direction;
+        }
+
+        public String direction() { return order.endsWith(" ASC") ? "ascending" : "descending"; }
+        public Sort reverse() { return values()[ordinal() ^ 1]; }
     }
 
     public enum Rank {
@@ -100,7 +109,7 @@ public final class AdminProductPerformanceController {
 
     public enum Quick {
         ALL("전체 상품"), SOLD("판매 발생"), UNSOLD("미판매"), TOP_VIEW("조회 상위"),
-        LOW_CONVERSION("전환율 낮음"), LOW_STOCK("재고 부족"), EMPTY_STOCK("품절");
+        LOW_CONVERSION("전환율 낮음");
 
         public final String label;
         Quick(String label) { this.label = label; }
@@ -112,20 +121,26 @@ public final class AdminProductPerformanceController {
         final Sort sort;
         final boolean includeDemo;
         final LocalDate start, endExclusive;
+        final LocalDateTime requestedAt, aggregateEnd;
         final int page, pageSize, rankingLimit, minimumViews, maxConversion;
         final Rank rank;
         final Quick quick;
-        final boolean fromPopular;
+        final boolean fromPopular, detailFragment;
         final String detail;
         final Tab tab;
 
         Filter(HttpServletRequest request) {
+            this(request, false);
+        }
+
+        Filter(HttpServletRequest request, boolean csv) {
             products = AdminProductFilter.read(request, AdminProductController.STATUSES);
             String requestedPeriod = ProductQueries.text(request, "period", 15);
             period = requestedPeriod.isEmpty() ? Period.WEEK : Period.valueOf(requestedPeriod);
             String requestedSort = ProductQueries.text(request, "performanceSort", 15);
             String requestedQuick = ProductQueries.text(request, "quick", 20);
-            quick = requestedQuick.isEmpty() ? Quick.ALL : Quick.valueOf(requestedQuick);
+            quick = List.of("", "LOW_STOCK", "EMPTY_STOCK").contains(requestedQuick)
+                    ? Quick.ALL : Quick.valueOf(requestedQuick);
             sort = requestedSort.isEmpty() ? (quick == Quick.TOP_VIEW ? Sort.VIEW : Sort.REVENUE) : Sort.valueOf(requestedSort);
             String requestedRank = ProductQueries.text(request, "rank", 12);
             rank = requestedRank.isEmpty() ? Rank.REVENUE : Rank.valueOf(requestedRank);
@@ -140,8 +155,11 @@ public final class AdminProductPerformanceController {
             page = ProductQueries.integer(request, "page", 1, 1, 1_000_000);
             String requestedDetail = ProductQueries.text(request, "detail", 100);
             tab = Tab.read(ProductQueries.text(request, "tab", 20), requestedDetail);
-            detail = tab == Tab.PRODUCTS ? requestedDetail : "";
-            LocalDate today = LocalDate.now(SEOUL);
+            detailFragment = "detail".equals(request.getParameter("fragment"));
+            if (detailFragment && requestedDetail.isEmpty()) throw new IllegalArgumentException();
+            detail = tab == Tab.PRODUCTS || detailFragment ? requestedDetail : "";
+            requestedAt = LocalDateTime.now(SEOUL).truncatedTo(ChronoUnit.MICROS);
+            LocalDate today = requestedAt.toLocalDate();
             try {
                 LocalDate end = period == Period.CUSTOM ? LocalDate.parse(ProductQueries.text(request, "end", 10)) : today;
                 start = period == Period.CUSTOM ? LocalDate.parse(ProductQueries.text(request, "start", 10))
@@ -149,6 +167,17 @@ public final class AdminProductPerformanceController {
                 if (start.getYear() < 2000 || end.isAfter(today) || start.isAfter(end)
                         || ChronoUnit.DAYS.between(start, end) >= 366) throw new IllegalArgumentException();
                 endExclusive = end.plusDays(1);
+                String snapshot = csv && tab == Tab.OVERVIEW ? ProductQueries.text(request, "asOf", 26) : "";
+                if (!snapshot.isEmpty()) {
+                    LocalDateTime cutoff = LocalDateTime.parse(snapshot);
+                    if (!hourly() || !cutoff.toLocalDate().equals(start) || cutoff.isAfter(requestedAt)) {
+                        throw new IllegalArgumentException();
+                    }
+                    aggregateEnd = cutoff;
+                } else {
+                    aggregateEnd = tab == Tab.OVERVIEW && hourly() && end.equals(today)
+                            ? requestedAt : endExclusive.atStartOfDay();
+                }
             } catch (DateTimeParseException error) {
                 throw new IllegalArgumentException("조회 기간이 올바르지 않습니다.", error);
             }
@@ -167,6 +196,8 @@ public final class AdminProductPerformanceController {
             includeDemo = current.includeDemo;
             endExclusive = current.start;
             start = endExclusive.minusDays(ChronoUnit.DAYS.between(current.start, current.endExclusive));
+            requestedAt = current.requestedAt;
+            aggregateEnd = current.partialHourRange() ? current.aggregateEnd.minusDays(1) : endExclusive.atStartOfDay();
             page = current.page;
             pageSize = current.pageSize;
             rankingLimit = current.rankingLimit;
@@ -177,7 +208,12 @@ public final class AdminProductPerformanceController {
             rank = current.rank;
             quick = Quick.ALL;
             fromPopular = false;
+            detailFragment = false;
         }
+
+        boolean hourly() { return endExclusive.equals(start.plusDays(1)); }
+        boolean partialHourRange() { return hourly() && aggregateEnd.isBefore(endExclusive.atStartOfDay()); }
+        LocalDateTime behaviorEnd() { return aggregateEnd.atZone(SEOUL).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime(); }
 
         Quick activeQuick() { return tab == Tab.PRODUCTS ? quick : Quick.ALL; }
 
@@ -212,13 +248,22 @@ public final class AdminProductPerformanceController {
             Filter filter = new Filter(request);
             ProductPerformanceDAO.Coverage coverage = performance.coverage(conn);
             Page page = new Page(request.getContextPath(), filter, coverage, products.findAdminCategories(conn, false));
+            if (filter.detailFragment) {
+                loadDetail(conn, filter, coverage, page);
+                if (page.selected == null) response.setStatus(404);
+                request.setAttribute("productPerformance", page);
+                conn.commit();
+                return "admin/product-performance-detail";
+            }
             switch (filter.tab) {
                 case OVERVIEW:
                     Filter previous = new Filter(filter);
                     page.summary = performance.summary(conn, filter, filter.products, coverage, "");
                     page.previous = performance.summary(conn, previous, filter.products, coverage, "");
                     page.previousStart = previous.start;
-                    page.comparableBehavior = coverage.firstDay != null && !previous.start.isBefore(coverage.firstDay);
+                    page.comparableBehavior = coverage.firstDay != null && (filter.hourly()
+                            ? !previous.start.atStartOfDay().isBefore(coverage.firstEvent)
+                            : !previous.start.isBefore(coverage.firstDay));
                     page.trend = performance.trend(conn, filter, coverage);
                     page.previousTrend = performance.trend(conn, previous, new ProductPerformanceDAO.Coverage(false, null));
                     page.ranking = performance.ranking(conn, filter, coverage, Rank.REVENUE, 3);
@@ -258,7 +303,11 @@ public final class AdminProductPerformanceController {
                 filter.pageSize, (current - 1) * filter.pageSize, "");
         page.first = page.rows.isEmpty() ? 0 : (current - 1) * filter.pageSize + 1;
         page.last = page.rows.isEmpty() ? 0 : page.first + page.rows.size() - 1;
-        if (filter.detail.isEmpty()) return;
+        if (!filter.detail.isEmpty()) loadDetail(conn, filter, coverage, page);
+    }
+
+    private void loadDetail(Connection conn, Filter filter, ProductPerformanceDAO.Coverage coverage, Page page)
+            throws SQLException {
         page.selected = page.rows.stream().filter(row -> row.id.equals(filter.detail)).findFirst().orElse(null);
         if (page.selected == null) {
             page.selected = performance.rows(conn, filter, filter.products, coverage, 1, 0, filter.detail)
@@ -281,7 +330,7 @@ public final class AdminProductPerformanceController {
         }
         StringBuilder output = new StringBuilder("\ufeff");
         try (Connection conn = ProductQueries.connect()) {
-            Filter filter = new Filter(request);
+            Filter filter = new Filter(request, true);
             ProductPerformanceDAO.Coverage coverage = performance.coverage(conn);
             if (filter.tab == Tab.POPULAR) {
                 AdminProductController.csvRow(output, "순위", "상품 ID", "품번", "상품명", "지표", "수치", "단위",
@@ -305,7 +354,7 @@ public final class AdminProductPerformanceController {
                         "주문", "결제 승인 주문", "주문 대비 승인율(%)", "미승인 실패 주문", "결제 실패율(%)",
                         "승인 후 취소 주문", "취소율(%)", "승인 후 환불 주문", "환불율(%)", "조회 표본 상태");
                 Map<String, String> categories = products.findAdminCategories(conn, false);
-                boolean hasBehavior = hasBehavior(coverage, filter.endExclusive);
+                boolean hasBehavior = hasBehavior(coverage, filter);
                 for (ProductPerformanceDAO.Row row : performance.rows(conn, filter, filter.products, coverage, 0, 0, "")) {
                     Metrics flow = row.conversion;
                     AdminProductController.csvRow(output, row.id, row.code, row.name,
@@ -350,8 +399,8 @@ public final class AdminProductPerformanceController {
         return VIEW;
     }
 
-    private static boolean hasBehavior(ProductPerformanceDAO.Coverage coverage, LocalDate endExclusive) {
-        return coverage.firstDay != null && coverage.firstDay.isBefore(endExclusive);
+    private static boolean hasBehavior(ProductPerformanceDAO.Coverage coverage, Filter filter) {
+        return coverage.firstEvent != null && coverage.firstEvent.isBefore(filter.aggregateEnd);
     }
 
     public static final class Page {
@@ -368,13 +417,14 @@ public final class AdminProductPerformanceController {
         public ProductPerformanceDAO.Row selected;
         public Metrics conversion, peerConversion;
         public List<ProductPerformanceDAO.Row> rows = List.of();
-        public List<ProductPerformanceDAO.Day> trend = List.of(), previousTrend = List.of();
+        public List<ProductPerformanceDAO.TrendBucket> trend = List.of(), previousTrend = List.of();
         public List<ProductPerformanceDAO.Ranked> ranking = List.of();
         public List<ProductPerformanceDAO.CategorySales> categorySales = List.of();
         public InventoryPagination pagination;
         public LocalDate previousStart;
         public boolean comparableBehavior;
-        public final boolean fromPopular, partialDay;
+        public final boolean fromPopular, partialDay, hourly;
+        public final LocalDateTime snapshot;
         public final String detailId;
         public final Rank rank;
         public final Quick quick;
@@ -404,7 +454,7 @@ public final class AdminProductPerformanceController {
             this.start = filter.start;
             this.end = filter.endExclusive.minusDays(1);
             this.behaviorReady = coverage.ready;
-            this.hasBehavior = hasBehavior(coverage, filter.endExclusive);
+            this.hasBehavior = hasBehavior(coverage, filter);
             this.firstBehaviorDay = coverage.firstDay;
             this.detailId = filter.detail;
             this.rank = filter.rank;
@@ -415,10 +465,22 @@ public final class AdminProductPerformanceController {
             this.maxConversion = filter.maxConversion;
             this.requestedPage = filter.page;
             this.fromPopular = filter.fromPopular;
-            this.partialDay = end.equals(LocalDate.now(SEOUL));
+            this.partialDay = end.equals(filter.requestedAt.toLocalDate());
+            this.hourly = filter.hourly();
+            this.snapshot = filter.partialHourRange() ? filter.aggregateEnd : null;
         }
 
-        public String csv() { return ProductView.url(context, ROUTE + "/csv", tabParams(tab)); }
+        public String csv() {
+            Map<String, String> link = tabParams(tab);
+            if (tab == Tab.OVERVIEW && snapshot != null) {
+                // Pin the calendar date as well, so this link still refers to the same report after midnight.
+                link.put("period", Period.CUSTOM.name());
+                link.put("start", start.toString());
+                link.put("end", end.toString());
+                link.put("asOf", snapshot.toString());
+            }
+            return ProductView.url(context, ROUTE + "/csv", link);
+        }
 
         public String listUrl(int page) {
             return ProductView.url(context, ROUTE, ProductView.with(tabParams(Tab.PRODUCTS), "page", Integer.toString(page)));
@@ -442,6 +504,14 @@ public final class AdminProductPerformanceController {
             Map<String, String> link = ProductView.with(tabParams(Tab.PRODUCTS), "filterCategory", root);
             link.remove("quick");
             return ProductView.url(context, ROUTE, link);
+        }
+
+        public Sort nextSort(Sort field) {
+            return sort == field || sort == field.reverse() ? sort.reverse() : field;
+        }
+
+        public String sortAttribute(Sort field) {
+            return sort == field || sort == field.reverse() ? "aria-sort=\"" + sort.direction() + "\"" : "";
         }
 
         public String sortUrl(Sort value) {

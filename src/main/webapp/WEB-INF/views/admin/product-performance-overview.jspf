@@ -1,7 +1,8 @@
 <%@ page pageEncoding="UTF-8" %>
 <section class="performance-overview" aria-label="핵심 지표">
     <p class="performance-comparison-period">비교 기간 <%= performance.previousStart %> ~ <%= performance.start.minusDays(1) %>
-        <% if (performance.partialDay) { %> · 오늘 집계 진행 중 (직전 전체 기간과 비교)<% } %></p>
+        <% if (performance.snapshot != null) { %> · 오늘 <%= performance.snapshot.toLocalTime().withNano(0) %>까지 집계 진행 중 (어제 같은 시각과 비교)
+        <% } else if (performance.partialDay) { %> · 오늘 집계 진행 중 (직전 전체 기간과 비교)<% } %></p>
     <h2 class="performance-group-title">판매 성과</h2>
     <div class="store-metrics performance-metrics" aria-label="판매 성과">
         <div><span>순상품 매출</span><strong data-metric="revenue"><%= number(performance.summary.revenue) %>원</strong>
@@ -26,7 +27,7 @@
         <section class="admin-panel">
             <h2>판매 상품 현황</h2>
             <% if (performance.summary.products > 0) { %>
-                <p>판매 발생 비율 <strong><%= percentage(performance.summary.sold, performance.summary.products) %></strong></p>
+                <p>판매 발생 비율 <strong><%= precisePercent(performance.summary.sold, performance.summary.products) %></strong></p>
                 <meter aria-label="판매 발생 상품 비율" min="0" max="<%= performance.summary.products %>"
                        value="<%= performance.summary.sold %>"></meter>
             <% } else { %><p>분석 대상 상품이 없습니다.</p><% } %>

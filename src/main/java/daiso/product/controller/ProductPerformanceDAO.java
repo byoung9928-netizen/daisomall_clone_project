@@ -25,10 +25,12 @@ public final class ProductPerformanceDAO {
     static final class Coverage {
         final boolean ready;
         final LocalDate firstDay;
+        final LocalDateTime firstEvent;
 
-        Coverage(boolean ready, LocalDate firstDay) {
+        Coverage(boolean ready, LocalDateTime firstEvent) {
             this.ready = ready;
-            this.firstDay = firstDay;
+            this.firstEvent = firstEvent;
+            this.firstDay = firstEvent == null ? null : firstEvent.toLocalDate();
         }
     }
 
@@ -38,7 +40,7 @@ public final class ProductPerformanceDAO {
             row.next();
             LocalDateTime first = row.getObject(1, LocalDateTime.class);
             return new Coverage(true, first == null ? null : first.atOffset(ZoneOffset.UTC)
-                    .atZoneSameInstant(AdminProductPerformanceController.SEOUL).toLocalDate());
+                    .atZoneSameInstant(AdminProductPerformanceController.SEOUL).toLocalDateTime());
         } catch (SQLException error) {
             if (error.getErrorCode() == 1146) return new Coverage(false, null);
             throw error;
@@ -58,12 +60,17 @@ public final class ProductPerformanceDAO {
     }
 
     static Query scope(AdminProductFilter filter, String excluded) {
+        return scope(filter, excluded, "");
+    }
+
+    private static Query scope(AdminProductFilter filter, String excluded, String selected) {
         ProductDAO.AdminScope scope = ProductDAO.adminScope(filter, true);
         Query query = new Query(scope.prefix.isEmpty() ? "WITH " : scope.prefix.stripTrailing() + ", ");
         query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity, p.low_stock_threshold, p.image_url")
                 .append(scope.from).append(scope.where);
         query.args.addAll(scope.parameters);
         if (!excluded.isEmpty()) query.append(" AND p.category_id=? AND p.product_id<>?", filter.category, excluded);
+        if (!selected.isEmpty()) query.append(" AND p.product_id=?", selected);
         return query.append(")");
     }
 
@@ -84,7 +91,7 @@ public final class ProductPerformanceDAO {
                 + (filter.includeDemo ? "" : " AND o.order_no NOT REGEXP '^DEMO_RANK_V1_'"
                         + " AND o.checkout_token NOT REGEXP '^DEMO-CHECKOUT-' AND pay.tid NOT REGEXP '^DEMO-TID-'")
                 + " GROUP BY o.order_id,o.member_id)",
-                filter.start.atStartOfDay(), filter.endExclusive.atStartOfDay(), filter.start.atStartOfDay());
+                filter.start.atStartOfDay(), filter.aggregateEnd, filter.start.atStartOfDay());
     }
 
     private static void sales(Query query, AdminProductPerformanceController.Filter filter, String group) {
@@ -102,7 +109,7 @@ public final class ProductPerformanceDAO {
             query.append(", acts AS (SELECT " + group + " AS bucket," + BEHAVIOR_COUNTS
                     + " FROM " + EVENT_TABLE + " e JOIN scoped s ON s.product_id=e.product_id"
                     + " WHERE e.occurred_at>=? AND e.occurred_at<?" + liveMember("e.member_id", filter.includeDemo)
-                    + " GROUP BY bucket)", filter.utcStart(), filter.utcEnd());
+                    + " GROUP BY bucket)", filter.utcStart(), filter.behaviorEnd());
         } else {
             query.append(", acts AS (SELECT NULL bucket," + ZERO_BEHAVIOR + " WHERE FALSE)");
         }
@@ -110,7 +117,12 @@ public final class ProductPerformanceDAO {
 
     private static Query metrics(AdminProductPerformanceController.Filter filter, AdminProductFilter products,
             Coverage coverage, String excluded) {
-        Query query = scope(products, excluded);
+        return metrics(filter, products, coverage, excluded, "");
+    }
+
+    private static Query metrics(AdminProductPerformanceController.Filter filter, AdminProductFilter products,
+            Coverage coverage, String excluded, String selected) {
+        Query query = scope(products, excluded, selected);
         sales(query, filter, "i.product_id");
         behavior(query, filter, coverage, "e.product_id");
         query.append(", metrics AS (SELECT s.*, COALESCE(a.views,0) views, COALESCE(a.viewers,0) viewers,"
@@ -188,11 +200,10 @@ public final class ProductPerformanceDAO {
 
     List<Row> rows(Connection conn, AdminProductPerformanceController.Filter filter, AdminProductFilter products,
             Coverage coverage, int limit, int offset, String detailId) throws SQLException {
-        Query query = metrics(filter, products, coverage, "");
+        Query query = metrics(filter, products, coverage, "", detailId);
         ProductConversionDAO.rows(query, filter, coverage);
         query.append(", page_rows AS (SELECT * FROM conversion_rows p");
-        if (!detailId.isEmpty()) query.append(" WHERE product_id=?", detailId);
-        else appendQuick(query, filter);
+        if (detailId.isEmpty()) appendQuick(query, filter);
         query.append(" ORDER BY " + filter.sort.order + ",product_id");
         if (limit > 0) query.append(" LIMIT ? OFFSET ?", limit, offset);
         query.append("), wish_now AS (SELECT w.product_id,COUNT(*) members FROM product_wishlists w"
@@ -221,8 +232,6 @@ public final class ProductPerformanceDAO {
         switch (filter.activeQuick()) {
             case SOLD: query.append(" WHERE units > 0"); break;
             case UNSOLD: query.append(" WHERE units = 0"); break;
-            case LOW_STOCK: query.append(" WHERE " + OnlineStockState.LOW.condition); break;
-            case EMPTY_STOCK: query.append(" WHERE " + OnlineStockState.SOLD_OUT.condition); break;
             case LOW_CONVERSION:
                 query.append(" WHERE f_view >= ? AND (f_view_paid * 100) < (? * f_view)",
                         filter.minimumViews, filter.maxConversion);
@@ -259,7 +268,7 @@ public final class ProductPerformanceDAO {
     }
 
     public static final class Ranked {
-        public final String id, name, code, imageUrl;
+        public final String id, name, code, imageUrl, category;
         public final long value;
 
         Ranked(ResultSet row) throws SQLException {
@@ -267,6 +276,7 @@ public final class ProductPerformanceDAO {
             name = row.getString("name");
             code = row.getString("product_code");
             imageUrl = row.getString("image_url");
+            category = row.getString("category_id");
             value = row.getLong("metric");
         }
     }
@@ -282,7 +292,7 @@ public final class ProductPerformanceDAO {
             sales(query, filter, "i.product_id");
             source = "sales";
         }
-        query.append(" SELECT s.product_id,s.name,s.product_code,s.image_url,v." + metric.column + " AS metric"
+        query.append(" SELECT s.product_id,s.name,s.product_code,s.image_url,s.category_id,v." + metric.column + " AS metric"
                 + " FROM " + source + " v JOIN scoped s ON s.product_id=v.bucket"
                 + " WHERE v." + metric.column + ">0 ORDER BY metric DESC,s.product_id LIMIT ?", limit);
         try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
@@ -309,10 +319,21 @@ public final class ProductPerformanceDAO {
         sales(query, filter, "i.product_id");
         query.append(", category_roots AS (SELECT category_id, category_id root_id FROM categories WHERE parent_id IS NULL"
                 + " UNION ALL SELECT c.category_id,r.root_id FROM categories c JOIN category_roots r ON c.parent_id=r.category_id)"
-                + " SELECT r.root_id, c.name root_name, COALESCE(SUM(s.revenue),0) revenue FROM scoped p"
+                + ", root_sales AS (SELECT r.root_id, COALESCE(SUM(s.revenue),0) revenue FROM scoped p"
                 + " LEFT JOIN sales s ON p.product_id=s.bucket LEFT JOIN category_roots r ON r.category_id=p.category_id"
-                + " LEFT JOIN categories c ON c.category_id=r.root_id GROUP BY r.root_id,c.name"
-                + " ORDER BY revenue DESC,r.root_id");
+                + " GROUP BY r.root_id)"
+                + " SELECT s.root_id, c.name root_name, s.revenue FROM root_sales s"
+                + " LEFT JOIN categories c ON c.category_id=s.root_id");
+        AdminProductFilter scope = filter.products;
+        if (scope.keyword.isEmpty() && scope.productId.isEmpty() && scope.status.isEmpty()
+                && scope.stock == AdminProductFilter.Stock.ALL) {
+            query.append(" UNION ALL SELECT c.category_id,c.name,0 FROM categories c WHERE c.parent_id IS NULL"
+                    + " AND NOT EXISTS (SELECT 1 FROM root_sales a WHERE a.root_id=c.category_id)");
+            if (!scope.category.isEmpty()) {
+                query.append(" AND c.category_id=(SELECT r.root_id FROM category_roots r WHERE r.category_id=?)", scope.category);
+            }
+        }
+        query.append(" ORDER BY revenue DESC,root_id");
         try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
             List<CategorySales> rows = new ArrayList<>();
             while (row.next()) rows.add(new CategorySales(row));
@@ -320,44 +341,55 @@ public final class ProductPerformanceDAO {
         }
     }
 
-    public static final class Day {
-        public final LocalDate date;
+    public static final class TrendBucket {
+        private static final java.time.format.DateTimeFormatter CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
+        public final String label, tick, detail;
+        public final boolean available, collecting, covered;
         public final long views, wishAdds, wishRemoves, cartAdds, cartRemoves, units, revenue;
 
-        Day(LocalDate date, long views, long wishAdds, long wishRemoves, long cartAdds, long cartRemoves, long units, long revenue) {
-            this.date = date;
-            this.views = views;
-            this.wishAdds = wishAdds;
-            this.wishRemoves = wishRemoves;
-            this.cartAdds = cartAdds;
-            this.cartRemoves = cartRemoves;
-            this.units = units;
-            this.revenue = revenue;
+        TrendBucket(LocalDateTime from, boolean hourly, LocalDateTime cutoff, LocalDateTime firstEvent, ResultSet row)
+                throws SQLException {
+            LocalDateTime until = hourly ? from.plusHours(1) : from.plusDays(1);
+            LocalDateTime observedEnd = until.isBefore(cutoff) ? until : cutoff;
+            available = from.isBefore(cutoff);
+            collecting = hourly && available && until.isAfter(cutoff);
+            covered = available && firstEvent != null && firstEvent.isBefore(observedEnd);
+            tick = hourly ? CLOCK.format(from) : from.toLocalDate().toString().substring(5).replace('-', '.');
+            label = hourly ? tick + "–" + (until.toLocalDate().equals(from.toLocalDate()) ? CLOCK.format(until) : "24:00")
+                    : from.toLocalDate().toString();
+            detail = hourly ? from.toLocalDate() + " " + label : label;
+            views = row == null ? 0 : row.getLong("views");
+            wishAdds = row == null ? 0 : row.getLong("wish_add");
+            wishRemoves = row == null ? 0 : row.getLong("wish_remove");
+            cartAdds = row == null ? 0 : row.getLong("cart_add");
+            cartRemoves = row == null ? 0 : row.getLong("cart_remove");
+            units = row == null ? 0 : row.getLong("units");
+            revenue = row == null ? 0 : row.getLong("revenue");
         }
     }
 
-    List<Day> trend(Connection conn, AdminProductPerformanceController.Filter filter, Coverage coverage)
+    List<TrendBucket> trend(Connection conn, AdminProductPerformanceController.Filter filter, Coverage coverage)
             throws SQLException {
+        boolean hourly = filter.hourly();
         Query query = scope(filter.products, "");
-        sales(query, filter, "DATE(v.approved_at)");
-        behavior(query, filter, coverage, "DATE(e.occurred_at + INTERVAL 9 HOUR)");
+        sales(query, filter, hourly ? "HOUR(v.approved_at)" : "DATE(v.approved_at)");
+        behavior(query, filter, coverage, hourly
+                ? "HOUR(e.occurred_at + INTERVAL 9 HOUR)" : "DATE(e.occurred_at + INTERVAL 9 HOUR)");
         query.append(" SELECT dates.bucket,COALESCE(a.views,0) views,COALESCE(a.wish_add,0) wish_add,"
                 + "COALESCE(a.wish_remove,0) wish_remove,COALESCE(a.cart_add,0) cart_add,COALESCE(a.cart_remove,0) cart_remove,"
                 + " COALESCE(s.units,0) units,COALESCE(s.revenue,0) revenue"
                 + " FROM (SELECT bucket FROM acts UNION SELECT bucket FROM sales) dates"
                 + " LEFT JOIN acts a USING(bucket) LEFT JOIN sales s USING(bucket) ORDER BY dates.bucket");
         try (PreparedStatement statement = query.prepare(conn); ResultSet rows = statement.executeQuery()) {
-            List<Day> trend = new ArrayList<>();
-            LocalDate next = rows.next() ? rows.getObject("bucket", LocalDate.class) : null;
-            for (LocalDate day = filter.start; day.isBefore(filter.endExclusive); day = day.plusDays(1)) {
-                if (day.equals(next)) {
-                    trend.add(new Day(day, rows.getLong("views"), rows.getLong("wish_add"), rows.getLong("wish_remove"),
-                            rows.getLong("cart_add"), rows.getLong("cart_remove"),
-                            rows.getLong("units"), rows.getLong("revenue")));
-                    next = rows.next() ? rows.getObject("bucket", LocalDate.class) : null;
-                } else {
-                    trend.add(new Day(day, 0, 0, 0, 0, 0, 0, 0));
-                }
+            List<TrendBucket> trend = new ArrayList<>();
+            boolean more = rows.next();
+            LocalDateTime limit = filter.endExclusive.atStartOfDay();
+            for (LocalDateTime start = filter.start.atStartOfDay(); start.isBefore(limit);
+                    start = hourly ? start.plusHours(1) : start.plusDays(1)) {
+                boolean match = more && (hourly ? rows.getInt("bucket") == start.getHour()
+                        : start.toLocalDate().equals(rows.getObject("bucket", LocalDate.class)));
+                trend.add(new TrendBucket(start, hourly, filter.aggregateEnd, coverage.firstEvent, match ? rows : null));
+                if (match) more = rows.next();
             }
             return trend;
         }
