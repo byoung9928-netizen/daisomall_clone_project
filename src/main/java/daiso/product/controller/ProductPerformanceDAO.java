@@ -60,7 +60,7 @@ public final class ProductPerformanceDAO {
     static Query scope(AdminProductFilter filter, String excluded) {
         ProductDAO.AdminScope scope = ProductDAO.adminScope(filter, true);
         Query query = new Query(scope.prefix.isEmpty() ? "WITH " : scope.prefix.stripTrailing() + ", ");
-        query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity, p.image_url")
+        query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity, p.low_stock_threshold, p.image_url")
                 .append(scope.from).append(scope.where);
         query.args.addAll(scope.parameters);
         if (!excluded.isEmpty()) query.append(" AND p.category_id=? AND p.product_id<>?", filter.category, excluded);
@@ -68,7 +68,7 @@ public final class ProductPerformanceDAO {
     }
 
     // Sales are attributed to the original payment approval day. Completed full reversals leave that cohort.
-    private static void sales(Query query, AdminProductPerformanceController.Filter filter, String group) {
+    private static void validOrders(Query query, AdminProductPerformanceController.Filter filter) {
         query.append(", valid_orders AS (SELECT o.order_id,o.member_id,MIN(pay.approved_at) approved_at"
                 + " FROM orders o JOIN payment_attempts pay ON pay.order_id=o.order_id"
                 + " WHERE o.canceled_at IS NULL AND ((o.status='PAID' AND pay.status='APPROVED')"
@@ -83,13 +83,17 @@ public final class ProductPerformanceDAO {
                 + liveMember("o.member_id", filter.includeDemo)
                 + (filter.includeDemo ? "" : " AND o.order_no NOT REGEXP '^DEMO_RANK_V1_'"
                         + " AND o.checkout_token NOT REGEXP '^DEMO-CHECKOUT-' AND pay.tid NOT REGEXP '^DEMO-TID-'")
-                + " GROUP BY o.order_id,o.member_id)"
-                + ", sales AS (SELECT " + group + " AS bucket,"
+                + " GROUP BY o.order_id,o.member_id)",
+                filter.start.atStartOfDay(), filter.endExclusive.atStartOfDay(), filter.start.atStartOfDay());
+    }
+
+    private static void sales(Query query, AdminProductPerformanceController.Filter filter, String group) {
+        validOrders(query, filter);
+        query.append(", sales AS (SELECT " + group + " AS bucket,"
                 + " COUNT(DISTINCT v.member_id) buyers,SUM(i.quantity) units,SUM(i.item_total) revenue"
                 + " FROM valid_orders v JOIN order_items i ON i.order_id=v.order_id"
                 + " JOIN scoped s ON s.product_id=i.product_id"
-                + " GROUP BY bucket)",
-                filter.start.atStartOfDay(), filter.endExclusive.atStartOfDay(), filter.start.atStartOfDay());
+                + " GROUP BY bucket)");
     }
 
     private static void behavior(Query query, AdminProductPerformanceController.Filter filter, Coverage coverage,
@@ -120,7 +124,7 @@ public final class ProductPerformanceDAO {
 
     public static final class Summary {
         public final int products;
-        public final long views, wishAdds, cartAdds, units, revenue, unsold;
+        public final long views, wishAdds, cartAdds, units, revenue, unsold, sold, uniqueBuyers;
 
         Summary(ResultSet row) throws SQLException {
             products = row.getInt("products");
@@ -130,6 +134,8 @@ public final class ProductPerformanceDAO {
             units = row.getLong("units");
             revenue = row.getLong("revenue");
             unsold = row.getLong("unsold");
+            sold = row.getLong("sold");
+            uniqueBuyers = row.getLong("unique_buyers");
         }
     }
 
@@ -137,7 +143,10 @@ public final class ProductPerformanceDAO {
             Coverage coverage, String excluded) throws SQLException {
         Query query = metrics(filter, products, coverage, excluded);
         query.append(" SELECT COUNT(*) products,SUM(views) views,SUM(wish_add) wish_add,SUM(cart_add) cart_add,"
-                + "SUM(units) units,SUM(revenue) revenue,COUNT(CASE WHEN units=0 THEN 1 END) unsold FROM metrics");
+                + "SUM(units) units,SUM(revenue) revenue,COUNT(CASE WHEN units=0 THEN 1 END) unsold,"
+                + "COUNT(CASE WHEN units>0 THEN 1 END) sold,"
+                + "(SELECT COUNT(DISTINCT v.member_id) FROM valid_orders v JOIN order_items i USING(order_id)"
+                + " JOIN scoped s ON s.product_id=i.product_id) unique_buyers FROM metrics");
         try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
             row.next();
             return new Summary(row);
@@ -181,8 +190,9 @@ public final class ProductPerformanceDAO {
             Coverage coverage, int limit, int offset, String detailId) throws SQLException {
         Query query = metrics(filter, products, coverage, "");
         ProductConversionDAO.rows(query, filter, coverage);
-        query.append(", page_rows AS (SELECT * FROM conversion_rows");
+        query.append(", page_rows AS (SELECT * FROM conversion_rows p");
         if (!detailId.isEmpty()) query.append(" WHERE product_id=?", detailId);
+        else appendQuick(query, filter);
         query.append(" ORDER BY " + filter.sort.order + ",product_id");
         if (limit > 0) query.append(" LIMIT ? OFFSET ?", limit, offset);
         query.append("), wish_now AS (SELECT w.product_id,COUNT(*) members FROM product_wishlists w"
@@ -203,6 +213,109 @@ public final class ProductPerformanceDAO {
         try (PreparedStatement statement = query.prepare(conn); ResultSet result = statement.executeQuery()) {
             List<Row> rows = new ArrayList<>();
             while (result.next()) rows.add(new Row(result));
+            return rows;
+        }
+    }
+
+    private static void appendQuick(Query query, AdminProductPerformanceController.Filter filter) {
+        switch (filter.activeQuick()) {
+            case SOLD: query.append(" WHERE units > 0"); break;
+            case UNSOLD: query.append(" WHERE units = 0"); break;
+            case LOW_STOCK: query.append(" WHERE " + OnlineStockState.LOW.condition); break;
+            case EMPTY_STOCK: query.append(" WHERE " + OnlineStockState.SOLD_OUT.condition); break;
+            case LOW_CONVERSION:
+                query.append(" WHERE f_view >= ? AND (f_view_paid * 100) < (? * f_view)",
+                        filter.minimumViews, filter.maxConversion);
+                break;
+            default: break;
+        }
+    }
+
+    int count(Connection conn, AdminProductPerformanceController.Filter filter, Coverage coverage) throws SQLException {
+        Query query;
+        String source;
+        switch (filter.activeQuick()) {
+            case SOLD:
+            case UNSOLD:
+                query = metrics(filter, filter.products, coverage, "");
+                source = "metrics";
+                break;
+            case LOW_CONVERSION:
+                query = metrics(filter, filter.products, coverage, "");
+                ProductConversionDAO.rows(query, filter, coverage);
+                source = "conversion_rows";
+                break;
+            default:
+                query = scope(filter.products, "");
+                source = "scoped";
+                break;
+        }
+        query.append(" SELECT COUNT(*) FROM " + source + " p");
+        appendQuick(query, filter);
+        try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
+            row.next();
+            return row.getInt(1);
+        }
+    }
+
+    public static final class Ranked {
+        public final String id, name, code, imageUrl;
+        public final long value;
+
+        Ranked(ResultSet row) throws SQLException {
+            id = row.getString("product_id");
+            name = row.getString("name");
+            code = row.getString("product_code");
+            imageUrl = row.getString("image_url");
+            value = row.getLong("metric");
+        }
+    }
+
+    List<Ranked> ranking(Connection conn, AdminProductPerformanceController.Filter filter, Coverage coverage,
+            AdminProductPerformanceController.Rank metric, int limit) throws SQLException {
+        Query query = scope(filter.products, "");
+        String source;
+        if (metric.behavior()) {
+            behavior(query, filter, coverage, "e.product_id");
+            source = "acts";
+        } else {
+            sales(query, filter, "i.product_id");
+            source = "sales";
+        }
+        query.append(" SELECT s.product_id,s.name,s.product_code,s.image_url,v." + metric.column + " AS metric"
+                + " FROM " + source + " v JOIN scoped s ON s.product_id=v.bucket"
+                + " WHERE v." + metric.column + ">0 ORDER BY metric DESC,s.product_id LIMIT ?", limit);
+        try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
+            List<Ranked> rows = new ArrayList<>();
+            while (row.next()) rows.add(new Ranked(row));
+            return rows;
+        }
+    }
+
+    public static final class CategorySales {
+        public final String id, name;
+        public final long revenue;
+
+        CategorySales(ResultSet row) throws SQLException {
+            id = row.getString("root_id");
+            name = row.getString("root_name");
+            revenue = row.getLong("revenue");
+        }
+    }
+
+    List<CategorySales> categorySales(Connection conn, AdminProductPerformanceController.Filter filter) throws SQLException {
+        Query query = scope(filter.products, "");
+        if (!query.sql.toString().startsWith("WITH RECURSIVE")) query.sql.insert(5, "RECURSIVE ");
+        sales(query, filter, "i.product_id");
+        query.append(", category_roots AS (SELECT category_id, category_id root_id FROM categories WHERE parent_id IS NULL"
+                + " UNION ALL SELECT c.category_id,r.root_id FROM categories c JOIN category_roots r ON c.parent_id=r.category_id)"
+                + " SELECT r.root_id, c.name root_name, COALESCE(SUM(s.revenue),0) revenue FROM scoped p"
+                + " LEFT JOIN sales s ON p.product_id=s.bucket LEFT JOIN category_roots r ON r.category_id=p.category_id"
+                + " LEFT JOIN categories c ON c.category_id=r.root_id GROUP BY r.root_id,c.name"
+                + " ORDER BY revenue DESC,r.root_id");
+        try (PreparedStatement statement = query.prepare(conn); ResultSet row = statement.executeQuery()) {
+            List<CategorySales> rows = new ArrayList<>();
+            while (row.next()) rows.add(new CategorySales(row));
             return rows;
         }
     }

@@ -1,0 +1,50 @@
+<%@ page pageEncoding="UTF-8" %>
+<section class="performance-overview" aria-label="핵심 지표">
+    <p class="performance-comparison-period">비교 기간 <%= performance.previousStart %> ~ <%= performance.start.minusDays(1) %>
+        <% if (performance.partialDay) { %> · 오늘 집계 진행 중 (직전 전체 기간과 비교)<% } %></p>
+    <h2 class="performance-group-title">판매 성과</h2>
+    <div class="store-metrics performance-metrics" aria-label="판매 성과">
+        <div><span>순상품 매출</span><strong data-metric="revenue"><%= number(performance.summary.revenue) %>원</strong>
+            <small><%= delta(performance.summary.revenue, performance.previous.revenue, true) %></small>
+            <a data-admin-query-link href="<%= performance.rankUrl(Rank.REVENUE) %>">순위 보기</a></div>
+        <div><span>순판매 수량</span><strong data-metric="units"><%= number(performance.summary.units) %>개</strong>
+            <small><%= delta(performance.summary.units, performance.previous.units, true) %></small></div>
+        <div><span>고유 구매 회원</span><strong data-metric="buyers"><%= number(performance.summary.uniqueBuyers) %>명</strong>
+            <small><%= delta(performance.summary.uniqueBuyers, performance.previous.uniqueBuyers, true) %> · 회원당 한 번</small></div>
+    </div>
+    <h2 class="performance-group-title">고객 행동</h2>
+    <div class="store-metrics performance-metrics" aria-label="고객 행동">
+        <div><span>상품 조회</span><strong data-metric="views"><%= behavior(performance.hasBehavior, performance.summary.views) %></strong>
+            <small><%= delta(performance.summary.views, performance.previous.views, performance.comparableBehavior) %></small>
+            <a data-admin-query-link href="<%= performance.rankUrl(Rank.VIEW) %>">순위 보기</a></div>
+        <div><span>찜 등록</span><strong data-metric="wish"><%= behavior(performance.hasBehavior, performance.summary.wishAdds) %></strong>
+            <small><%= delta(performance.summary.wishAdds, performance.previous.wishAdds, performance.comparableBehavior) %></small></div>
+        <div><span>장바구니 등록</span><strong data-metric="cart"><%= behavior(performance.hasBehavior, performance.summary.cartAdds) %></strong>
+            <small><%= delta(performance.summary.cartAdds, performance.previous.cartAdds, performance.comparableBehavior) %></small></div>
+    </div>
+    <div class="performance-overview-panels">
+        <section class="admin-panel">
+            <h2>판매 상품 현황</h2>
+            <% if (performance.summary.products > 0) { %>
+                <p>판매 발생 비율 <strong><%= percentage(performance.summary.sold, performance.summary.products) %></strong></p>
+                <meter aria-label="판매 발생 상품 비율" min="0" max="<%= performance.summary.products %>"
+                       value="<%= performance.summary.sold %>"></meter>
+            <% } else { %><p>분석 대상 상품이 없습니다.</p><% } %>
+            <p>전체 <strong><%= number(performance.summary.products) %>종</strong> ·
+                <a data-admin-query-link href="<%= performance.quickUrl(Quick.SOLD) %>">판매 발생 <strong><%= number(performance.summary.sold) %>종</strong></a> ·
+                <a data-admin-query-link href="<%= performance.quickUrl(Quick.UNSOLD) %>">미판매 <strong data-metric="unsold"><%= number(performance.summary.unsold) %>종</strong></a>
+            </p>
+        </section>
+        <section class="admin-panel">
+            <h2>순상품 매출 TOP 3</h2>
+            <% if (performance.ranking.isEmpty()) { %><p>순상품 매출이 있는 상품이 없습니다.</p><% } %>
+            <ol class="performance-ranking">
+                <% for (Ranked item : performance.ranking) { %>
+                <li><img alt="" width="36" height="36" src="<%= ProductView.image(context, item.imageUrl) %>">
+                    <span><%= ProductView.escape(item.name) %></span><strong><%= number(item.value) %>원</strong></li>
+                <% } %>
+            </ol>
+            <a class="button secondary" data-admin-query-link href="<%= performance.rankUrl(Rank.REVENUE) %>">전체 보기</a>
+        </section>
+    </div>
+</section>
