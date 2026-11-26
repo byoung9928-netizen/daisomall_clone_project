@@ -2,6 +2,7 @@ package daiso.product.controller;
 
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
+import daiso.product.controller.ProductConversionDAO.Metrics;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -44,7 +45,11 @@ public final class AdminProductPerformanceController {
         REVENUE("순상품 매출 높은순", "revenue DESC"), UNITS("순판매 수량 많은순", "units DESC"),
         VIEW("조회 많은순", "views DESC"), WISH("찜 등록 많은순", "wish_add DESC"),
         CART("장바구니 등록 많은순", "cart_add DESC"), BUYERS("구매 회원 많은순", "buyers DESC"),
-        NAME("상품명순", "name ASC"), STOCK("온라인 재고 적은순", "stock_quantity ASC");
+        NAME("상품명순", "name ASC"), STOCK("온라인 재고 적은순", "stock_quantity ASC"),
+        CONVERSION_HIGH("조회 대비 결제 전환율 높은순", "(f_view<" + LOW_VIEW_SAMPLE
+                + "), f_view_paid/NULLIF(f_view,0) DESC"),
+        CONVERSION_LOW("조회 대비 결제 전환율 낮은순", "(f_view<" + LOW_VIEW_SAMPLE
+                + "), f_view_paid/NULLIF(f_view,0) ASC");
 
         public final String label;
         final String order;
@@ -119,6 +124,9 @@ public final class AdminProductPerformanceController {
                     PAGE_SIZE, (page - 1) * PAGE_SIZE, "");
             ProductPerformanceDAO.Row selected = null;
             ProductPerformanceDAO.Summary peers = null;
+            Metrics peerConversion = null;
+            Metrics conversion = ProductConversionDAO.summary(conn, ProductPerformanceDAO.scope(filter.products, ""),
+                    filter, coverage, false);
             if (!filter.detail.isEmpty()) {
                 selected = rows.stream().filter(row -> row.id.equals(filter.detail)).findFirst().orElse(null);
                 if (selected == null) {
@@ -126,13 +134,15 @@ public final class AdminProductPerformanceController {
                             .stream().findFirst().orElse(null);
                 }
                 if (selected != null) {
-                    peers = performance.summary(conn, filter, AdminProductFilter.performanceScope(selected.category, ""),
-                            coverage, selected.id);
+                    AdminProductFilter peerProducts = AdminProductFilter.performanceScope(selected.category, "");
+                    peers = performance.summary(conn, filter, peerProducts, coverage, selected.id);
+                    peerConversion = ProductConversionDAO.summary(conn, ProductPerformanceDAO.scope(peerProducts, selected.id),
+                            filter, coverage, true);
                 }
             }
             request.setAttribute("productPerformance", new Page(request.getContextPath(), filter, coverage, total,
                     products.findAdminCategories(conn, false), rows, performance.trend(conn, filter, coverage),
-                    selected, peers, page, pages));
+                    selected, peers, conversion, peerConversion, page, pages));
             conn.commit();
             return VIEW;
         } catch (IllegalArgumentException error) {
@@ -157,17 +167,35 @@ public final class AdminProductPerformanceController {
             AdminProductController.csvRow(output, "상품 ID", "품번", "상품명", "카테고리", "판매 상태", "시작일(KST)",
                     "종료일(KST)", "시연 데이터", "행동 첫 기록일(KST)", "기간 조회", "고유 조회 회원", "기간 찜 등록",
                     "기간 찜 취소", "현재 찜 회원", "기간 장바구니 등록", "기간 장바구니 삭제", "현재 장바구니 회원",
-                    "기간 유효 구매 회원", "기간 순판매 수량", "기간 순상품 매출(원)", "활성 리뷰 수", "활성 평균 평점", "현재 온라인 재고");
+                    "기간 유효 구매 회원", "기간 순판매 수량", "기간 순상품 매출(원)", "활성 리뷰 수", "활성 평균 평점", "현재 온라인 재고",
+                    "관찰 기간(일)", "조회 코호트 회원", "조회 후 찜 회원", "조회 후 찜 비율(%)",
+                    "조회 후 장바구니 회원", "조회 후 장바구니 비율(%)", "조회 후 승인 회원", "조회 대비 결제 전환율(%)",
+                    "조회 후 순구매 회원", "조회 대비 순구매율(%)", "직접 결제 회원", "장바구니 경유 결제 회원",
+                    "장바구니 코호트 회원", "장바구니 후 승인 회원", "장바구니 대비 결제 전환율(%)",
+                    "관찰 완료 장바구니 회원", "관찰 완료 미구매 회원", "최종 미구매율(%)",
+                    "주문", "결제 승인 주문", "주문 대비 승인율(%)", "미승인 실패 주문", "결제 실패율(%)",
+                    "승인 후 취소 주문", "취소율(%)", "승인 후 환불 주문", "환불율(%)", "조회 표본 상태");
             Map<String, String> categories = products.findAdminCategories(conn, false);
             boolean hasBehavior = hasBehavior(coverage, filter.endExclusive);
             for (ProductPerformanceDAO.Row row : performance.rows(conn, filter, filter.products, coverage, 0, 0, "")) {
+                Metrics flow = row.conversion;
                 AdminProductController.csvRow(output, row.id, row.code, row.name,
                         categories.getOrDefault(row.category, row.category), AdminProductController.STATUSES.getOrDefault(row.status, row.status),
                         filter.start, filter.endExclusive.minusDays(1), filter.includeDemo ? "포함" : "제외",
                         coverage.firstDay, hasBehavior ? row.views : null, hasBehavior ? row.viewers : null,
                         hasBehavior ? row.wishAdds : null, hasBehavior ? row.wishRemoves : null, row.currentWish,
                         hasBehavior ? row.cartAdds : null, hasBehavior ? row.cartRemoves : null, row.currentCart, row.buyers,
-                        row.units, row.revenue, row.reviews, row.rating, row.stock);
+                        row.units, row.revenue, row.reviews, row.rating, row.stock,
+                        ProductConversionDAO.DAYS, hasBehavior ? flow.viewed : null, hasBehavior ? flow.wished : null,
+                        Metrics.percent(flow.wished, flow.viewed), hasBehavior ? flow.cartAfterView : null,
+                        Metrics.percent(flow.cartAfterView, flow.viewed), hasBehavior ? flow.viewPaid : null,
+                        Metrics.percent(flow.viewPaid, flow.viewed), hasBehavior ? flow.viewNet : null,
+                        Metrics.percent(flow.viewNet, flow.viewed), hasBehavior ? flow.direct : null, hasBehavior ? flow.viaCart : null,
+                        hasBehavior ? flow.cart : null, hasBehavior ? flow.cartPaid : null, Metrics.percent(flow.cartPaid, flow.cart),
+                        hasBehavior ? flow.matureCart : null, hasBehavior ? flow.lostCart : null, Metrics.percent(flow.lostCart, flow.matureCart),
+                        flow.orders, flow.paid, Metrics.percent(flow.paid, flow.orders), flow.failed, Metrics.percent(flow.failed, flow.orders),
+                        flow.cancelled, Metrics.percent(flow.cancelled, flow.paid), flow.refunded, Metrics.percent(flow.refunded, flow.paid),
+                        flow.viewed == 0 ? "분석 불가" : flow.viewed < LOW_VIEW_SAMPLE ? "표본 부족" : "집계 가능");
             }
             conn.commit();
         } catch (IllegalArgumentException error) {
@@ -206,6 +234,7 @@ public final class AdminProductPerformanceController {
         public final LocalDate start, end, firstBehaviorDay;
         public final ProductPerformanceDAO.Summary summary, peers;
         public final ProductPerformanceDAO.Row selected;
+        public final Metrics conversion, peerConversion;
         public final List<ProductPerformanceDAO.Row> rows;
         public final List<ProductPerformanceDAO.Day> trend;
         public final InventoryPagination pagination;
@@ -214,7 +243,8 @@ public final class AdminProductPerformanceController {
 
         Page(String context, Filter filter, ProductPerformanceDAO.Coverage coverage, ProductPerformanceDAO.Summary summary,
                 Map<String, String> categories, List<ProductPerformanceDAO.Row> rows, List<ProductPerformanceDAO.Day> trend,
-                ProductPerformanceDAO.Row selected, ProductPerformanceDAO.Summary peers, int page, int pages) {
+                ProductPerformanceDAO.Row selected, ProductPerformanceDAO.Summary peers,
+                Metrics conversion, Metrics peerConversion, int page, int pages) {
             this.context = context;
             this.params = filter.params();
             this.categories = categories;
@@ -230,6 +260,8 @@ public final class AdminProductPerformanceController {
             this.rows = rows;
             this.trend = trend;
             this.selected = selected;
+            this.conversion = conversion;
+            this.peerConversion = peerConversion;
             this.peers = peers;
             this.detailId = filter.detail;
             first = rows.isEmpty() ? 0 : (page - 1) * PAGE_SIZE + 1;

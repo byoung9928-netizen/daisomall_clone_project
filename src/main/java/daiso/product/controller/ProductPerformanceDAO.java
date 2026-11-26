@@ -46,18 +46,18 @@ public final class ProductPerformanceDAO {
     }
 
     // Demo actions inherit the existing fixture member ID, login and email. Demo purchases also carry their own markers.
-    private static String demoMember(String id) {
+    static String demoMember(String id) {
         return "EXISTS (SELECT 1 FROM members dm WHERE dm.member_id = " + id
                 + " AND dm.member_id REGEXP '^DEMO_RANK_V1_M[0-9]{4}$'"
                 + " AND dm.login_id = CONCAT('demorank', RIGHT(dm.member_id, 4))"
                 + " AND dm.email = CONCAT(dm.login_id, '@example.invalid'))";
     }
 
-    private static String liveMember(String id, boolean includeDemo) {
+    static String liveMember(String id, boolean includeDemo) {
         return includeDemo ? "" : " AND NOT " + demoMember(id);
     }
 
-    private static Query scope(AdminProductFilter filter, String excluded) {
+    static Query scope(AdminProductFilter filter, String excluded) {
         ProductDAO.AdminScope scope = ProductDAO.adminScope(filter, true);
         Query query = new Query(scope.prefix.isEmpty() ? "WITH " : scope.prefix.stripTrailing() + ", ");
         query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity")
@@ -150,6 +150,7 @@ public final class ProductPerformanceDAO {
         public final long views, viewers, wishAdds, wishRemoves, cartAdds, cartRemoves, buyers, units, revenue;
         public final long currentWish, currentCart, reviews;
         public final BigDecimal rating;
+        public final ProductConversionDAO.Metrics conversion;
 
         Row(ResultSet row) throws SQLException {
             id = row.getString("product_id");
@@ -171,13 +172,15 @@ public final class ProductPerformanceDAO {
             currentCart = row.getLong("current_cart");
             reviews = row.getLong("reviews");
             rating = row.getBigDecimal("rating");
+            conversion = new ProductConversionDAO.Metrics(row, false);
         }
     }
 
     List<Row> rows(Connection conn, AdminProductPerformanceController.Filter filter, AdminProductFilter products,
             Coverage coverage, int limit, int offset, String detailId) throws SQLException {
         Query query = metrics(filter, products, coverage, "");
-        query.append(", page_rows AS (SELECT * FROM metrics");
+        ProductConversionDAO.rows(query, filter, coverage);
+        query.append(", page_rows AS (SELECT * FROM conversion_rows");
         if (!detailId.isEmpty()) query.append(" WHERE product_id=?", detailId);
         query.append(" ORDER BY " + filter.sort.order + ",product_id");
         if (limit > 0) query.append(" LIMIT ? OFFSET ?", limit, offset);
@@ -246,7 +249,7 @@ public final class ProductPerformanceDAO {
         }
     }
 
-    private static final class Query {
+    static final class Query {
         final StringBuilder sql;
         final List<Object> args = new ArrayList<>();
 

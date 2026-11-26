@@ -1,8 +1,14 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.util.Locale,java.util.Map,daiso.product.controller.ProductView,daiso.product.controller.ProductPerformanceDAO.Row,daiso.product.controller.ProductPerformanceDAO.Day,daiso.product.controller.AdminProductPerformanceController,daiso.product.controller.AdminProductPerformanceController.Page,daiso.product.controller.AdminProductPerformanceController.Period,daiso.product.controller.AdminProductPerformanceController.Sort" %>
+<%@ page import="daiso.product.controller.ProductConversionDAO.Metrics,java.util.Locale,java.util.Map,daiso.product.controller.ProductView,daiso.product.controller.ProductPerformanceDAO.Row,daiso.product.controller.ProductPerformanceDAO.Day,daiso.product.controller.AdminProductPerformanceController,daiso.product.controller.AdminProductPerformanceController.Page,daiso.product.controller.AdminProductPerformanceController.Period,daiso.product.controller.AdminProductPerformanceController.Sort" %>
 <%!
     private static String number(long value) { return String.format(Locale.KOREA, "%,d", value); }
     private static String behavior(boolean available, long value) { return available ? number(value) : "—"; }
+    private static String percentage(long numerator, long denominator) {
+        return denominator == 0 ? "분석 불가" : Metrics.percent(numerator, denominator).toPlainString() + "%";
+    }
+    private static String fraction(long numerator, long denominator, String unit) {
+        return denominator == 0 ? "분모 없음" : number(numerator) + unit + " / " + number(denominator) + unit;
+    }
     private static String average(long total, int peers) {
         return peers == 0 ? "—" : String.format(Locale.KOREA, "%,.1f", (double) total / peers);
     }
@@ -18,7 +24,7 @@
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-workspace.css?v=batch-selection-2">
     <link rel="stylesheet" href="<%= context %>/assets/css/admin-stores.css">
-    <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-performance.css?v=1">
+    <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-performance.css?v=conversion-1">
     <script src="<%= context %>/assets/js/common/admin-product-workspace.js?v=batch-selection-1" defer></script>
     <script src="<%= context %>/assets/js/common/admin-product-suggestions.js?v=inventory-suggest-1" defer></script>
     <script src="<%= context %>/assets/js/common/admin-product-performance.js?v=1" defer></script>
@@ -117,6 +123,8 @@
                 <div><span>미판매 상품</span><strong data-metric="unsold"><%= number(performance.summary.unsold) %>종</strong></div>
             </div>
 
+            <%@ include file="product-conversion.jspf" %>
+
             <section class="admin-panel performance-trend" aria-labelledby="performance-trend-title">
                 <h2 id="performance-trend-title">일별 행동·판매 추이</h2>
                 <p>판매는 결제 승인일 기준입니다. 완료된 전액 취소·환불은 원래 승인일의 수량과 상품 매출에서 제외합니다.</p>
@@ -180,6 +188,21 @@
                         </tbody>
                     </table>
                     </div>
+                    <% Metrics itemFlow = item.conversion;
+                       Metrics peerFlow = performance.peerConversion; %>
+                    <h3>구매 행동 및 카테고리 비교</h3>
+                    <p>조회 대비 결제 전환율 <strong><%= percentage(itemFlow.viewPaid, itemFlow.viewed) %></strong>
+                        · 카테고리 가중 평균 <strong><%= percentage(peerFlow.viewPaid, peerFlow.viewed) %></strong>
+                        <small>(이 상품 제외 · 조회 회원 표본 수로 가중)</small></p>
+                    <dl class="performance-detail-stats">
+                        <div><dt>조회 대비 순구매율</dt><dd><%= percentage(itemFlow.viewNet, itemFlow.viewed) %></dd></div>
+                        <div><dt>조회 후 찜·장바구니 등록률</dt><dd><%= percentage(itemFlow.wished, itemFlow.viewed) %> · <%= percentage(itemFlow.cartAfterView, itemFlow.viewed) %></dd></div>
+                        <div><dt>직접·장바구니 경유 결제</dt><dd><%= itemFlow.viewed == 0 ? "—" : number(itemFlow.direct) + "명 · " + number(itemFlow.viaCart) + "명" %></dd></div>
+                        <div><dt>장바구니 대비 결제 전환율</dt><dd><%= percentage(itemFlow.cartPaid, itemFlow.cart) %></dd></div>
+                        <div><dt>장바구니 최종 미구매율</dt><dd><%= percentage(itemFlow.lostCart, itemFlow.matureCart) %></dd></div>
+                        <div><dt>주문 대비 결제 완료·실패율</dt><dd><%= percentage(itemFlow.paid, itemFlow.orders) %> · <%= percentage(itemFlow.failed, itemFlow.orders) %></dd></div>
+                        <div><dt>승인 후 취소·환불율</dt><dd><%= percentage(itemFlow.cancelled, itemFlow.paid) %> · <%= percentage(itemFlow.refunded, itemFlow.paid) %></dd></div>
+                    </dl>
                     <dl class="performance-detail-stats">
                         <div><dt>기간 고유 조회 회원</dt><dd><%= behavior(performance.hasBehavior, item.viewers) %></dd></div>
                         <div><dt>기간 찜 취소</dt><dd><%= behavior(performance.hasBehavior, item.wishRemoves) %></dd></div>
@@ -208,7 +231,7 @@
                 <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품별 성과 표">
                     <table class="admin-table performance-rows">
                         <thead><tr><th scope="col">상품</th><th scope="col">기간 조회</th><th scope="col">기간 찜</th><th scope="col">기간 장바구니</th>
-                            <th scope="col">기간 구매·판매</th><th scope="col">현재 찜·장바구니</th><th scope="col">활성 리뷰</th>
+                            <th scope="col">기간 구매·판매</th><th scope="col">조회 대비 결제 전환율</th><th scope="col">현재 찜·장바구니</th><th scope="col">활성 리뷰</th>
                             <th scope="col">현재 온라인 재고</th><th scope="col">관리</th></tr></thead>
                         <tbody>
                             <% for (Row item : performance.rows) { %>
@@ -220,12 +243,17 @@
                                 <td>등록 <%= behavior(performance.hasBehavior, item.wishAdds) %><small>취소 <%= behavior(performance.hasBehavior, item.wishRemoves) %></small></td>
                                 <td>등록 <%= behavior(performance.hasBehavior, item.cartAdds) %><small>삭제 <%= behavior(performance.hasBehavior, item.cartRemoves) %></small></td>
                                 <td><strong><%= number(item.revenue) %>원</strong><small>순판매 <%= number(item.units) %>개 · 구매 <%= number(item.buyers) %>명</small></td>
+                                <td data-product-conversion><strong><%= percentage(item.conversion.viewPaid, item.conversion.viewed) %></strong>
+                                    <% if (item.conversion.viewed > 0 && item.conversion.viewed < AdminProductPerformanceController.LOW_VIEW_SAMPLE) { %>
+                                        <small class="conversion-small-sample">표본 부족</small>
+                                    <% } %>
+                                    <small><%= fraction(item.conversion.viewPaid, item.conversion.viewed, "명") %></small></td>
                                 <td>찜 <%= number(item.currentWish) %>명<small>장바구니 <%= number(item.currentCart) %>명</small></td>
                                 <td><%= item.rating == null ? "—" : item.rating %><small><%= number(item.reviews) %>건</small></td>
                                 <td><%= number(item.stock) %>개</td>
                                 <td><a class="button secondary" data-admin-query-link href="<%= performance.detail(item.id) %>">상세</a></td>
                             </tr>
-                            <% } if (performance.rows.isEmpty()) { %><tr><td colspan="9">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                            <% } if (performance.rows.isEmpty()) { %><tr><td colspan="10">조건에 맞는 상품이 없습니다.</td></tr><% } %>
                         </tbody>
                     </table>
                 </div>
