@@ -1069,6 +1069,32 @@ public class OrderDAO {
 		    }
 		}
 		
+		//픽업준비가 끝난 주문의 회원 이메일과 수령매장을 발송 대기열에 저장
+		private void enqueuePickupReadyEmail(Connection connection, String orderNo) 
+			throws SQLException{
+			String sql = 
+					"INSERT INTO order_email_outbox "
+				+"(order_id , event_type, recipient_email, subject, body) "
+				+"SELECT o.order_id, 'PICKUP_READY' , m.email, "
+				+"		'주문하신 상품의 픽업 준비가 완료되었습니다.',"
+				+"		CONCAT('픽업 매장: ',s.store_name ,CHAR(10), "
+				+"			   '주문 번호: ',o.order_no, CHAR(10), "
+				+"			   '매장에 방문해 직원에게 주문번호를 보여주세요.') "
+				+"FROM orders o "
+				+"JOIN members m ON m.member_id = o.member_id "
+				+"JOIN store_locations s ON s.store_id = o.pickup_store_id "
+				+"WHERE o.order_no = ? "
+				+"  AND o.fulfillment_type = 'PICKUP' "
+				+"  AND o.pickup_status = 'READY' "
+				+"  AND NULLIF(TRIM(m.email), '') IS NOT NULL "
+				+"ON DUPLICATE KEY UPDATE email_id = order_email_outbox.email_id";
+			
+			try (PreparedStatement statement = connection.prepareStatement(sql)){
+				statement.setString(1, orderNo);
+				statement.executeUpdate();
+			}
+		}
+		
 		public boolean advancePickupStatus(Connection connection, String storeId,
 		        String orderNo, boolean markPickedUp) throws SQLException {
 		    String sql = "UPDATE orders o SET o.pickup_status = ? "
@@ -1093,7 +1119,11 @@ public class OrderDAO {
 		        } else {
 		            statement.setNull(4, java.sql.Types.VARCHAR);
 		        }
-		        return statement.executeUpdate() == 1;
+		       boolean changed = statement.executeUpdate()==1;
+		       if(changed && ! markPickedUp) {
+		    	   enqueuePickupReadyEmail(connection,orderNo);
+		       }
+		       return changed;
 		    }
 		}
 		
@@ -1189,7 +1219,7 @@ public class OrderDAO {
 		    }
 		}
 		//토스 승인 결과, 선택 매장 재고, 픽업 장바구니를 한 트랜잭션에 반영
-		// ===== 토스페이와 카카오페이의 픽업 승인 결과를 매장 재고에 반영 =====
+		// 토스페이와 카카오페이의 픽업 승인 결과를 매장 재고에 반영
 		public void completePickupTossApproval(String memberId, long orderId,
 		        String paymentKey, int amount, Timestamp approvedAt) throws SQLException {
 		    completePickupApproval(memberId, orderId, paymentKey, amount, approvedAt, "TOSSPAY");
