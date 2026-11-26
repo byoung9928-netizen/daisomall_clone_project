@@ -1,18 +1,6 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="daiso.product.controller.ProductConversionDAO.Metrics,java.util.Locale,java.util.Map,daiso.product.controller.ProductView,daiso.product.controller.ProductPerformanceDAO.Row,daiso.product.controller.ProductPerformanceDAO.Day,daiso.product.controller.AdminProductPerformanceController,daiso.product.controller.AdminProductPerformanceController.Page,daiso.product.controller.AdminProductPerformanceController.Period,daiso.product.controller.AdminProductPerformanceController.Sort,daiso.product.controller.AdminProductPerformanceController.Tab" %>
-<%!
-    private static String number(long value) { return String.format(Locale.KOREA, "%,d", value); }
-    private static String behavior(boolean available, long value) { return available ? number(value) : "—"; }
-    private static String percentage(long numerator, long denominator) {
-        return denominator == 0 ? "분석 불가" : Metrics.percent(numerator, denominator).toPlainString() + "%";
-    }
-    private static String fraction(long numerator, long denominator, String unit) {
-        return denominator == 0 ? "분모 없음" : number(numerator) + unit + " / " + number(denominator) + unit;
-    }
-    private static String average(long total, int peers) {
-        return peers == 0 ? "—" : String.format(Locale.KOREA, "%,.1f", (double) total / peers);
-    }
-%>
+<%@ page import="daiso.product.controller.ProductConversionDAO.Metrics,java.util.Locale,java.util.Map,daiso.product.controller.ProductView,daiso.product.controller.ProductPerformanceDAO.Row,daiso.product.controller.ProductPerformanceDAO.TrendBucket,daiso.product.controller.AdminProductPerformanceController,daiso.product.controller.AdminProductPerformanceController.Page,daiso.product.controller.AdminProductPerformanceController.Period,daiso.product.controller.AdminProductPerformanceController.Sort,daiso.product.controller.AdminProductPerformanceController.Tab,daiso.product.controller.AdminProductPerformanceController.Quick,daiso.product.controller.AdminProductPerformanceController.Rank,daiso.product.controller.ProductPerformanceDAO.Ranked,daiso.product.controller.ProductPerformanceDAO.CategorySales" %>
+<%@ include file="product-performance-format.jspf" %>
 <%
     Page performance = (Page) request.getAttribute("productPerformance");
     String route = request.getContextPath() + "/app/admin/products/performance";
@@ -24,10 +12,10 @@
     <%@ include file="../common/admin-head.jspf" %>
     <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-workspace.css?v=batch-selection-2">
     <link rel="stylesheet" href="<%= context %>/assets/css/admin-stores.css">
-    <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-performance.css?v=performance-tabs-1">
-    <script src="<%= context %>/assets/js/common/admin-product-workspace.js?v=batch-selection-1" defer></script>
+    <link rel="stylesheet" href="<%= context %>/assets/css/admin-product-performance.css?v=performance-hourly-1">
+    <script src="<%= context %>/assets/js/common/admin-product-workspace.js?v=performance-hourly-1" defer></script>
     <script src="<%= context %>/assets/js/common/admin-product-suggestions.js?v=inventory-suggest-1" defer></script>
-    <script src="<%= context %>/assets/js/common/admin-product-performance.js?v=performance-tabs-1" defer></script>
+    <script src="<%= context %>/assets/js/common/admin-product-performance.js?v=performance-hourly-1" defer></script>
 </head>
 <body class="admin-body product-admin-ux">
 <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
@@ -37,6 +25,7 @@
     <main id="admin-content" class="admin-content" tabindex="-1" data-admin-query="product-performance" data-admin-query-route="<%= route %>">
         <h1 class="page-title">상품 성과 분석</h1>
         <p class="error-message" role="alert" data-admin-query-error hidden></p>
+        <button class="button secondary" type="button" data-admin-query-retry hidden>다시 시도</button>
         <div data-admin-query-content>
             <% if (performance == null) { %>
                 <p class="error-message" role="alert"><%= ProductView.escape(request.getAttribute("productPerformanceError")) %></p>
@@ -47,8 +36,11 @@
                 <a id="performance-tab-<%= tab.key %>" data-admin-query-link href="<%= performance.tabUrl(tab) %>#performance-tab-<%= tab.key %>" <%= tab == performance.tab ? "aria-current=\"page\"" : "" %>><%= tab.label %></a>
                 <% } %>
             </nav>
-            <form class="admin-panel performance-filters" data-admin-query-form data-performance-filters method="get" action="<%= route %>">
+            <form class="admin-panel performance-filters" data-admin-query-form id="performance-query-form" data-admin-explicit-submit data-performance-filters method="get" action="<%= route %>">
                 <input type="hidden" name="tab" value="<%= performance.tab.key %>">
+                <input type="hidden" name="quick" value="<%= performance.quick.name() %>">
+                <input type="hidden" name="rank" value="<%= performance.rank.name() %>">
+                <input type="hidden" name="rankingLimit" value="<%= performance.rankingLimit %>">
                 <input type="hidden" name="filterStock" value="<%= ProductView.escape(performance.params.get("filterStock")) %>">
                 <input type="hidden" name="stockQuantity" value="<%= ProductView.escape(performance.params.get("stockQuantity")) %>">
                 <div class="performance-common-fields">
@@ -69,9 +61,11 @@
                         <input type="date" name="end" value="<%= performance.end %>">
                     </label>
                 </div>
-                <% if (performance.tab != Tab.PRODUCTS) { %>
-                <p class="performance-scope"><strong>적용된 상품 조건</strong> <%= ProductView.escape(performance.appliedProductFilters) %></p>
-                <% } %>
+                <div class="performance-actions">
+                    <button type="submit" class="button primary">조회</button>
+                    <a class="button secondary" data-admin-query-link href="<%= route %>?tab=<%= performance.tab.key %>">초기화</a>
+                    <a class="button secondary" href="<%= performance.csv() %>">CSV 다운로드</a>
+                </div>
                 <div class="performance-product-fields" <%= performance.tab == Tab.PRODUCTS ? "" : "hidden" %>>
                     <div class="field admin-product-suggest" data-admin-suggestions="<%= context %>/app/admin/products/suggestions"
                          data-suggest-filters="filterCategory filterStatus filterStock stockQuantity" data-suggest-stock-label="온라인 재고">
@@ -107,17 +101,34 @@
                             <% } %>
                         </select>
                     </label>
-                </div>
-                <div class="performance-actions">
-                    <button type="submit" class="button primary">조회</button>
-                    <a class="button secondary" data-admin-query-link href="<%= route %>?tab=<%= performance.tab.key %>">초기화</a>
-                    <a class="button secondary" href="<%= performance.csv() %>">CSV 다운로드</a>
+                    <% if (performance.tab != Tab.PRODUCTS) { %>
+                    <input type="hidden" name="pageSize" value="<%= performance.pageSize %>">
+                    <% } %>
+                    <% if (performance.quick == Quick.LOW_CONVERSION) { %>
+                    <label class="field">최소 고유 조회 회원
+                        <select name="minimumViews">
+                            <% for (int size : new int[]{10, 30, 50, 100}) { %>
+                            <option value="<%= size %>" <%= size == performance.minimumViews ? "selected" : "" %>><%= size %>명 이상</option>
+                            <% } %>
+                        </select>
+                    </label>
+                    <label class="field">결제 전환율
+                        <select name="maxConversion">
+                            <% for (int threshold : new int[]{1, 3, 5, 10}) { %>
+                            <option value="<%= threshold %>" <%= threshold == performance.maxConversion ? "selected" : "" %>><%= threshold %>% 미만</option>
+                            <% } %>
+                        </select>
+                    </label>
+                    <% } else { %>
+                    <input type="hidden" name="minimumViews" value="<%= performance.minimumViews %>">
+                    <input type="hidden" name="maxConversion" value="<%= performance.maxConversion %>">
+                    <% } %>
                 </div>
             </form>
 
-            <% if (performance.tab != Tab.PRODUCTS) { %>
             <p class="performance-period">
-                <strong><%= performance.start %> ~ <%= performance.end %></strong> (한국 시간)
+                <strong><%= performance.start %> ~ <%= performance.end %></strong> (한국 시간) ·
+                <%= ProductView.escape(performance.appliedProductFilters) %>
                 <% if (performance.firstBehaviorDay != null) { %> · 행동 수집 첫 기록일 <%= performance.firstBehaviorDay %><% } %>
             </p>
             <% if (!performance.hasBehavior) { %>
@@ -128,7 +139,7 @@
             <% } %>
             <details class="performance-guide">
                 <summary>집계 기준</summary>
-                <% if (performance.tab == Tab.OVERVIEW) { %>
+                <% if (performance.tab != Tab.CONVERSION) { %>
                 <p>판매는 결제 승인일 기준이며, 완료된 전액 취소·환불은 원래 승인일의 수량과 상품 매출에서 제외합니다.</p>
                 <% } else { %>
                 <p>첫 조회 또는 첫 장바구니 등록부터 7일간 관찰합니다. 조회·장바구니·구매의 발생 순서를 확인하고 회원을 중복 없이 셉니다.</p>
@@ -136,49 +147,48 @@
                     주문 지표는 주문 생성일 기준이며, 시연 주문은 앞선 조회 또는 장바구니 기록이 연결된 경우에 집계합니다.</p>
                 <% } %>
             </details>
-            <% } %>
             <% if (performance.tab == Tab.OVERVIEW) { %>
-            <h2 class="performance-group-title">기간 행동</h2>
-            <div class="store-metrics performance-metrics" aria-label="기간 성과 요약">
-                <div><span>상품 조회</span><strong data-metric="views"><%= behavior(performance.hasBehavior, performance.summary.views) %></strong></div>
-                <div><span>찜 등록</span><strong data-metric="wish"><%= behavior(performance.hasBehavior, performance.summary.wishAdds) %></strong></div>
-                <div><span>장바구니 등록</span><strong data-metric="cart"><%= behavior(performance.hasBehavior, performance.summary.cartAdds) %></strong></div>
-            </div>
-            <h2 class="performance-group-title">기간 판매</h2>
-            <div class="store-metrics performance-metrics" aria-label="기간 판매 요약">
-                <div><span>순판매 수량</span><strong data-metric="units"><%= number(performance.summary.units) %>개</strong></div>
-                <div><span>순상품 매출</span><strong data-metric="revenue"><%= number(performance.summary.revenue) %>원</strong></div>
-                <div><span>미판매 상품</span><strong data-metric="unsold"><%= number(performance.summary.unsold) %>종</strong></div>
-            </div>
+            <%@ include file="product-performance-overview.jspf" %>
 
             <section class="admin-panel performance-trend" aria-labelledby="performance-trend-title">
-                <h2 id="performance-trend-title">일별 행동·판매 추이</h2>
+                <h2 id="performance-trend-title"><%= performance.hourly ? "시간대별" : "일별" %> 행동·판매 추이</h2>
                 <div class="performance-charts">
-                    <% if (performance.hasBehavior) { %>
-                    <figure data-performance-chart="views"><figcaption>상품 조회 (건)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
-                    <figure data-performance-chart="wish,unwish"><figcaption>찜 등록·취소 (건)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
-                    <figure data-performance-chart="cart,uncart"><figcaption>장바구니 등록·삭제 (건)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
-                    <% } %>
+                    <figure data-performance-chart="revenue,previousRevenue"><figcaption>순상품 매출 (원)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
                     <figure data-performance-chart="units"><figcaption>순판매 수량 (개)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
-                    <figure data-performance-chart="revenue"><figcaption>순상품 매출 (원)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
+                    <% if (performance.hasBehavior || performance.hourly) { %>
+                    <figure data-performance-chart="views,wish,cart,unwish,uncart"><figcaption>고객 행동 (건)</figcaption><canvas aria-hidden="true"></canvas><small data-chart-range></small></figure>
+                    <% } %>
                 </div>
+                <% if (performance.hourly) { %>
+                <p class="performance-key">행동 기록 수집 전과 아직 지나지 않은 시간은 ‘—’로 표시합니다.</p>
+                <% } %>
                 <details class="performance-trend-data">
-                    <summary>일별 데이터 표 보기</summary>
-                    <div class="admin-table-scroll" tabindex="0" role="region" aria-label="일별 성과">
-                        <table class="admin-table" data-performance-days>
-                            <thead><tr><th scope="col">일자</th><th scope="col">조회</th><th scope="col">찜 등록</th><th scope="col">찜 취소</th>
-                                <th scope="col">장바구니 등록</th><th scope="col">장바구니 삭제</th><th scope="col">순판매 수량</th><th scope="col">순상품 매출</th></tr></thead>
+                    <summary><%= performance.hourly ? "시간대별" : "일별" %> 데이터 표 보기</summary>
+                    <div class="admin-table-scroll" tabindex="0" role="region" aria-label="<%= performance.hourly ? "시간대별 성과" : "일별 성과" %>">
+                        <table class="admin-table" data-performance-days data-hourly="<%= performance.hourly %>" data-trend-period="<%= performance.hourly ? performance.start + " · 00:00–24:00 (한국 시간)" : performance.start + " ~ " + performance.end %>">
+                            <thead><tr><th scope="col"><%= performance.hourly ? "시간 (한국 시간)" : "일자" %></th><th scope="col">조회</th><th scope="col">찜 등록</th><th scope="col">찜 취소</th>
+                                <th scope="col">장바구니 등록</th><th scope="col">장바구니 삭제</th><th scope="col">순판매 수량</th><th scope="col">순상품 매출</th><th scope="col">직전 기간 일자·매출</th></tr></thead>
                             <tbody>
-                                <% for (Day day : performance.trend) {
-                                    boolean covered = performance.firstBehaviorDay != null && !day.date.isBefore(performance.firstBehaviorDay); %>
-                                <tr data-date="<%= day.date %>"
-                                    <% if (covered) { %>data-views="<%= day.views %>" data-wish="<%= day.wishAdds %>" data-unwish="<%= day.wishRemoves %>"
-                                    data-cart="<%= day.cartAdds %>" data-uncart="<%= day.cartRemoves %>"<% } %>
-                                    data-units="<%= day.units %>" data-revenue="<%= day.revenue %>">
-                                    <th scope="row"><%= day.date %></th><td><%= behavior(covered, day.views) %></td>
-                                    <td><%= behavior(covered, day.wishAdds) %></td><td><%= behavior(covered, day.wishRemoves) %></td>
-                                    <td><%= behavior(covered, day.cartAdds) %></td><td><%= behavior(covered, day.cartRemoves) %></td>
-                                    <td><%= number(day.units) %>개</td><td><%= number(day.revenue) %>원</td>
+                                <% for (int dayIndex = 0; dayIndex < performance.trend.size(); dayIndex++) {
+                                    TrendBucket day = performance.trend.get(dayIndex);
+                                    TrendBucket earlier = performance.previousTrend.get(dayIndex); %>
+                                <tr data-date="<%= day.detail %>" data-tick="<%= day.tick %>"
+                                    data-state="<%= !day.available ? "future" : day.collecting ? "collecting" : "complete" %>"
+                                    <% if (day.covered) { %>data-views="<%= day.views %>" data-wish="<%= day.wishAdds %>"
+                                    data-unwish="<%= day.wishRemoves %>" data-cart="<%= day.cartAdds %>" data-uncart="<%= day.cartRemoves %>"<% } %>
+                                    <% if (day.available) { %>data-units="<%= day.units %>" data-revenue="<%= day.revenue %>"<% } %>
+                                    <% if (earlier.available) { %>data-previous-revenue="<%= earlier.revenue %>"<% } %>
+                                    data-previous-date="<%= earlier.detail %>">
+                                    <th scope="row"><%= day.label %>
+                                        <% if (!day.available) { %><small> · 집계 전</small>
+                                        <% } else if (day.collecting) { %><small> · 집계 진행 중</small><% } %>
+                                    </th>
+                                    <td><%= behavior(day.covered, day.views) %></td><td><%= behavior(day.covered, day.wishAdds) %></td>
+                                    <td><%= behavior(day.covered, day.wishRemoves) %></td><td><%= behavior(day.covered, day.cartAdds) %></td>
+                                    <td><%= behavior(day.covered, day.cartRemoves) %></td>
+                                    <td><%= day.available ? number(day.units) + "개" : "—" %></td>
+                                    <td><%= day.available ? number(day.revenue) + "원" : "—" %></td>
+                                    <td><%= earlier.available ? earlier.detail + " · " + number(earlier.revenue) + "원" : "—" %></td>
                                 </tr>
                                 <% } %>
                             </tbody>
@@ -188,28 +198,73 @@
             </section>
 
             <% } else if (performance.tab == Tab.CONVERSION) { %>
+                <% Metrics flow = performance.conversion; %>
                 <%@ include file="product-conversion.jspf" %>
+            <% } else if (performance.tab == Tab.POPULAR) { %>
+                <%@ include file="product-performance-popular.jspf" %>
             <% } else { %>
+            <nav class="performance-quick" aria-label="빠른 분석 필터">
+                <% for (Quick item : Quick.values()) { %>
+                <a data-admin-query-link href="<%= performance.quickUrl(item) %>" <%= item == performance.quick ? "aria-current=\"page\"" : "" %>><%= item.label %></a>
+                <% } %>
+            </nav>
             <section id="performance-results" aria-labelledby="performance-results-title">
                 <h2 id="performance-results-title">상품별 성과</h2>
-                <p role="status">상품 <%= number(performance.summary.products) %>종
+                <div class="performance-table-tools">
+                <p role="status">상품 <%= number(performance.totalProducts) %>종
                 <% if (performance.first > 0) { %> · <%= performance.first %>–<%= performance.last %>번째 표시 <% } %></p>
-                <p class="performance-key">기간 지표는 선택 기간 기준이며, 현재 상태와 활성 리뷰는 조회 시점 기준입니다. —는 수집 기록이 없는 기간을 표시합니다.</p>
-                <div class="admin-table-scroll" tabindex="0" role="region" aria-label="상품별 성과 표">
+                <div class="performance-table-options">
+                    <label class="field">페이지당 상품
+                        <select name="pageSize" form="performance-query-form" data-performance-page-size>
+                            <% for (int size : new int[]{20, 50, 100}) { %>
+                            <option value="<%= size %>" <%= size == performance.pageSize ? "selected" : "" %>><%= size %>개</option>
+                            <% } %>
+                        </select>
+                    </label>
+                <details class="performance-columns">
+                    <summary class="button secondary">표시 항목</summary>
+                    <div class="performance-actions">
+                        <% String[] columnNames = {"조회", "찜", "장바구니", "구매·판매", "결제 전환율", "현재 찜·장바구니", "활성 리뷰", "현재 재고"};
+                           for (int col = 0; col < columnNames.length; col++) { %>
+                        <label><input type="checkbox" data-performance-column="<%= col + 2 %>" checked> <%= columnNames[col] %></label>
+                        <% } %>
+                        <button class="button secondary" type="button" data-performance-show-all>전체 표시 · 기본값 복원</button>
+                    </div>
+                </details>
+                </div></div>
+                <p class="performance-key">기간 지표는 선택 기간 기준이며, 현재 상태와 활성 리뷰는 조회 시점 기준입니다.</p>
+                <div class="admin-table-scroll performance-table-scroll" tabindex="0" role="region" aria-label="상품별 성과 표">
                     <table class="admin-table performance-rows">
-                        <thead><tr><th scope="col">상품</th><th scope="col">기간 조회</th><th scope="col">기간 찜</th><th scope="col">기간 장바구니</th>
-                            <th scope="col">기간 구매·판매</th><th scope="col">조회 대비 결제 전환율</th><th scope="col">현재 찜·장바구니</th><th scope="col">활성 리뷰</th>
-                            <th scope="col">현재 온라인 재고</th><th scope="col">관리</th></tr></thead>
+                        <thead>
+                        <tr class="performance-column-groups"><th scope="col" rowspan="2" <%= performance.sortAttribute(Sort.NAME) %>><a data-admin-query-link href="<%= performance.sortUrl(performance.nextSort(Sort.NAME)) %>">상품 정보</a></th>
+                            <th scope="colgroup" colspan="3">고객 행동 · 선택 기간</th>
+                            <th scope="colgroup" colspan="2">판매 성과 · 선택 기간</th>
+                            <th scope="colgroup" colspan="3">현재 상태 · 조회 시점</th><th scope="col" rowspan="2">관리</th></tr>
+                        <tr>
+                            <% String[] headings = {"조회", "찜", "장바구니", "구매·판매", "결제 전환율", "찜·장바구니", "활성 리뷰", "온라인 재고"};
+                               Sort salesSort = performance.sort == Sort.UNITS || performance.sort == Sort.UNITS_ASC ? Sort.UNITS
+                                   : performance.sort == Sort.BUYERS || performance.sort == Sort.BUYERS_ASC ? Sort.BUYERS : Sort.REVENUE;
+                               if (salesSort == Sort.UNITS) headings[3] = "순판매 수량";
+                               if (salesSort == Sort.BUYERS) headings[3] = "구매 회원";
+                               Sort[] sorts = {Sort.VIEW, Sort.WISH, Sort.CART, salesSort, Sort.CONVERSION_HIGH, null, null, Sort.STOCK};
+                               for (int col = 0; col < headings.length; col++) {
+                                   Sort sort = sorts[col]; %>
+                                <th scope="col" data-performance-header="<%= col + 2 %>" <%= sort == null ? "" : performance.sortAttribute(sort) %>>
+                                    <% if (sort != null) { %><a data-admin-query-link href="<%= performance.sortUrl(performance.nextSort(sort)) %>"><%= headings[col] %></a>
+                                    <% } else { %><%= headings[col] %><% } %>
+                                </th>
+                            <% } %>
+                        </tr></thead>
                         <tbody>
                             <% for (Row item : performance.rows) { %>
                             <tr data-performance-product="<%= ProductView.escape(item.id) %>">
                                 <th scope="row">
                                     <div class="performance-product">
-                                        <img src="<%= ProductView.image(context, item.imageUrl) %>" alt="" width="40" height="40" loading="lazy">
+                                        <img src="<%= ProductView.image(context, item.imageUrl) %>" alt="" width="46" height="46" loading="lazy">
                                         <span><strong><%= ProductView.escape(item.name) %></strong>
                                             <small>품번 <%= ProductView.escape(item.code) %></small>
-                                            <small><%= ProductView.escape(performance.categories.getOrDefault(item.category, item.category)) %> ·
-                                                <%= ProductView.escape(performance.statuses.getOrDefault(item.status, item.status)) %></small></span>
+                                            <small><%= ProductView.escape(performance.categories.getOrDefault(item.category, item.category)) %></small>
+                                            <small class="performance-product-status"><%= ProductView.escape(performance.statuses.getOrDefault(item.status, item.status)) %></small></span>
                                     </div>
                                 </th>
                                 <td>조회 <%= behavior(performance.hasBehavior, item.views) %><small>고유 회원 <%= behavior(performance.hasBehavior, item.viewers) %></small></td>
@@ -220,86 +275,28 @@
                                     <% if (item.conversion.viewed > 0 && item.conversion.viewed < AdminProductPerformanceController.LOW_VIEW_SAMPLE) { %>
                                         <small class="conversion-small-sample">표본 부족</small>
                                     <% } %>
-                                    <small><%= fraction(item.conversion.viewPaid, item.conversion.viewed, "명") %></small></td>
+                                    <small><%= performance.hasBehavior ? fraction(item.conversion.viewPaid, item.conversion.viewed, "명") : "행동 미수집" %></small></td>
                                 <td>찜 <%= number(item.currentWish) %>명<small>장바구니 <%= number(item.currentCart) %>명</small></td>
                                 <td><%= item.rating == null ? "—" : item.rating %><small><%= number(item.reviews) %>건</small></td>
                                 <td><%= number(item.stock) %>개</td>
-                                <td><a id="<%= performance.rowAnchor(item.id) %>" class="button secondary" data-admin-query-link href="<%= performance.detail(item.id) %>">상세</a></td>
+                                <td><a id="<%= performance.rowAnchor(item.id) %>" class="button secondary" data-performance-detail-link href="<%= performance.detail(item.id) %>">상세</a></td>
                             </tr>
-                            <% } if (performance.rows.isEmpty()) { %><tr><td colspan="10">조건에 맞는 상품이 없습니다.</td></tr><% } %>
+                            <% } if (performance.rows.isEmpty()) { %><tr><td colspan="10">조건에 맞는 상품이 없습니다. <a data-admin-query-link href="<%= route %>?tab=products">필터 초기화</a></td></tr><% } %>
                         </tbody>
                     </table>
                 </div>
-                <% if (performance.pagination.pages > 1) { %>
-                    <nav class="admin-product-pagination" aria-label="상품 성과 페이지">
-                        <% if (performance.pagination.previous != null) { %><a href="<%= performance.pagination.previous %>">이전</a><% } %>
-                        <% for (Map.Entry<Integer, String> link : performance.pagination.links.entrySet()) {
-                            if (link.getKey() == performance.pagination.page) { %>
-                            <strong aria-current="page"><%= link.getKey() %></strong>
-                            <% } else { %><a href="<%= link.getValue() %>"><%= link.getKey() %></a><% } } %>
-                        <% if (performance.pagination.next != null) { %><a href="<%= performance.pagination.next %>">다음</a><% } %>
-                    </nav>
+                <% if (performance.totalProducts > 0) {
+                   InventoryPagination inventoryPagination = performance.pagination;
+                   request.setAttribute("adminPaginationLabel", "상품 성과 페이지");
+                   request.setAttribute("adminPaginationBoundaryControls", true); %>
+                    <%@ include file="inventory-pagination.jspf" %>
                 <% } %>
             </section>
             <% if (!performance.detailId.isEmpty()) { %>
-            <section id="product-performance-detail" class="admin-panel performance-detail" aria-labelledby="performance-detail-title">
-                <% if (performance.selected == null) { %>
-                    <h2 id="performance-detail-title">상품 상세 분석</h2>
-                    <p>현재 조회 조건에서 해당 상품을 찾을 수 없습니다.</p>
-                <% } else {
-                    Row item = performance.selected;
-                    int peers = performance.peers.products; %>
-                    <h2 id="performance-detail-title"><%= ProductView.escape(item.name) %> 상세 분석</h2>
-                    <p>품번 <%= ProductView.escape(item.code) %> · 동일 카테고리의 다른 상품 <%= peers %>종과 비교 (미판매 포함)</p>
-                    <% if (performance.hasBehavior && item.views < AdminProductPerformanceController.LOW_VIEW_SAMPLE) { %>
-                        <p class="performance-notice">이 상품의 조회 표본이 적습니다 (10건 미만).</p>
-                    <% } %>
-                    <% if (peers == 0) { %><p>비교할 동일 카테고리 상품이 없습니다.</p><% } %>
-                    <div class="admin-table-scroll" tabindex="0" role="region" aria-label="비교 지표">
-                    <table class="admin-table performance-comparison">
-                        <thead><tr><th scope="col">기간 지표</th><th scope="col">이 상품</th><th scope="col">카테고리 평균</th></tr></thead>
-                        <tbody>
-                            <tr><th scope="row">조회</th><td><%= behavior(performance.hasBehavior, item.views) %></td><td><%= performance.hasBehavior ? average(performance.peers.views, peers) : "—" %></td></tr>
-                            <tr><th scope="row">찜 등록</th><td><%= behavior(performance.hasBehavior, item.wishAdds) %></td><td><%= performance.hasBehavior ? average(performance.peers.wishAdds, peers) : "—" %></td></tr>
-                            <tr><th scope="row">장바구니 등록</th><td><%= behavior(performance.hasBehavior, item.cartAdds) %></td><td><%= performance.hasBehavior ? average(performance.peers.cartAdds, peers) : "—" %></td></tr>
-                            <tr><th scope="row">순판매 수량</th><td><%= number(item.units) %></td><td><%= average(performance.peers.units, peers) %></td></tr>
-                            <tr><th scope="row">순상품 매출 (원)</th><td><%= number(item.revenue) %></td><td><%= average(performance.peers.revenue, peers) %></td></tr>
-                        </tbody>
-                    </table>
-                    </div>
-                    <% Metrics itemFlow = item.conversion;
-                       Metrics peerFlow = performance.peerConversion; %>
-                    <h3>구매 행동 및 카테고리 비교</h3>
-                    <p>조회 대비 결제 전환율 <strong><%= percentage(itemFlow.viewPaid, itemFlow.viewed) %></strong>
-                        · 카테고리 가중 평균 <strong><%= percentage(peerFlow.viewPaid, peerFlow.viewed) %></strong>
-                        <small>(이 상품 제외 · 조회 회원 표본 수로 가중)</small></p>
-                    <dl class="performance-detail-stats">
-                        <div><dt>조회 대비 순구매율</dt><dd><%= percentage(itemFlow.viewNet, itemFlow.viewed) %></dd></div>
-                        <div><dt>조회 후 찜·장바구니 등록률</dt><dd><%= percentage(itemFlow.wished, itemFlow.viewed) %> · <%= percentage(itemFlow.cartAfterView, itemFlow.viewed) %></dd></div>
-                        <div><dt>직접·장바구니 경유 결제</dt><dd><%= itemFlow.viewed == 0 ? "—" : number(itemFlow.direct) + "명 · " + number(itemFlow.viaCart) + "명" %></dd></div>
-                        <div><dt>장바구니 대비 결제 전환율</dt><dd><%= percentage(itemFlow.cartPaid, itemFlow.cart) %></dd></div>
-                        <div><dt>장바구니 최종 미구매율</dt><dd><%= percentage(itemFlow.lostCart, itemFlow.matureCart) %></dd></div>
-                        <div><dt>주문 대비 결제 완료·실패율</dt><dd><%= percentage(itemFlow.paid, itemFlow.orders) %> · <%= percentage(itemFlow.failed, itemFlow.orders) %></dd></div>
-                        <div><dt>승인 후 취소·환불율</dt><dd><%= percentage(itemFlow.cancelled, itemFlow.paid) %> · <%= percentage(itemFlow.refunded, itemFlow.paid) %></dd></div>
-                    </dl>
-                    <dl class="performance-detail-stats">
-                        <div><dt>기간 고유 조회 회원</dt><dd><%= behavior(performance.hasBehavior, item.viewers) %></dd></div>
-                        <div><dt>기간 찜 취소</dt><dd><%= behavior(performance.hasBehavior, item.wishRemoves) %></dd></div>
-                        <div><dt>기간 장바구니 삭제</dt><dd><%= behavior(performance.hasBehavior, item.cartRemoves) %></dd></div>
-                        <div><dt>기간 유효 구매 회원</dt><dd><%= number(item.buyers) %>명</dd></div>
-                        <div><dt>현재 찜 회원</dt><dd><%= number(item.currentWish) %>명</dd></div>
-                        <div><dt>현재 장바구니 회원</dt><dd><%= number(item.currentCart) %>명</dd></div>
-                        <div><dt>활성 리뷰 평점·건수</dt><dd><%= item.rating == null ? "—" : item.rating %> · <%= number(item.reviews) %>건</dd></div>
-                        <div><dt>현재 온라인 재고</dt><dd><%= number(item.stock) %>개</dd></div>
-                    </dl>
-                    <nav class="performance-actions" aria-label="관련 관리자 화면">
-                        <a class="button secondary" href="<%= ProductView.url(context, "/app/admin/products", Map.of("edit", item.id)) %>#product-editor">상품 관리</a>
-                        <a class="button secondary" href="<%= ProductView.url(context, "/app/admin/inventory", Map.of("selectedProductId", item.id, "q", item.code)) %>">온라인 재고</a>
-                        <a class="button secondary" href="<%= ProductView.url(context, "/app/admin/products/reviews", Map.of("query", item.code)) %>">리뷰 관리</a>
-                    </nav>
-                <% } %>
-                <a class="button secondary" data-admin-query-link href="<%= performance.detail("") %>">상세 닫기</a>
-            </section>
+            <dialog class="performance-detail-dialog" aria-labelledby="performance-detail-title" data-performance-initial-dialog open>
+                <jsp:include page="product-performance-detail.jsp" />
+            </dialog>
+
             <% } %>
 
             <% } } %>

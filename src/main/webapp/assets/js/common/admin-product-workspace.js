@@ -3,6 +3,9 @@
     if (!root) return;
     const content = root.querySelector('[data-admin-query-content]');
     const error = root.querySelector('[data-admin-query-error]');
+    const retry = root.querySelector('[data-admin-query-retry]');
+    let failedUrl;
+    retry?.addEventListener('click', () => { if (failedUrl) navigate(failedUrl); });
     const route = new URL(root.dataset.adminQueryRoute, location.origin);
     let committed = new URL(location.href);
     const initialEntry = committed.href;
@@ -108,6 +111,7 @@
         pending = request;
         content.setAttribute('aria-busy', 'true');
         error.hidden = true;
+        if (retry) retry.hidden = true;
         try {
             const { next, destination } = await fetchWorkspace(url, request.controller.signal);
             if (pending !== request) return;
@@ -290,6 +294,7 @@
             };
             error.textContent = messages[failure.message] || '목록을 불러오지 못했습니다. 기존 결과를 유지합니다.';
             error.hidden = false;
+            if (retry) { failedUrl = url; retry.hidden = false; }
             if (restore) history.replaceState(null, '', committed);
         } finally {
             if (pending === request) {
@@ -319,6 +324,7 @@
     root.addEventListener('change', event => {
         if (event.target.matches('[data-admin-query-form] select, [data-admin-query-form] input[type="date"]')) {
             const form = event.target.form;
+            if (form.hasAttribute('data-admin-explicit-submit')) return;
             if (form.elements.historyPeriod?.value === 'CUSTOM'
                     && (!form.elements.historyStart.value || !form.elements.historyEnd.value)) return;
             form.requestSubmit();

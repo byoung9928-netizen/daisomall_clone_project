@@ -1,8 +1,16 @@
 <%@ page pageEncoding="UTF-8" %>
 <%@ page import="java.util.Map,daiso.product.controller.InventoryPagination" %>
+<% boolean adminPaginationBoundaryControls = Boolean.TRUE.equals(request.getAttribute("adminPaginationBoundaryControls")); %>
 <nav class="admin-product-pagination" aria-label="<%= request.getAttribute("adminPaginationLabel") == null ? "재고 목록 페이지" : daiso.product.controller.ProductView.escape(request.getAttribute("adminPaginationLabel")) %>">
+    <% if (adminPaginationBoundaryControls) {
+        if (inventoryPagination.page > 1) { %>
+        <a class="button secondary" href="<%= inventoryPagination.links.get(1) %>">처음</a>
+        <% } else { %><button type="button" class="button secondary" disabled>처음</button><% } %>
+    <% } %>
     <% if (inventoryPagination.previous != null) { %>
         <a class="button secondary" rel="prev" href="<%= inventoryPagination.previous %>">이전 페이지</a>
+    <% } else if (adminPaginationBoundaryControls) { %>
+        <button type="button" class="button secondary" disabled>이전 페이지</button>
     <% } %>
     <div class="admin-product-page-numbers">
         <% int lastInventoryPage = 0;
@@ -19,6 +27,13 @@
     </div>
     <% if (inventoryPagination.next != null) { %>
         <a class="button secondary" rel="next" href="<%= inventoryPagination.next %>">다음 페이지</a>
+    <% } else if (adminPaginationBoundaryControls) { %>
+        <button type="button" class="button secondary" disabled>다음 페이지</button>
+    <% } %>
+    <% if (adminPaginationBoundaryControls) {
+        if (inventoryPagination.page < inventoryPagination.pages) { %>
+        <a class="button secondary" href="<%= inventoryPagination.links.get(inventoryPagination.pages) %>">마지막</a>
+        <% } else { %><button type="button" class="button secondary" disabled>마지막</button><% } %>
     <% } %>
     <span>총 <%= inventoryPagination.pages %>페이지</span>
 </nav>
