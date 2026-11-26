@@ -4,6 +4,7 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.ProductConversionDAO.Metrics;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -12,6 +13,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,24 @@ public final class AdminProductPerformanceController {
     static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final ProductPerformanceDAO performance = new ProductPerformanceDAO();
     private final ProductDAO products = new ProductDAO();
+
+    public enum Tab {
+        OVERVIEW("overview", "종합 성과"), CONVERSION("conversion", "구매 전환 분석"), PRODUCTS("products", "상품별 성과");
+
+        public final String key, label;
+
+        Tab(String key, String label) {
+            this.key = key;
+            this.label = label;
+        }
+
+        static Tab read(String key, String detail) {
+            for (Tab tab : values()) {
+                if (tab.key.equals(key)) return tab;
+            }
+            return key.isEmpty() && !detail.isEmpty() ? PRODUCTS : OVERVIEW;
+        }
+    }
 
     public enum Period {
         TODAY("오늘", 1), WEEK("최근 7일", 7), MONTH("최근 30일", 30), QUARTER("최근 90일", 90), CUSTOM("직접 지정", 0);
@@ -68,6 +89,7 @@ public final class AdminProductPerformanceController {
         final LocalDate start, endExclusive;
         final int page;
         final String detail;
+        final Tab tab;
 
         Filter(HttpServletRequest request) {
             products = AdminProductFilter.read(request, AdminProductController.STATUSES);
@@ -79,7 +101,9 @@ public final class AdminProductPerformanceController {
             if (!List.of("", "exclude", "include").contains(demo)) throw new IllegalArgumentException();
             includeDemo = "include".equals(demo);
             page = ProductQueries.integer(request, "page", 1, 1, 1_000_000);
-            detail = ProductQueries.text(request, "detail", 100);
+            String requestedDetail = ProductQueries.text(request, "detail", 100);
+            tab = Tab.read(ProductQueries.text(request, "tab", 20), requestedDetail);
+            detail = tab == Tab.PRODUCTS ? requestedDetail : "";
             LocalDate today = LocalDate.now(SEOUL);
             try {
                 LocalDate end = period == Period.CUSTOM ? LocalDate.parse(ProductQueries.text(request, "end", 10)) : today;
@@ -229,6 +253,8 @@ public final class AdminProductPerformanceController {
         public final Map<String, String> params, categories;
         public final Map<String, String> statuses = AdminProductController.STATUSES;
         public final Period period;
+        public final Tab tab;
+        public final String appliedProductFilters;
         public final Sort sort;
         public final boolean includeDemo, behaviorReady, hasBehavior;
         public final LocalDate start, end, firstBehaviorDay;
@@ -249,6 +275,18 @@ public final class AdminProductPerformanceController {
             this.params = filter.params();
             this.categories = categories;
             this.period = filter.period;
+            this.tab = filter.tab;
+            List<String> labels = new ArrayList<>();
+            addLabel(labels, "검색어", params.get("query"));
+            addLabel(labels, "선택 상품 ID", params.getOrDefault("selectedProductId", ""));
+            String category = params.get("filterCategory");
+            addLabel(labels, "카테고리", categories.getOrDefault(category, category));
+            addLabel(labels, "판매 상태", statuses.getOrDefault(params.get("filterStatus"), ""));
+            if (!params.get("filterStock").isEmpty()) {
+                addLabel(labels, "온라인 재고", filter.products.stock.label
+                        + (filter.products.stockQuantity == null ? "" : " " + filter.products.stockQuantity + "개"));
+            }
+            appliedProductFilters = labels.isEmpty() ? "전체 상품" : String.join(" · ", labels);
             this.sort = filter.sort;
             this.includeDemo = filter.includeDemo;
             this.start = filter.start;
@@ -267,14 +305,37 @@ public final class AdminProductPerformanceController {
             first = rows.isEmpty() ? 0 : (page - 1) * PAGE_SIZE + 1;
             last = rows.isEmpty() ? 0 : first + rows.size() - 1;
             pagination = new InventoryPagination(page, pages, target -> ProductView.url(context, ROUTE,
-                    ProductView.with(params, "page", Integer.toString(target))));
+                    ProductView.with(tabParams(Tab.PRODUCTS), "page", Integer.toString(target))));
         }
 
         public String csv() { return ProductView.url(context, ROUTE + "/csv", params); }
+        private static void addLabel(List<String> labels, String label, String value) {
+            if (!value.isEmpty()) labels.add(label + " " + value);
+        }
+
+        private Map<String, String> tabParams(Tab target) {
+            return ProductView.with(params, "tab", target.key);
+        }
+
+        public String tabUrl(Tab target) {
+            return ProductView.url(context, ROUTE,
+                    ProductView.with(tabParams(target), "page", Integer.toString(pagination.page)));
+        }
+
+        public String rowAnchor(String productId) {
+            return "performance-row-" + Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(productId.getBytes(StandardCharsets.UTF_8));
+        }
+
         public String detail(String productId) {
-            Map<String, String> link = ProductView.with(params, "page", Integer.toString(pagination.page));
-            return ProductView.url(context, ROUTE, ProductView.with(link, "detail", productId))
-                    + (productId.isEmpty() ? "#performance-results" : "#product-performance-detail");
+            String url = tabUrl(Tab.PRODUCTS);
+            if (!productId.isEmpty()) {
+                Map<String, String> link = ProductView.with(tabParams(Tab.PRODUCTS), "page", Integer.toString(pagination.page));
+                return ProductView.url(context, ROUTE, ProductView.with(link, "detail", productId))
+                        + "#performance-detail-title";
+            }
+            boolean onPage = rows.stream().anyMatch(row -> row.id.equals(detailId));
+            return url + "#" + (onPage ? rowAnchor(detailId) : "performance-results-title");
         }
     }
 }

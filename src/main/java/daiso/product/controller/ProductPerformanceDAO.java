@@ -60,7 +60,7 @@ public final class ProductPerformanceDAO {
     static Query scope(AdminProductFilter filter, String excluded) {
         ProductDAO.AdminScope scope = ProductDAO.adminScope(filter, true);
         Query query = new Query(scope.prefix.isEmpty() ? "WITH " : scope.prefix.stripTrailing() + ", ");
-        query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity")
+        query.sql.append("scoped AS (SELECT p.product_id, p.name, p.product_code, p.category_id, p.status, p.stock_quantity, p.image_url")
                 .append(scope.from).append(scope.where);
         query.args.addAll(scope.parameters);
         if (!excluded.isEmpty()) query.append(" AND p.category_id=? AND p.product_id<>?", filter.category, excluded);
@@ -145,7 +145,7 @@ public final class ProductPerformanceDAO {
     }
 
     public static final class Row {
-        public final String id, name, code, category, status;
+        public final String id, name, code, category, status, imageUrl;
         public final int stock;
         public final long views, viewers, wishAdds, wishRemoves, cartAdds, cartRemoves, buyers, units, revenue;
         public final long currentWish, currentCart, reviews;
@@ -158,6 +158,7 @@ public final class ProductPerformanceDAO {
             code = row.getString("product_code");
             category = row.getString("category_id");
             status = row.getString("status");
+            imageUrl = row.getString("image_url");
             stock = row.getInt("stock_quantity");
             views = row.getLong("views");
             viewers = row.getLong("viewers");
