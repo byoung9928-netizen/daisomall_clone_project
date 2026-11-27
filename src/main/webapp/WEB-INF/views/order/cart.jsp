@@ -364,7 +364,11 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 %>
 <div id="cart-pickup-content"<%= pickupTab ? "" : " hidden" %>>
     <% if (pickupItems == null || pickupItems.isEmpty()) { %>
-        <div class="cart-empty"><p>매장픽업으로 담은 상품이 없습니다.</p></div>
+        <div class="cart-empty">
+            <span class="cart-empty-icon" aria-hidden="true">!</span>
+            <p>매장픽업으로 담은 상품이 없습니다.</p>
+            <a class="cart-shop-button" href="<%= cartContext %>/list.jsp">쇼핑하러 가기</a>
+        </div>
     <% } else {
     %>
         <div class="cart-selection-toolbar">

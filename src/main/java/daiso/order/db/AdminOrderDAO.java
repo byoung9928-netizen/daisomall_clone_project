@@ -356,8 +356,8 @@ public class AdminOrderDAO {
 	                pstmt.setString(5, nextStatus);
 
 	               int updatedRows= pstmt.executeUpdate();
-	               if(updatedRows == 1 && "SHIPPED".equals(nextStatus)) {
-	            	   enqueueShippingEmail(con,orderNo);
+	               if(updatedRows == 1) {
+                    enqueueDeliveryEmail(con, orderNo, nextStatus);
 	               }
 	            }
 
@@ -373,12 +373,12 @@ public class AdminOrderDAO {
 	    }
 	}
 	
-	//배송중으로 변경된 주문의 회원 이메일과 운송장 정보를 발송대기열에 저장
-	private void enqueueShippingEmail(Connection con, String orderNo)throws SQLException{
+	// 배송 상태가 바뀐 주문의 알림을 발송 대기열에 저장
+	private void enqueueDeliveryEmail(Connection con, String orderNo, String status) throws SQLException {
 		String sql=
 				"INSERT INTO order_email_outbox "
 				+"(order_id, event_type, recipient_email, subject, body) "
-				+"SELECT o.order_id, 'SHIPPED' , m.email, '주문하신 상품이 발송되었습니다.', "
+				+"SELECT o.order_id, ?, m.email, ?, "
 				+"		CONCAT('주문번호: ', o.order_no, CHAR(10), "
 				+"             '택배사: ', o.carrier_id, CHAR(10), "
 				+"			   '운송장 번호: ', o.tracking_number) "
@@ -386,12 +386,17 @@ public class AdminOrderDAO {
 		        + "JOIN members m ON m.member_id = o.member_id "
 		        + "WHERE o.order_no = ? "
 		        + "  AND o.fulfillment_type = 'DELIVERY' "
-		        + "  AND o.status = 'SHIPPED' "
+		        + "  AND o.status = ? "
 		        + "  AND NULLIF(TRIM(m.email), '') IS NOT NULL "
 		        + "ON DUPLICATE KEY UPDATE email_id = order_email_outbox.email_id";
 		
 		try (PreparedStatement pstmt = con.prepareStatement(sql)){
-			pstmt.setString(1, orderNo);
+			pstmt.setString(1, status);
+            pstmt.setString(2, "DELIVERED".equals(status)
+                    ? "주문하신 상품의 배송이 완료되었습니다."
+                    : "주문하신 상품이 발송되었습니다.");
+            pstmt.setString(3, orderNo);
+            pstmt.setString(4, status);
 			pstmt.executeUpdate();
 		}
 				
