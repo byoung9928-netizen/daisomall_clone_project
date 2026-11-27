@@ -177,7 +177,7 @@ public final class StoreManagerInventoryController {
     private enum Save { THRESHOLD, ADJUST, RECEIVE_BATCH }
 
     // Enable relative quantity submissions after the approved MySQL concurrency tests.
-    private static final Set<Change> VERIFIED_RELATIVE_WRITES = Set.of();
+    private static final Set<Change> VERIFIED_RELATIVE_WRITES = Set.of(Change.RECEIVE, Change.DAMAGE);
 
     public static boolean quantityWritesEnabled() {
         return VERIFIED_RELATIVE_WRITES.containsAll(Set.of(Change.RECEIVE, Change.DAMAGE));
@@ -327,9 +327,9 @@ public final class StoreManagerInventoryController {
     static int updateThresholds(Connection connection, StoreInventoryDAO dao, String store,
             Map<String, Long> selection, int threshold, String reason, String memberId) throws SQLException {
         List<Stock> changes = new ArrayList<>();
-        for (Map.Entry<String, Long> item : selection.entrySet()) {
-            Stock stock = dao.find(connection, store, item.getKey(), true);
-            if (stock == null || !item.getKey().equals(stock.id) || !stock.carried || stock.version != item.getValue()) {
+        for (String product : dao.inventoryLockOrder(connection, store, selection.keySet())) {
+            Stock stock = dao.find(connection, store, product, true);
+            if (stock == null || !product.equals(stock.id) || !stock.carried || stock.version != selection.get(product)) {
                 throw new IllegalArgumentException("재고 상태가 바뀌었거나 취급하지 않는 상품이 포함됐습니다. 목록에서 다시 선택해 주세요.");
             }
             if (stock.threshold != threshold) changes.add(stock);

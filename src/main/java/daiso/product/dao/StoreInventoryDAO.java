@@ -579,9 +579,47 @@ public final class StoreInventoryDAO {
         }
     }
 
+    /**
+     * Resolve the stored keys using the same collation as checkout's order_items.product_id.
+     * This read takes no row locks. Callers lock individual inventory PKs in the returned order.
+     */
+    public List<String> inventoryLockOrder(Connection connection, String store, Collection<String> products)
+            throws SQLException {
+        if (products.size() <= 1) return List.copyOf(products);
+        String sql = "SELECT product_id FROM store_inventory WHERE store_id = ? AND product_id IN ("
+                + String.join(",", Collections.nCopies(products.size(), "?")) + ") ORDER BY product_id";
+        return orderedKeys(connection, sql, store, products);
+    }
+
+    public List<String> storeLockOrder(Connection connection, Collection<String> stores) throws SQLException {
+        if (stores.size() <= 1) return List.copyOf(stores);
+        String sql = "SELECT store_id FROM store_locations WHERE store_id IN ("
+                + String.join(",", Collections.nCopies(stores.size(), "?")) + ") ORDER BY store_id";
+        return orderedKeys(connection, sql, null, stores);
+    }
+
+    private static List<String> orderedKeys(Connection connection, String sql, String store, Collection<String> keys)
+            throws SQLException {
+        Set<String> expected = new HashSet<>(keys);
+        List<String> ordered = new ArrayList<>(expected.size());
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int bind = 1;
+            if (store != null) statement.setString(bind++, store);
+            for (String key : keys) statement.setString(bind++, key);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String key = rows.getString(1);
+                    if (expected.remove(key)) ordered.add(key);
+                }
+            }
+        }
+        if (!expected.isEmpty()) throw new IllegalArgumentException("매장 또는 상품이 변경되었습니다. 최신 목록에서 다시 선택해 주세요.");
+        return ordered;
+    }
+
     public Stock find(Connection connection, String store, String product, boolean lock) throws SQLException {
         String sql = stockFields() + "FROM store_inventory i JOIN products p ON p.product_id = i.product_id "
-                + "WHERE i.store_id = ? AND i.product_id = ?" + (lock ? " FOR UPDATE" : "");
+                + "WHERE i.store_id = ? AND i.product_id = ?" + (lock ? " FOR UPDATE OF i" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, store);
             statement.setString(2, product);
