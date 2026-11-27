@@ -237,6 +237,7 @@
                                         <a class="button secondary" href="<%= inventoryPage.closeDrawerUrl(stock.id) %>" data-drawer-close>취소</a>
                                     </div>
                                 <% } else { %>
+                                    <input type="hidden" name="adjustReceipt" value="<%= ProductView.escape(preview.receipt) %>">
                                     <input type="hidden" name="change" value="<%= preview.adjustment.change.name() %>">
                                     <input type="hidden" name="amount" value="<%= preview.adjustment.amount %>">
                                     <input type="hidden" name="reason" value="<%= ProductView.escape(preview.adjustment.reason) %>">
