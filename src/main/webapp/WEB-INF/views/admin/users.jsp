@@ -27,10 +27,7 @@
     Long memberPageCount = (Long) request.getAttribute("adminMemberTotalPages");
     long memberPage = memberPageValue == null ? 1 : memberPageValue;
 
-    String memberPageUrl = route
-            + "?query=" + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
-            + "&status=" + java.net.URLEncoder.encode(status, java.nio.charset.StandardCharsets.UTF_8)
-            + "&page=";
+    
 
     String errorMessage = (String) request.getAttribute("adminMembersError");
     String noticeMessage = (String) request.getAttribute("adminMembersNotice");
@@ -43,7 +40,7 @@
 <head>
     <%@ include file="../common/admin-head.jspf" %>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
 
@@ -202,30 +199,17 @@
                     </tbody>
                 </table>
             </div>
-            <% if (memberPageCount != null && memberPageCount > 1) { %>
-    <nav class="admin-product-pagination" aria-label="회원 목록 페이지">
-        <% if (memberPage > 1) { %>
-            <a class="button secondary"
-               href="<%=ProductView.escape(memberPageUrl + (memberPage - 1))%>">이전</a>
-        <% } %>
-
-        <% for (long p = Math.max(1, memberPage - 2);
-                p <= Math.min(memberPageCount, memberPage + 2); p++) { %>
-            <% if (p == memberPage) { %>
-                <span class="admin-product-page-number" aria-current="page"><%=p%></span>
-            <% } else { %>
-                <a class="admin-product-page-number"
-                   href="<%=ProductView.escape(memberPageUrl + p)%>"><%=p%></a>
-            <% } %>
-        <% } %>
-
-        <% if (memberPage < memberPageCount) { %>
-            <a class="button secondary"
-               href="<%=ProductView.escape(memberPageUrl + (memberPage + 1))%>">다음</a>
-        <% } %>
-    </nav>
-<% } %>
-        </main>
+			<%
+			daiso.product.controller.InventoryPagination inventoryPagination = (daiso.product.controller.InventoryPagination) request
+				.getAttribute("adminMemberPagination");
+				if (inventoryPagination != null && inventoryPagination.pages > 1) {
+					request.setAttribute("adminPaginationLabel", "회원 목록 페이지");
+			%>
+			<%@ include file="inventory-pagination.jspf"%>
+			<%
+			}
+			%>
+		</main>
     </div>
 </body>
 </html>

@@ -37,10 +37,10 @@
                 <p>평일 09:00 ~ 18:00</p>
                 <div class="footer-links">
                     <button type="button" data-shopping-route="orders" data-unavailable>주문조회</button>
-                    <button type="button" data-unavailable>취소/교환/반품 신청</button>
-                    <button type="button" data-unavailable>공지사항</button>
+					<a href="${pageContext.request.contextPath}/app/order/mypage?section=orders">취소/교환/반품 신청 </a>												
+					<button type="button" data-unavailable>공지사항</button>
                     <a href="${pageContext.request.contextPath}/app/support/faq">FAQ</a>
-                    <button type="button" data-unavailable>1:1 문의</button>
+                    <a href="${pageContext.request.contextPath}/app/support/inquiries?view=write">1:1 문의</a>
                 </div>
             </section>
             <section>

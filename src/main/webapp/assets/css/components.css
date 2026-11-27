@@ -317,7 +317,8 @@
     flex-wrap: wrap;
     gap: 12px 16px;
 }
-.footer-links button {
+.footer-links button,
+.footer-links a {
     text-decoration: underline;
     text-underline-offset: 4px;
 }
