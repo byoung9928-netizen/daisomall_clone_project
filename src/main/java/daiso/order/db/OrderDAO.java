@@ -614,7 +614,7 @@ public class OrderDAO {
                     + "(SELECT MAX(r.requested_at) FROM order_returns r WHERE r.order_id = o.order_id))";
             boolean claimHistory = Boolean.TRUE.equals(claims);
             String dateColumn = claimHistory ? claimDate : "NULL";
-            String sortColumn = claimHistory ? "claim_at" : "o.created_at";
+            String orderBy = claimHistory ? "claim_at DESC, o.order_id DESC" : "o.order_id DESC";
             String sql =
 		        "SELECT o.order_id, o.order_no, o.status, "
 		        + "o.total_amount, o.created_at, "
@@ -629,7 +629,7 @@ public class OrderDAO {
 		        + "WHERE o.member_id = ? "
 		        + "AND o.hidden_at IS NULL "
                 + filter
-		        + "ORDER BY " + sortColumn + " DESC, o.order_id DESC "
+		        + "ORDER BY " + orderBy + " "
 		        + "LIMIT 50";
 
 		    List<Map<String, Object>> orders = new ArrayList<>();
