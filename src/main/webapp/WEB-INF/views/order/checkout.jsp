@@ -40,6 +40,23 @@
     .delivery-dialog{width:520px;max-width:calc(100% - 32px);max-height:calc(100dvh - 64px);padding:0;border:0;border-radius:2px;color:#15202c;background:white}.delivery-dialog::backdrop{background:rgba(0,0,0,.73)}.delivery-dialog-frame{display:flex;flex-direction:column;max-height:calc(100dvh - 64px)}.delivery-dialog-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 20px;flex-shrink:0}.delivery-dialog-header h2{margin:0;font-size:20px;font-weight:800}.delivery-close{width:28px;height:28px;border:0;background:none;color:#17212a;font-size:28px;line-height:1;cursor:pointer}.delivery-form-scroll{padding:4px 24px 8px;overflow-y:auto;min-height:0}.delivery-field{margin:0 0 30px}.delivery-field>label{display:block;font-size:18px;font-weight:700;margin-bottom:12px}.delivery-field input{width:100%;min-height:48px;border:1px solid #e1e4e9;background:#fff;border-radius:0;padding:12px 20px;font-size:14px;color:#17212a}.delivery-field input::placeholder{color:#b5bdc7}.delivery-field input[readonly]{background:#f6f7f9}.delivery-field input[aria-invalid=true]{border-color:#ed0025}.delivery-field .field-error{color:#ed0025;font-size:14px;margin:8px 0 0;line-height:1.5}.delivery-address-search{display:flex;gap:8px;margin-bottom:16px}.delivery-address-search input{flex:1;min-width:0}.delivery-address-search button{flex-shrink:0}.delivery-address-line{margin-bottom:16px}.delivery-dialog-footer{padding:20px 24px 24px;flex-shrink:0}.delivery-save{width:100%;height:48px;background:#171e24;border:0;color:white;font-size:14px;font-weight:700;cursor:pointer}.delivery-save:disabled{opacity:.5}.delivery-dialog :focus-visible,.order-screen :focus-visible{outline:2px solid #2a66bd;outline-offset:3px}
     @media(max-width:1100px){.order-point-row{grid-template-columns:170px minmax(0,1fr) 100px}.payment-methods{gap:10px}.payment-wordmark{font-size:16px}}
     @media(max-width:800px){.order-screen.container{width:calc(100% - 32px);padding-top:28px}.order-screen .order-title{font-size:28px;margin-bottom:32px}.order-columns{grid-template-columns:1fr}.order-summary{position:static}.order-block{margin-bottom:46px}.order-section-heading h2{font-size:22px}.order-point-row{grid-template-columns:1fr 90px;padding:0;gap:10px}.order-point-row>label{grid-column:1/-1;padding-top:0}.payment-methods{grid-template-columns:repeat(2,minmax(0,1fr))}.order-section-heading{flex-wrap:wrap}.delivery-dialog{max-height:calc(100dvh - 32px)}.delivery-dialog-frame{max-height:calc(100dvh - 32px)}.delivery-dialog-header{padding:20px}.delivery-form-scroll{padding:4px 20px 8px}.delivery-dialog-footer{padding:16px 20px 20px}.delivery-field>label{font-size:16px}.order-remember{font-size:11px}}
+    #delivery-request:not([hidden]){
+    display:grid;
+    grid-template-columns:max-content minmax(0,1fr);
+    align-items: center;
+    gap: 8px 16px;
+    }
+    #delivery-request > label {
+    	margin:0;
+    	white-space:nowrap;
+    }
+    #delivery-message-choice,
+    #delivery-message-custom {
+    	grid-column: 2;
+    	width:100%;
+    	min-width:0;
+    	box-sizing: border-box;
+    }
     </style>
 </head>
 <body>
@@ -133,7 +150,6 @@
             <button class="payment-method" type="button" disabled><span class="payment-wordmark">▱</span>금융 법인카드(무기명)</button>
           </div>
           <div class="payment-detail"><p><strong id="selected-payment-label">카카오페이</strong></p></div>
-          <p id="selected-payment-help" class="payment-help" aria-live="polite">카카오페이로 결제할 수 있습니다.</p>
           <div class="order-agreements"><label><input id="order-consent" type="checkbox"><span>주문 상품과 배송 정보를 확인했으며, 주문 및 결제 진행에 동의합니다.</span></label></div>
         </section>
       </div>
@@ -249,9 +265,7 @@
             kakaoPayment.setAttribute('aria-pressed', String(!isTossPay));
             tossPay.setAttribute('aria-pressed', String(isTossPay));
             paymentLabel.textContent = isTossPay ? '토스페이' : '카카오페이';
-            paymentHelp.textContent = isTossPay
-                ? '토스페이 결제창 연결을 준비 중입니다.'
-                : '카카오페이로 결제할 수 있습니다.';
+           
             remember.disabled = isTossPay;
         }
 

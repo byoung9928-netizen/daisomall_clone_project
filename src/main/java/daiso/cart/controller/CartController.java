@@ -6,6 +6,7 @@ import daiso.common.annotation.*;
 import javax.servlet.http.HttpSession;
 import java.sql.SQLException;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -38,6 +39,8 @@ public class CartController {
 		        request.setAttribute("cartList", cartList);
 		        List<CartBean> pickupCartList = dao.getPickupCartList(memberId);
 		        request.setAttribute("pickupCartList", pickupCartList);
+                request.setAttribute("pickupTab", CartTab.openPickup(request, memberId,
+                        cartList.isEmpty() && !pickupCartList.isEmpty()));
 
 		    } catch (SQLException e) {
 		        throw new IllegalStateException(
@@ -74,7 +77,7 @@ public class CartController {
 	//1. 시작
 	@DaisoPostMapping("/cart/add")
 	@DaisoResponseBody
-	public String cartAdd(HttpServletRequest request) {
+	public String cartAdd(HttpServletRequest request, HttpServletResponse response) {
 		//로그인한 회원 확인
 	    HttpSession session = request.getSession(false);
 
@@ -103,9 +106,8 @@ public class CartController {
 	        if (dao.addCartAndCheckNew(memberId, productId, quantity)) {
 	            ProductBehaviorRecorder.record(request, Type.CART_ADD, productId);
 	        }
-	        
-	        
-	        return "OK";
+            CartTab.remember(request, response, memberId, false);
+            return "OK";
 
 	    } catch (NumberFormatException e) {
 	        return "수량은 정수로 입력해 주세요.";
@@ -124,7 +126,7 @@ public class CartController {
 	//매장픽업
 	@DaisoPostMapping("/cart/pickup/add")
 	@DaisoResponseBody
-	public String pickupCartAdd(HttpServletRequest request) {
+	public String pickupCartAdd(HttpServletRequest request, HttpServletResponse response) {
 		HttpSession session = request.getSession(false);
 		String memberId = session ==null
 				? null :(String)session.getAttribute("member_id");
@@ -149,7 +151,8 @@ public class CartController {
 			if (dao.addPickupCart(memberId, storeId, productId, quantity)) {
 				ProductBehaviorRecorder.record(request, Type.CART_ADD, productId);
 			}
-			return "OK";
+            CartTab.remember(request, response, memberId, true);
+            return "OK";
 		}catch (NumberFormatException e) {
 			return"수량은 정수로 입력해 주세요.";
 		}catch (IllegalArgumentException e) {

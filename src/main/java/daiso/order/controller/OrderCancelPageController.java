@@ -10,11 +10,13 @@ import java.util.Map;
 import java.util.UUID;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import daiso.cart.controller.CartTab;
 import daiso.cart.db.CartBean;
 import daiso.cart.db.CartDAO;
 import daiso.common.annotation.DaisoController;
@@ -91,7 +93,7 @@ public class OrderCancelPageController {
     }
     @DaisoPostMapping("/order/cancel/request")
     @DaisoResponseBody
-    public String requestCancellation(HttpServletRequest request) {
+    public String requestCancellation(HttpServletRequest request, HttpServletResponse response) {
 
         HttpSession session = request.getSession(false);
 
@@ -175,7 +177,7 @@ public class OrderCancelPageController {
             	return "현재 이 결제수단은 온라인 주문취소를 지원하지 않습니다.";
             }
             return executePaidCancellation(
-            	    memberId, orderNo, paymentMethod, reason, restoreCart, session
+                    memberId, orderNo, paymentMethod, reason, restoreCart, request, response
             	);
 
            
@@ -190,7 +192,8 @@ public class OrderCancelPageController {
             String paymentMethod,
             String reason,
             boolean restoreCart,
-            HttpSession session) {
+            HttpServletRequest request, HttpServletResponse response) {
+        HttpSession session = request.getSession(false);
 
         try {
             // 키 설정 오류가 있으면 DB 변경 전에 중단
@@ -255,7 +258,7 @@ public class OrderCancelPageController {
 
              // 환불 DB 저장이 끝난 뒤에만 장바구니에 다시 담기
                 if (restoreCart) {
-                    String message = restoreCancelledCart(memberId, orderNo);
+                    String message = restoreCancelledCart(memberId, orderNo, request, response);
 
                     session.setAttribute(
                         "cancelCartMessage:" + orderNo,
@@ -324,7 +327,7 @@ public class OrderCancelPageController {
     
     
     private String restoreCancelledCart(
-            String memberId, String orderNo) {
+            String memberId, String orderNo, HttpServletRequest request, HttpServletResponse response) {
 
         try {
             Map<String, Object> order =
@@ -369,6 +372,9 @@ public class OrderCancelPageController {
                 }
             }
 
+            if (addedCount > 0) {
+                CartTab.remember(request, response, memberId, pickup);
+            }
             if (failedCount > 0) {
                 return "결제 취소는 완료되었습니다. "
                     + addedCount + "개 품목을 다시 담았으며, "

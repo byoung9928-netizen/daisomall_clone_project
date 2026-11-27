@@ -22,7 +22,9 @@
         <a data-review-list-link href="<%= ProductView.url(context, route, ProductView.with(base, "reviewTab", target ? "written" : "")) %>"
            <%= written == target ? "aria-current=\"page\"" : "" %>>
             <%= target ? "내가 작성한 리뷰" : "작성 가능한 리뷰" %>
-            <span class="my-review-count"><%= request.getAttribute(target ? "myReviewWrittenTotal" : "myReviewAvailableTotal") %></span>
+           <%if(!target){ %>
+           		<span class = "my-review-count"><%= request.getAttribute("myReviewAvailableTotal") %></span>
+           		<%} %>
         </a>
         <% } %>
     </nav>
