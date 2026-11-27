@@ -149,10 +149,13 @@ public class KakaoPayController {
                 itemName += " 외 " + (items.size() - 1) + "종";
             }
 
-            String baseUrl =
-                "http://localhost:8080"
-                + request.getContextPath()
-                + "/app/payment/kakao";
+            String publicOrigin = System.getenv("DAISOMALL_PUBLIC_ORIGIN");
+            if (publicOrigin == null || publicOrigin.isBlank()) {
+                publicOrigin = "http://localhost:8080";
+            }
+
+            String baseUrl = publicOrigin + request.getContextPath()
+                    + "/app/payment/kakao";
             
          // 세션에 저장된 배송지 가져오기
             Map<String, String> address = new HashMap<>(

@@ -354,7 +354,12 @@ public class TossPayController {
         if ("KAKAOPAY".equals(method)) {
             int totalAmount = Math.toIntExact(amount);
             int quantity = selectedItems.stream().mapToInt(CartBean::getQuantity).sum();
-            String baseUrl = "http://localhost:8080" + request.getContextPath()
+            String publicOrigin = System.getenv("DAISOMALL_PUBLIC_ORIGIN");
+            if (publicOrigin == null || publicOrigin.isBlank()) {
+                publicOrigin = "http://localhost:8080";
+            }
+
+            String baseUrl = publicOrigin + request.getContextPath()
                     + "/app/payment/kakao";
 
             try {
