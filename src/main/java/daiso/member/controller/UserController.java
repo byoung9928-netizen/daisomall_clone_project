@@ -234,8 +234,7 @@ public class UserController {
             session.setAttribute("kakaoOAuthLinkMemberId", memberId);
             session.setAttribute("kakaoOAuthState", state);
 
-            String redirectUri =
-                    "http://localhost:8080/daisomall/app/member/oauth/kakao/callback";
+            String redirectUri = KakaoOAuthClient.redirectUri();
 
             String authUrl =
                     "https://kauth.kakao.com/oauth/authorize"

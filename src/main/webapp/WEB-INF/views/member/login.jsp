@@ -69,6 +69,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 				<div class="social-login-buttons">
 					<button type="button" id="kakao-login-btn"
+					data-redirect-uri="<%= daiso.product.controller.ProductView.escape(
+        daiso.member.controller.KakaoOAuthClient.redirectUri()) %>"
 						class="social-login-button kakao" aria-label="카카오 로그인"
 						title="카카오 로그인">
 						<svg viewBox="0 0 48 48" aria-hidden="true">
@@ -154,7 +156,7 @@ document.addEventListener("DOMContentLoaded", function () {
 						"click",
 						function() {
 							Kakao.Auth.authorize({
-								redirectUri : "http://localhost:8080/daisomall/app/member/oauth/kakao/callback",
+								redirectUri: this.dataset.redirectUri,
 								scope : "account_email"	,	
 								throughTalk : false		
 									});
