@@ -3,6 +3,7 @@
 <%@ page import="daiso.cart.db.CartBean" %>
 
 <%
+    boolean pickupTab = Boolean.TRUE.equals(request.getAttribute("pickupTab"));
     List<CartBean> cartList =
         (List<CartBean>) request.getAttribute("cartList");
 
@@ -264,18 +265,18 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
 <h1 class="page-title">장바구니</h1>
 <p class="error-message" role="alert">${cartError}</p>
 <div class="cart-board">
-<section aria-label="택배배송 상품">
+<section aria-label="장바구니 상품">
 <%-- ===== 장바구니 수령 방식: 택배배송 · 매장픽업 ===== --%>
 <div class="cart-delivery-tabs" role="group" aria-label="수령 방식">
-    <button type="button" class="cart-delivery-tab is-active"
-            aria-pressed="true">
+    <button type="button" class="cart-delivery-tab<%= pickupTab ? "" : " is-active" %>"
+            aria-pressed="<%= !pickupTab %>">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M2 5h12v10h1V8h4l3 4v6h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V5zm15 5v3h3l-2-3h-1zM6 16a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm11 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
         </svg>
         <span>택배배송</span>
     </button>
-    <button type="button" class="cart-delivery-tab"
-            aria-pressed="false">
+    <button type="button" class="cart-delivery-tab<%= pickupTab ? " is-active" : "" %>"
+            aria-pressed="<%= pickupTab %>">
         <img src="${pageContext.request.contextPath}/assets/images/home/service-pickup.svg"
              alt="" width="20" height="20">
         <span>매장픽업</span>
@@ -291,6 +292,9 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
     deliveryTabs.forEach((tab, index) => {
         tab.addEventListener("click", () => {
             const isPickup = index === 1;
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", isPickup ? "pickup" : "delivery");
+            history.replaceState(history.state, "", url);
 
             deliveryTabs.forEach(item => {
                 const selected = item === tab;
@@ -305,7 +309,7 @@ display:flex;justify-content:space-between;align-items:center;gap:12px;font-size
         });
     });
 </script>
-<div id="cart-delivery-content">
+<div id="cart-delivery-content"<%= pickupTab ? " hidden" : "" %>>
 <% if (!hasCartItems) { %>
 <div class="cart-empty">
 <span class="cart-empty-icon" aria-hidden="true">!</span>
@@ -358,7 +362,7 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
     long pickupSubtotal = 0;
     String previousStoreId = null;
 %>
-<div id="cart-pickup-content" hidden>
+<div id="cart-pickup-content"<%= pickupTab ? "" : " hidden" %>>
     <% if (pickupItems == null || pickupItems.isEmpty()) { %>
         <div class="cart-empty"><p>매장픽업으로 담은 상품이 없습니다.</p></div>
     <% } else {
@@ -446,7 +450,7 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
     <% } %>
 </div>
 </section>
-<aside id="cart-delivery-summary" class="cart-payment" aria-label="배송지 및 결제 예상 금액">
+<aside id="cart-delivery-summary" class="cart-payment" aria-label="배송지 및 결제 예상 금액"<%= pickupTab ? " hidden" : "" %>>
 <div class="cart-address-title"><h2>배송지</h2>
 <button class="cart-address-link" id="cart-delivery-open" type="button">⌖ 등록</button></div>
 <p class="cart-address-message">배송지를 등록해 주세요.</p>
@@ -464,7 +468,7 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 <ul class="cart-policy"><li>[상품준비중] 상태일 경우에만 주문 취소 가능합니다.</li><li>[마이페이지 &gt; 주문내역]에서 직접 취소하실 수 있습니다.</li></ul>
 </aside>
 <aside id="cart-pickup-summary" class="cart-payment"
-       aria-label="매장픽업 결제 예상 금액" hidden>
+       aria-label="매장픽업 결제 예상 금액"<%= pickupTab ? "" : " hidden" %>>
     <div class="cart-address-title"><h2>픽업매장</h2></div>
     <p class="cart-address-message">상품은 왼쪽 목록에 표시된 매장에서 수령해요.</p>
 
@@ -487,9 +491,6 @@ long cartRowTotal = canPurchaseCartItem ? cart.getItemTotal() : 0;
 (() => {
     // ===== 삭제 후 장바구니를 다시 열어도 픽업 탭을 유지 =====
     const pageUrl = new URL(window.location.href);
-    if (pageUrl.searchParams.get("tab") === "pickup") {
-        document.querySelectorAll(".cart-delivery-tabs .cart-delivery-tab")[1]?.click();
-    }
 
     const pickupContent = document.getElementById("cart-pickup-content");
 const deleteUrl = "${pageContext.request.contextPath}/app/cart/pickup/delete";
