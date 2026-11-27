@@ -2,9 +2,9 @@ package daiso.product.controller;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
@@ -14,132 +14,151 @@ import javax.servlet.http.HttpSession;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
+import daiso.common.annotation.DaisoResponseBody;
 import daiso.member.controller.MemberService;
 import daiso.order.db.OrderDAO;
 import daiso.product.dao.StoreInventoryDAO;
 import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.HistoryFilter;
-import daiso.product.dao.StoreInventoryDAO.InventoryFilter;
-import daiso.product.dao.StoreInventoryDAO.Sort;
-import daiso.product.dao.StoreInventoryDAO.State;
 import daiso.product.dao.StoreInventoryDAO.Stock;
-import daiso.common.annotation.DaisoResponseBody;
 
 @DaisoController
 public class StoreManagerController {
     private static final int PAGE_SIZE = 20;
-    
-    private static final String ASSIGNMENT_SQL =
-            "SELECT s.store_id, s.store_name "
-            + "FROM store_manager_assignments a "
-            + "JOIN members m ON m.member_id = a.member_id "
-            + "JOIN store_locations s ON s.store_id = a.store_id "
-            + "WHERE a.member_id = ? "
-            + "AND m.role = 'STORE_MANAGER' AND m.status = 'ACTIVE'";
 
+    private static final String LOGIN = "redirect:/member/login";
+    private static final String NO_ASSIGNMENT = "배정된 매장이 있는 관리자만 이용할 수 있습니다.";
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
-    @DaisoGetMapping("/store-manager/inventory")
-    public String inventory(HttpServletRequest request, HttpServletResponse response)
-            throws IOException {
-        HttpSession session = request.getSession(false);
-        Object memberId = session == null ? null : session.getAttribute("member_id");
+    @DaisoGetMapping("/store-manager/dashboard")
+    public String dashboard(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return overview(request, response, "dashboard", "매장 대시보드", "store-manager/dashboard");
+    }
 
-        if (!(memberId instanceof String)) {
-            return "redirect:/member/login";
+    @DaisoGetMapping("/store-manager/assortment")
+    public String assortment(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return overview(request, response, "assortment", "취급 상품 관리", "store-manager/planned");
+    }
+
+    @DaisoGetMapping("/store-manager/performance")
+    public String performance(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return overview(request, response, "performance", "매장 성과 분석", "store-manager/planned");
+    }
+
+    @DaisoGetMapping("/store-manager/settings")
+    public String settings(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return overview(request, response, "settings", "매장 정보 관리", "store-manager/planned");
+    }
+
+    private String overview(HttpServletRequest request, HttpServletResponse response,
+            String section, String title, String view) throws IOException {
+        response.setHeader("Cache-Control", "no-store");
+        String memberId = StoreManagerAccess.memberId(request);
+        if (memberId == null) {
+            return LOGIN;
         }
 
-        
-
         try (Connection connection = ProductQueries.connect()) {
-            String storeId;
-            String storeName;
-
-            try (PreparedStatement statement = connection.prepareStatement(ASSIGNMENT_SQL)) {
-                statement.setString(1, (String) memberId);
-
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        connection.rollback();
-                        response.sendError(403, "배정된 매장이 있는 관리자만 이용할 수 있습니다.");
-                        return null;
-                    }
-
-                    storeId = result.getString("store_id");
-                    storeName = result.getString("store_name");
-                }
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, false);
+            if (manager == null) {
+                connection.rollback();
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
+                return null;
             }
-
-            StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
-            boolean showHistory = "history".equals(request.getParameter("mode"));
-            InventoryFilter inventoryFilter =
-                    new InventoryFilter(storeId, "", "", "", State.ALL);
-            HistoryFilter historyFilter =
-                    new HistoryFilter(null, null, "", "", "", false);
-
-            long total = showHistory
-                    ? dao.countHistory(connection, storeId, "", historyFilter)
-                    : dao.countInventory(connection, inventoryFilter);
-            long pages = Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
-            int requestedPage = ProductQueries.integer(
-                    request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
-            int page = (int) Math.min(requestedPage, pages);
-
-            request.setAttribute("storeManagerName", storeName);
-            request.setAttribute("storeManagerId", storeId);
-            request.setAttribute("storeManagerCsrf", AdminProductController.token(session));
-            request.setAttribute("storeManagerShowHistory", showHistory);
-
-            int offset = (page - 1) * PAGE_SIZE;
-            if (showHistory) {
-                request.setAttribute("storeManagerHistory",
-                        dao.history(connection, storeId, "", historyFilter, PAGE_SIZE, offset));
-            } else {
-                request.setAttribute("storeManagerStock",
-                        dao.inventory(connection, inventoryFilter, Sort.NAME, PAGE_SIZE, offset));
-            }
-            request.setAttribute("storeManagerPage", page);
-            request.setAttribute("storeManagerPages", pages);
-            
-           
             connection.commit();
-            return "store-manager/inventory";
+            showManager(request, manager, section);
+            request.setAttribute("storeManagerTitle", title);
+            if ("dashboard".equals(section)) {
+                request.setAttribute("storeManagerCheckedAt", OffsetDateTime.now(SEOUL).withNano(0));
+            }
+            return view;
         } catch (SQLException | NamingException error) {
-            request.getServletContext().log("매장 관리자 재고 조회 실패", error);
-            response.sendError(503, "매장 재고를 불러오지 못했습니다.");
+            request.getServletContext().log("매장 관리자 정보 조회 실패", error);
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "매장 관리자 화면을 불러오지 못했습니다.");
             return null;
         }
     }
-    
+
+    static void showManager(HttpServletRequest request, StoreManagerAccess manager, String section) {
+        request.setAttribute("storeManagerName", manager.storeName);
+        request.setAttribute("storeManagerLoginId", manager.loginId);
+        request.setAttribute("storeManagerSection", section);
+    }
+
+    @DaisoGetMapping("/store-manager/inventory")
+    public String inventory(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return "history".equals(request.getParameter("mode"))
+                ? history(request, response, true) : StoreManagerInventoryController.list(request, response);
+    }
+
+    @DaisoGetMapping("/store-manager/history")
+    public String history(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return history(request, response, false);
+    }
+
+    private String history(HttpServletRequest request, HttpServletResponse response, boolean legacy) throws IOException {
+        response.setHeader("Cache-Control", "no-store");
+        String memberId = StoreManagerAccess.memberId(request);
+        if (memberId == null) return LOGIN;
+
+        try (Connection connection = ProductQueries.connect()) {
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, false);
+            if (manager == null) {
+                connection.rollback();
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
+                return null;
+            }
+
+            String product = ProductQueries.text(request, "product", 100);
+            HistoryFilter filter = new HistoryFilter(null, null, "", "", "", false, product);
+            StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
+            long total = dao.countHistory(connection, manager.storeId, "", filter);
+            int pages = (int) Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
+            int page = Math.min(pages, ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE));
+            String path = legacy ? "/app/store-manager/inventory" : "/app/store-manager/history";
+            java.util.Map<String, String> params = java.util.Map.of("mode", legacy ? "history" : "", "product", product);
+
+            showManager(request, manager, "history");
+            request.setAttribute("storeManagerHistoryProduct", product);
+            request.setAttribute("storeManagerHistory", dao.history(connection, manager.storeId,
+                    "", filter, PAGE_SIZE, (page - 1) * PAGE_SIZE));
+            request.setAttribute("storeManagerHistoryPagination", new InventoryPagination(page, pages,
+                    target -> ProductView.url(request.getContextPath(), path,
+                            ProductView.with(params, "page", Integer.toString(target)))));
+
+            connection.commit();
+            return "store-manager/history";
+        } catch (IllegalArgumentException error) {
+            response.sendError(400, "이력 조회 조건을 확인해 주세요.");
+            return null;
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("매장 관리자 재고 이력 조회 실패", error);
+            response.sendError(503, "재고 이력을 불러오지 못했습니다.");
+            return null;
+        }
+    }
+
     @DaisoGetMapping("/store-manager/pickup-orders")
     public String pickupOrders(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
+        response.setHeader("Cache-Control", "no-store");
         HttpSession session = request.getSession(false);
-        Object memberId = session == null ? null : session.getAttribute("member_id");
+        String memberId = StoreManagerAccess.memberId(session);
 
-        if (!(memberId instanceof String)) {
-            return "redirect:/member/login";
+        if (memberId == null) {
+            return LOGIN;
         }
 
         try (Connection connection = ProductQueries.connect()) {
-            String storeId;
-            String storeName;
-
-            try (PreparedStatement statement = connection.prepareStatement(ASSIGNMENT_SQL)) {
-                statement.setString(1, (String) memberId);
-
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        connection.rollback();
-                        response.sendError(403, "배정된 매장이 있는 관리자만 이용할 수 있습니다.");
-                        return null;
-                    }
-
-                    storeId = result.getString("store_id");
-                    storeName = result.getString("store_name");
-                }
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, false);
+            if (manager == null) {
+                connection.rollback();
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
+                return null;
             }
+            String storeId = manager.storeId;
 
-            request.setAttribute("storeManagerName", storeName);
+            showManager(request, manager, "pickup-orders");
             request.setAttribute("storeManagerCsrf", AdminProductController.token(session));
             request.setAttribute("pickupOrders",
                     new OrderDAO().findPaidPickupOrders(connection, storeId));
@@ -152,7 +171,7 @@ public class StoreManagerController {
             return null;
         }
     }
-    
+
  // 스캔한 QR이 로그인한 관리자의 담당 매장 주문인지 조회한다.
     @DaisoPostMapping("/store-manager/pickup-orders/scan")
     @DaisoResponseBody
@@ -161,9 +180,9 @@ public class StoreManagerController {
         response.setHeader("Cache-Control", "no-store");
 
         HttpSession session = request.getSession(false);
-        Object memberId = session == null ? null : session.getAttribute("member_id");
+        String memberId = StoreManagerAccess.memberId(session);
 
-        if (!(memberId instanceof String)) {
+        if (memberId == null) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return "매장 관리자 계정으로 로그인해 주세요.";
         }
@@ -179,22 +198,16 @@ public class StoreManagerController {
             return "픽업 QR을 다시 스캔해 주세요.";
         }
 
-        try (Connection connection = ProductQueries.connect();
-                PreparedStatement assignment = connection.prepareStatement(ASSIGNMENT_SQL)) {
-            assignment.setString(1, (String) memberId);
-
-            String storeId;
-            try (ResultSet result = assignment.executeQuery()) {
-                if (!result.next()) {
-                    connection.rollback();
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    return "배정된 매장이 있는 관리자만 이용할 수 있습니다.";
-                }
-                storeId = result.getString("store_id");
+        try (Connection connection = ProductQueries.connect()) {
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, false);
+            if (manager == null) {
+                connection.rollback();
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                return NO_ASSIGNMENT;
             }
 
             String orderNo = new OrderDAO().findReadyPickupOrderNoByToken(
-                    connection, storeId, pickupToken);
+                    connection, manager.storeId, pickupToken);
             connection.commit();
 
             if (orderNo == null) {
@@ -213,9 +226,9 @@ public class StoreManagerController {
     public String updatePickupStatus(HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         HttpSession session = request.getSession(false);
-        Object memberId = session == null ? null : session.getAttribute("member_id");
-        if (!(memberId instanceof String)) {
-            return "redirect:/member/login";
+        String memberId = StoreManagerAccess.memberId(session);
+        if (memberId == null) {
+            return LOGIN;
         }
 
         if (!AdminProductController.validToken(request, session)) {
@@ -232,46 +245,41 @@ public class StoreManagerController {
         }
 
         try (Connection connection = ProductQueries.connect()) {
-            String storeId;
-            try (PreparedStatement statement =
-                         connection.prepareStatement(ASSIGNMENT_SQL + " FOR UPDATE")) {
-                statement.setString(1, (String) memberId);
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        connection.rollback();
-                        response.sendError(403, "배정된 매장이 있는 관리자만 이용할 수 있습니다.");
-                        return null;
-                    }
-                    storeId = result.getString("store_id");
-                }
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, true);
+            if (manager == null) {
+                connection.rollback();
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
+                return null;
             }
+            String storeId = manager.storeId;
 
             boolean completing = "complete".equals(action);
-            String pickupToken =null;
-            if(completing) {
-            	pickupToken=request.getParameter("pickupToken");
-            	if(pickupToken ==null||!pickupToken.matches("[A-Za-z0-9__-]{43}")) {
-            		connection.rollback();
-            		response.sendError(400,"픽업QR을 다시 스캔해 주세요.");
-            		return null;
-            	}
-            	boolean passwordVerified;
-            	try {
-            		passwordVerified=new MemberService().verifyStoreManagerPassword((String)memberId, request.getParameter("approvalPassword"));
-            	}catch(Exception error) {
-            		connection.rollback();
-            		request.getServletContext().log("픽업 승인정보 확인 실패", error);
-            		response.sendError(503,"승인 정보를 확인하지 못했습니다.");
-            		return null;
-            	}
-            	if(!passwordVerified) {
-            		connection.rollback();
-            		response.sendError(403,"매장 관리자비밀번호가 올바르지 않습니다.");
-            		return null;
-            	}
+            String pickupToken = null;
+            if (completing) {
+                pickupToken = request.getParameter("pickupToken");
+                if (pickupToken == null || !pickupToken.matches("[A-Za-z0-9__-]{43}")) {
+                    connection.rollback();
+                    response.sendError(400, "픽업QR을 다시 스캔해 주세요.");
+                    return null;
+                }
+                boolean passwordVerified;
+                try {
+                    passwordVerified = new MemberService().verifyStoreManagerPassword(
+                            memberId, request.getParameter("approvalPassword"));
+                } catch (Exception error) {
+                    connection.rollback();
+                    request.getServletContext().log("픽업 승인정보 확인 실패", error);
+                    response.sendError(503, "승인 정보를 확인하지 못했습니다.");
+                    return null;
+                }
+                if (!passwordVerified) {
+                    connection.rollback();
+                    response.sendError(403, "매장 관리자비밀번호가 올바르지 않습니다.");
+                    return null;
+                }
             }
-            boolean changed=new OrderDAO().advancePickupStatus(
-            		connection, storeId,orderNo,completing,pickupToken);
+            boolean changed = new OrderDAO().advancePickupStatus(
+                    connection, storeId, orderNo, completing, pickupToken);
             if (!changed) {
                 connection.rollback();
                 response.sendError(409, "처리할 수 없는 주문입니다. 목록을 새로고침해 주세요.");
@@ -286,16 +294,16 @@ public class StoreManagerController {
             return null;
         }
     }
-    
+
     @DaisoPostMapping("/store-manager/inventory/adjust")
     public String adjust(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
         request.setCharacterEncoding("UTF-8");
 
         HttpSession session = request.getSession(false);
-        Object memberId = session == null ? null : session.getAttribute("member_id");
-        if (!(memberId instanceof String)) {
-            return "redirect:/member/login";
+        String memberId = StoreManagerAccess.memberId(session);
+        if (memberId == null) {
+            return LOGIN;
         }
 
         if (!AdminProductController.validToken(request, session)) {
@@ -320,21 +328,13 @@ public class StoreManagerController {
 
             try (Connection connection = ProductQueries.connect()) {
                 try {
-                    String storeId;
-
-                    try (PreparedStatement statement =
-                                 connection.prepareStatement(ASSIGNMENT_SQL + " FOR UPDATE")) {
-                        statement.setString(1, (String) memberId);
-
-                        try (ResultSet result = statement.executeQuery()) {
-                            if (!result.next()) {
-                                connection.rollback();
-                                response.sendError(403, "배정된 매장이 있는 관리자만 이용할 수 있습니다.");
-                                return null;
-                            }
-                            storeId = result.getString("store_id");
-                        }
+                    StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, true);
+                    if (manager == null) {
+                        connection.rollback();
+                        response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
+                        return null;
                     }
+                    String storeId = manager.storeId;
 
                     if (!storeId.equals(viewedStoreId)) {
                         connection.rollback();
@@ -360,7 +360,7 @@ public class StoreManagerController {
                         return null;
                     }
 
-                    dao.update(connection, storeId, before, after, change, reason, (String) memberId);
+                    dao.update(connection, storeId, before, after, change, reason, memberId);
                     connection.commit();
                     return "redirect:/store-manager/inventory?page=" + page;
                 } catch (SQLException error) {
@@ -381,5 +381,5 @@ public class StoreManagerController {
             return null;
         }
     }
-    
+
 }

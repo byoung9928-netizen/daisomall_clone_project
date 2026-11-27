@@ -1,0 +1,55 @@
+<%@ page pageEncoding="UTF-8" %>
+<dialog class="store-inventory-dialog" id="store-adjust-preview" aria-labelledby="store-adjust-title">
+    <div class="store-inventory-dialog-header">
+        <h2 id="store-adjust-title">재고 조정 미리보기</h2>
+        <button type="button" class="button secondary" data-store-dialog-close>닫기</button>
+    </div>
+    <p>재고 조정 결과를 계산합니다. 저장은 목록의 ‘기존 재고 저장’에서 할 수 있습니다.</p>
+    <p><strong data-adjust-product></strong> · 현재 재고 <span data-adjust-current></span>개</p>
+    <label class="field">변경 유형
+        <select data-adjust-type>
+            <option value="RECEIVE">입고</option>
+            <option value="DAMAGE">파손</option>
+            <option value="COUNT">실사</option>
+        </select>
+    </label>
+    <label class="field"><span data-adjust-label>추가할 수량</span>
+        <input type="number" data-adjust-amount min="1" max="2147483647" required>
+    </label>
+    <label class="field">조정 사유
+        <textarea data-adjust-reason maxlength="255" required></textarea>
+    </label>
+    <p data-adjust-estimate role="status"></p>
+</dialog>
+
+<% if (!model.token.isEmpty()) { %>
+    <dialog class="store-inventory-dialog" id="store-threshold-dialog" aria-labelledby="store-threshold-title">
+        <form method="post" action="<%= inventoryUrl %>/threshold" data-store-threshold-form
+              data-batch-limit="<%= daiso.product.controller.AdminInventoryBatchController.BATCH_LIMIT %>">
+            <div class="store-inventory-dialog-header">
+                <h2 id="store-threshold-title">부족 기준 변경</h2>
+                <button type="button" class="button secondary" data-store-dialog-close>닫기</button>
+            </div>
+            <p><strong data-threshold-count></strong>개 상품을 선택했습니다. 현재 재고 수량은 유지됩니다.</p>
+            <input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
+            <input type="hidden" name="formToken" value="<%= ProductView.escape(model.token) %>">
+            <% for (Map.Entry<String, String> param : model.params.entrySet()) { %>
+                <input type="hidden" name="<%= param.getKey() %>" value="<%= ProductView.escape(param.getValue()) %>">
+            <% } %>
+            <div data-threshold-items></div>
+            <div class="admin-table-scroll">
+                <table class="admin-table">
+                    <thead><tr><th scope="col">상품</th><th scope="col">현재 기준</th><th scope="col">변경 후</th></tr></thead>
+                    <tbody data-threshold-preview></tbody>
+                </table>
+            </div>
+            <label class="field">새 부족 기준
+                <input type="number" name="threshold" min="1" max="2147483647" required>
+            </label>
+            <label class="field">변경 사유
+                <textarea name="reason" maxlength="255" required></textarea>
+            </label>
+            <button class="button primary" type="submit">부족 기준 저장</button>
+        </form>
+    </dialog>
+<% } %>

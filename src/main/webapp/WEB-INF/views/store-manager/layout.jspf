@@ -1,0 +1,33 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ page import="daiso.product.controller.ProductView" %>
+<%
+    String[][] storeManagerMenu = {
+        {"dashboard", "대시보드"}, {"inventory", "재고 관리"}, {"assortment", "취급 상품 관리"},
+        {"history", "재고 변경 이력"}, {"pickup-orders", "픽업 주문 관리"},
+        {"performance", "매장 성과 분석"}, {"settings", "매장 정보 관리"}
+    };
+    String storeManagerBase = ProductView.escape(request.getContextPath()) + "/app/store-manager/";
+%>
+<a class="store-manager-skip" href="#store-manager-content">본문으로 이동</a>
+<header class="admin-header store-manager-header">
+    <a href="<%= storeManagerBase %>dashboard" class="admin-brand">
+        <img src="${pageContext.request.contextPath}/assets/images/home/daiso-logo.svg" alt="다이소" width="136" height="33">
+        <span>매장 관리자</span>
+    </a>
+    <div class="admin-header-actions store-manager-account">
+        <p>
+            <strong><%= ProductView.escape(request.getAttribute("storeManagerName")) %></strong>
+            <span><%= ProductView.escape(request.getAttribute("storeManagerLoginId")) %></span>
+        </p>
+        <form method="post" action="${pageContext.request.contextPath}/app/member/logout">
+            <button type="submit" class="button secondary">로그아웃</button>
+        </form>
+    </div>
+</header>
+<div class="admin-layout store-manager-layout">
+    <nav class="admin-sidebar" aria-label="매장 관리자 메뉴">
+        <% for (String[] entry : storeManagerMenu) { %>
+            <a href="<%= storeManagerBase %><%= entry[0] %>"<% if (entry[0].equals(request.getAttribute("storeManagerSection"))) { %>
+               aria-current="page"<% } %>><%= entry[1] %></a>
+        <% } %>
+    </nav>

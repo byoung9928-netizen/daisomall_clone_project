@@ -8,21 +8,13 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <%@ include file="../common/admin-head.jspf" %>
+    <%@ include file="head.jspf" %>
 <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/store-pickup.css">
 </head>
-<body class="admin-body">
-    <main class="admin-content pickup-page">
-        <h1 class="page-title">
-            <%= ProductView.escape(request.getAttribute("storeManagerName")) %> 픽업 주문
-        </h1>
-
-        <nav class="pickup-nav" aria-label="매장 관리자 메뉴">
-            <a class="button secondary"
-               href="${pageContext.request.contextPath}/app/store-manager/inventory">매장 재고</a>
-            <a class="button primary" aria-current="page"
-               href="${pageContext.request.contextPath}/app/store-manager/pickup-orders">픽업 주문</a>
-        </nav>
+<body class="admin-body store-manager-body">
+    <%@ include file="layout.jspf" %>
+    <main class="admin-content pickup-page" id="store-manager-content" tabindex="-1">
+        <h1 class="page-title">픽업 주문 관리</h1>
 
         <section class="pickup-panel" aria-labelledby="pickup-heading">
             <div class="pickup-toolbar">
@@ -129,6 +121,7 @@
             </table>
         </div>
     </main>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
 <script>
     const startButton = document.getElementById("startPickupScan");
