@@ -35,7 +35,7 @@ public class StoreManagerController {
 
     @DaisoGetMapping("/store-manager/assortment")
     public String assortment(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        return overview(request, response, "assortment", "취급 상품 관리", "store-manager/planned");
+        return StoreManagerAssortmentController.list(request, response);
     }
 
     @DaisoGetMapping("/store-manager/performance")
@@ -108,16 +108,20 @@ public class StoreManagerController {
             }
 
             String product = ProductQueries.text(request, "product", 100);
-            HistoryFilter filter = new HistoryFilter(null, null, "", "", "", false, product);
+            String type = ProductQueries.text(request, "historyType", 14);
+            if (!StoreInventoryDAO.HistoryFilter.TYPES.contains(type)) throw new IllegalArgumentException();
+            HistoryFilter filter = new HistoryFilter(null, null, type, "", "", false, product);
             StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
             long total = dao.countHistory(connection, manager.storeId, "", filter);
             int pages = (int) Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
             int page = Math.min(pages, ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE));
             String path = legacy ? "/app/store-manager/inventory" : "/app/store-manager/history";
-            java.util.Map<String, String> params = java.util.Map.of("mode", legacy ? "history" : "", "product", product);
+            java.util.Map<String, String> params = java.util.Map.of(
+                    "mode", legacy ? "history" : "", "product", product, "historyType", type);
 
             showManager(request, manager, "history");
             request.setAttribute("storeManagerHistoryProduct", product);
+            request.setAttribute("storeManagerHistoryType", type);
             request.setAttribute("storeManagerHistory", dao.history(connection, manager.storeId,
                     "", filter, PAGE_SIZE, (page - 1) * PAGE_SIZE));
             request.setAttribute("storeManagerHistoryPagination", new InventoryPagination(page, pages,
@@ -243,7 +247,7 @@ public class StoreManagerController {
         }
 
         try (Connection connection = ProductQueries.connect()) {
-            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, true);
+            StoreManagerAccess manager = StoreManagerAccess.findForWrite(connection, memberId);
             if (manager == null) {
                 connection.rollback();
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);

@@ -1,0 +1,51 @@
+.store-manager-assortment .store-inventory-table .admin-table {
+    min-width: 1200px;
+}
+
+.store-manager-assortment .store-assortment-actions-col {
+    width: 260px;
+}
+
+.store-manager-assortment .store-assortment-warning {
+    padding: 12px 16px;
+    border: 1px solid #ebc991;
+    border-radius: 6px;
+    background: #fff8ec;
+    color: #653a00;
+}
+
+.store-manager-assortment .store-assortment-warning a {
+    text-decoration: underline;
+}
+
+.store-manager-assortment .store-recovered {
+    display: block;
+    color: #8a4a0c;
+    margin-top: 4px;
+}
+
+.store-manager-assortment .store-assortment-item {
+    padding: 12px;
+    border: 1px solid #e3e6ea;
+    border-radius: 6px;
+}
+
+.store-manager-assortment :is(.store-assortment-item-heading, .store-assortment-inputs) {
+    display: flex;
+    align-items: start;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.store-manager-assortment .store-assortment-item-heading small {
+    display: block;
+}
+
+.store-manager-assortment .store-assortment-inputs .field {
+    flex: 1 1 120px;
+    min-width: 0;
+}
+
+.store-manager-assortment .store-assortment-item > p {
+    margin: 6px 0 0;
+}

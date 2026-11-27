@@ -158,9 +158,12 @@ public class AdminOrderController {
     	JsonObject result = new JsonObject();
     	result.addProperty("success", false);
     	
-    	HttpSession session=request.getSession(false);
-    	Object savedToken = session ==null
-    			? null : session.getAttribute("adminOrderCsrf");
+        HttpSession session = request.getSession(false);
+        if (session == null || !"ADMIN".equals(session.getAttribute("role"))) {
+            result.addProperty("message", "관리자 권한이 필요합니다.");
+            return result.toString();
+        }
+        Object savedToken = session.getAttribute("adminOrderCsrf");
     	String csrfToken = request.getParameter("csrfToken");
     	
     	if(!(savedToken instanceof String)||!savedToken.equals(csrfToken)) {
@@ -179,10 +182,10 @@ public class AdminOrderController {
     	
     	try {
     		AdminOrderDAO dao = new AdminOrderDAO();
-    		OrderBean order =dao.getOrderDetail(orderNo);
+            OrderBean order = dao.getDeliveryOrderDetail(orderNo);
     		
     		if(order ==null) {
-    			result.addProperty("message", "주문을 찾을 수 없습니다.");
+                result.addProperty("message", "배송 조회가 가능한 택배 주문을 찾을 수 없습니다.");
     			return result.toString();
     		}
     	String carrierId = order.getCarrierId();
@@ -209,13 +212,9 @@ public class AdminOrderController {
     		    nextStatus = "SHIPPED";
     		}
 
-    		if (nextStatus != null) {
-    		    dao.updateDeliveryStatus(
-    		        orderNo,
-    		        carrierId,
-    		        trackingNumber,
-    		        nextStatus
-    		    );
+            if (nextStatus != null && !dao.updateDeliveryStatus(orderNo, carrierId, trackingNumber, nextStatus)) {
+                result.addProperty("message", "배송 상태를 변경할 수 없는 주문입니다.");
+                return result.toString();
     		}
     	result.addProperty("success", true);
         result.add("tracking", tracking);

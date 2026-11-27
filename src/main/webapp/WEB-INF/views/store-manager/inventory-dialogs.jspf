@@ -1,19 +1,36 @@
 <%@ page pageEncoding="UTF-8" %>
 <%
     boolean quantitySaveEnabled = StoreManagerInventoryController.quantityWritesEnabled() && !model.token.isEmpty();
+    boolean countSaveEnabled = Boolean.TRUE.equals(request.getAttribute("storeStocktakeEnabled")) && !model.token.isEmpty();
 %>
 <dialog class="store-inventory-dialog" id="store-adjust-preview" aria-labelledby="store-adjust-title">
     <form method="post" action="<%= inventoryUrl %>/adjust" data-store-save-form
-          data-quantity-form data-save-enabled="<%= quantitySaveEnabled %>">
+          data-quantity-form data-save-enabled="<%= quantitySaveEnabled %>" data-count-save="<%= countSaveEnabled %>"
+          data-count-url="<%= ProductView.escape(inventoryUrl + "/count-preview") %>">
         <div class="store-inventory-dialog-header">
             <h2 id="store-adjust-title"><%= quantitySaveEnabled ? "재고 조정" : "재고 조정 미리보기" %></h2>
-            <button type="button" class="button secondary" data-store-dialog-close>취소</button>
+            <button type="button" class="button secondary" data-store-dialog-close>닫기</button>
         </div>
+        <div class="store-dialog-content">
         <% if (!quantitySaveEnabled) { %><p>픽업 결제와 통합 관리자 재고 변경 시 수량이 어긋날 수 있어 수량 저장을 사용할 수 없습니다.</p><% } %>
-        <p data-count-notice hidden>실사 저장은 픽업 결제와의 동시성 검증 대기 중입니다.</p>
-        <p><strong data-adjust-product></strong> · 현재 재고 <span data-adjust-current></span>개</p>
+        <div class="store-dialog-product"><img class="store-inventory-thumb" data-adjust-image alt="" width="48" height="48">
+            <div><strong data-adjust-product></strong><small data-adjust-code></small>
+                <span>현재 판매 가능 재고 <b data-adjust-current></b>개</span></div>
+        </div>
+        <section data-count-details hidden aria-label="실사 기준">
+            <p>미수령 픽업 상품도 실물 수량에 포함하세요. 실사 중 입출고와 고객 인도를 직원과 조정하고, 실물 이동이 있었다면 다시 세어 주세요.</p>
+            <% if (!countSaveEnabled) { %><p>현재는 미리보기만 제공됩니다.</p><% } %>
+            <dl class="store-adjustment-summary">
+                <div><dt>미수령 픽업 할당</dt><dd data-count-allocated>—</dd></div>
+                <div><dt>예상 실제 보유</dt><dd data-count-physical>—</dd></div>
+                <div><dt>조회 기준 시각</dt><dd data-count-checked>—</dd></div>
+            </dl>
+            <button class="button secondary" type="button" data-count-refresh><%= countSaveEnabled ? "실사 기준 다시 확인" : "할당 수량 다시 조회" %></button>
+            <p data-count-status role="status"></p>
+        </section>
         <%@ include file="inventory-save-fields.jspf" %>
         <input type="hidden" name="item">
+        <input type="hidden" name="countBaseline">
         <label class="field">변경 유형
             <select name="change" data-adjust-type>
                 <option value="RECEIVE">입고</option>
@@ -22,25 +39,30 @@
             </select>
         </label>
         <label class="field"><span data-adjust-label>추가할 수량</span>
-            <input type="number" name="amount" data-adjust-amount min="1" max="2147483647" required>
+            <input type="number" name="amount" data-adjust-amount aria-describedby="store-adjust-estimate" min="1" max="2147483647" required>
         </label>
         <label class="field">조정 사유
             <textarea name="reason" data-adjust-reason maxlength="255" required></textarea>
         </label>
-        <p data-adjust-estimate role="status"></p>
-        <button class="button primary" type="submit" disabled>재고 저장</button>
+        <p class="store-dialog-estimate" id="store-adjust-estimate" data-adjust-estimate role="status"></p>
+        </div>
+        <div class="store-dialog-footer">
+            <button type="button" class="button secondary" data-store-dialog-close>취소</button>
+            <button class="button primary" type="submit" disabled>재고 저장</button>
+        </div>
     </form>
 </dialog>
 
 <% if (!model.token.isEmpty()) { %>
-    <dialog class="store-inventory-dialog" id="store-receive-dialog" aria-labelledby="store-receive-title">
+    <dialog class="store-inventory-dialog" data-store-batch id="store-receive-dialog" aria-labelledby="store-receive-title">
         <form method="post" action="<%= inventoryUrl %>/receive-batch" data-store-save-form
               data-batch-receive-form data-save-enabled="<%= quantitySaveEnabled %>"
               data-batch-limit="<%= daiso.product.controller.AdminInventoryBatchController.BATCH_LIMIT %>">
             <div class="store-inventory-dialog-header">
                 <h2 id="store-receive-title"><%= quantitySaveEnabled ? "일괄 입고" : "일괄 입고 미리보기" %></h2>
-                <button type="button" class="button secondary" data-store-dialog-close>취소</button>
+                <button type="button" class="button secondary" data-store-dialog-close>닫기</button>
             </div>
+            <div class="store-dialog-content">
             <% if (!quantitySaveEnabled) { %><p>픽업 결제와 통합 관리자 재고 변경 시 수량이 어긋날 수 있어 일괄 입고 저장을 사용할 수 없습니다.</p><% } %>
             <p>선택 <strong data-receive-count></strong>개 · <span data-receive-total role="status"></span></p>
             <p>예상 수량은 조회 시점 기준입니다.</p>
@@ -54,19 +76,24 @@
             <label class="field">공통 입고 사유
                 <textarea name="reason" maxlength="255" required></textarea>
             </label>
-            <button type="submit" class="button primary" disabled>일괄 입고 저장</button>
+            </div>
+            <div class="store-dialog-footer">
+                <button type="button" class="button secondary" data-store-dialog-close>취소</button>
+                <button type="submit" class="button primary" disabled>일괄 입고 저장</button>
+            </div>
         </form>
     </dialog>
 <% } %>
 
 <% if (!model.token.isEmpty()) { %>
-    <dialog class="store-inventory-dialog" id="store-threshold-dialog" aria-labelledby="store-threshold-title">
+    <dialog class="store-inventory-dialog" data-store-batch id="store-threshold-dialog" aria-labelledby="store-threshold-title">
         <form method="post" action="<%= inventoryUrl %>/threshold" data-store-save-form data-store-threshold-form
               data-batch-limit="<%= daiso.product.controller.AdminInventoryBatchController.BATCH_LIMIT %>">
             <div class="store-inventory-dialog-header">
                 <h2 id="store-threshold-title">부족 기준 변경</h2>
                 <button type="button" class="button secondary" data-store-dialog-close>닫기</button>
             </div>
+            <div class="store-dialog-content">
             <p><strong data-threshold-count></strong>개 상품을 선택했습니다. 현재 재고 수량은 유지됩니다.</p>
             <%@ include file="inventory-save-fields.jspf" %>
             <div data-threshold-items></div>
@@ -77,12 +104,17 @@
                 </table>
             </div>
             <label class="field">새 부족 기준
-                <input type="number" name="threshold" min="1" max="2147483647" required>
+                <input type="number" name="threshold" aria-describedby="store-threshold-guidance" min="1" max="2147483647" required>
             </label>
+            <p class="store-dialog-estimate" id="store-threshold-guidance">1개 이상을 입력한 뒤 각 상품의 변경 전후 기준을 확인해 주세요.</p>
             <label class="field">변경 사유
                 <textarea name="reason" maxlength="255" required></textarea>
             </label>
-            <button class="button primary" type="submit">부족 기준 저장</button>
+            </div>
+            <div class="store-dialog-footer">
+                <button type="button" class="button secondary" data-store-dialog-close>취소</button>
+                <button class="button primary" type="submit">부족 기준 저장</button>
+            </div>
         </form>
     </dialog>
 <% } %>

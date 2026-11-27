@@ -1,9 +1,12 @@
 package daiso.product.controller;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
@@ -61,6 +64,8 @@ public final class StoreManagerInventoryController {
                     filters.size, (page - 1L) * filters.size);
             Map<String, String> categories = new ProductDAO().findAdminCategories(connection, false);
             Summary summary = dao.summary(connection, manager.storeId);
+            long recoveredUncarried = dao.countRecoveredUncarried(connection, manager.storeId);
+            request.setAttribute("storeStocktakeEnabled", StoreStocktake.enabled(connection));
             connection.commit();
 
             StoreManagerController.showManager(request, manager, "inventory");
@@ -80,7 +85,7 @@ public final class StoreManagerInventoryController {
                 else notice = null;
             }
             request.setAttribute("storeInventoryPage", new Page(request.getContextPath(), filters, page,
-                    pages, total, categories, summary, rows, token, notice));
+                    pages, total, categories, summary, rows, token, notice, recoveredUncarried));
             return VIEW;
         } catch (IllegalArgumentException error) {
             response.sendError(400, "조회 조건을 확인해 주세요. 최소 수량은 최대 수량 이하여야 합니다.");
@@ -126,6 +131,62 @@ public final class StoreManagerInventoryController {
         response.getWriter().write(response.getStatus() == 200 ? items.toString() : "[]");
         response.flushBuffer();
         return null;
+    }
+
+    @DaisoGetMapping(MAPPING + "/count-preview")
+    public String countPreview(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        response.setHeader("Cache-Control", "private, no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        String memberId = StoreManagerAccess.memberId(request);
+        if (memberId == null) return denied(response);
+
+        JsonObject result = new JsonObject();
+        int status = HttpServletResponse.SC_OK;
+        try (Connection connection = ProductQueries.connect()) {
+            try {
+                // The read-only setting belongs to this transaction, not to the pooled connection.
+                try (java.sql.Statement begin = connection.createStatement()) {
+                    begin.execute("START TRANSACTION READ ONLY");
+                }
+                StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, false);
+                if (manager == null) {
+                    connection.rollback();
+                    return denied(response);
+                }
+                String product = ProductQueries.text(request, "item", 100);
+                if (!validProductId(product)) throw new IllegalArgumentException();
+                Stock stock = new StoreInventoryDAO().find(connection, manager.storeId, product, false);
+                if (stock == null || !stock.carried || !stock.id.equals(product)) {
+                    status = HttpServletResponse.SC_NOT_FOUND;
+                    result.addProperty("message", "소속 매장에서 취급 중인 상품을 다시 선택해 주세요.");
+                } else {
+                    StoreStocktake.Baseline baseline = StoreStocktake.enabled(connection)
+                            ? StoreStocktake.issue(connection, request.getSession(false), memberId, "STORE_MANAGER",
+                                    manager.storeId, stock)
+                            : null;
+                    long allocated = baseline == null
+                            ? StoreInventoryCountPreview.allocated(connection, manager.storeId, product)
+                            : baseline.orders.allocated;
+                    StoreStocktake.present(result, manager.storeId, stock, allocated, baseline);
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                try { connection.rollback(); }
+                catch (SQLException rollback) { error.addSuppressed(rollback); }
+                throw error;
+            }
+        } catch (StoreInventoryCountPreview.UncertainPickup error) {
+            status = HttpServletResponse.SC_CONFLICT;
+            result.addProperty("message", error.getMessage());
+        } catch (IllegalArgumentException error) {
+            status = HttpServletResponse.SC_BAD_REQUEST;
+            result.addProperty("message", "실사할 상품을 다시 선택해 주세요.");
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("실사 할당 조회 실패", error);
+            status = HttpServletResponse.SC_SERVICE_UNAVAILABLE;
+            result.addProperty("message", "현재 픽업 할당 수량을 조회할 수 없습니다.");
+        }
+        return StoreStocktake.respond(response, result, status);
     }
 
     @DaisoGetMapping(MAPPING + "/csv")
@@ -215,12 +276,15 @@ public final class StoreManagerInventoryController {
             return null;
         }
 
-        boolean allowed = operation == Save.THRESHOLD
-                || change != Change.COUNT && quantityWritesEnabled();
+        boolean count = change == Change.COUNT;
         String store = null;
         Notice notice;
         try (Connection connection = ProductQueries.connect()) {
-            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, allowed);
+            if (count) StoreStocktake.beginCurrentRead(connection);
+            boolean allowed = operation == Save.THRESHOLD
+                    || (count ? StoreStocktake.enabled(connection) : quantityWritesEnabled());
+            StoreManagerAccess manager = allowed ? StoreManagerAccess.findForWrite(connection, memberId)
+                    : StoreManagerAccess.find(connection, memberId, false);
             if (manager == null) {
                 connection.rollback();
                 return denied(response);
@@ -229,7 +293,7 @@ public final class StoreManagerInventoryController {
             if (!allowed) {
                 connection.rollback();
                 response.sendError(409, change == Change.COUNT
-                        ? "실사 저장은 픽업 결제와의 동시성 검증을 마친 뒤 사용할 수 있습니다."
+                        ? "실사는 현재 할당 수량으로 미리보기만 할 수 있습니다."
                         : "픽업 결제와 통합 관리자 재고 변경 시 수량이 어긋날 수 있어 수량 저장을 사용할 수 없습니다.");
                 return null;
             }
@@ -248,6 +312,21 @@ public final class StoreManagerInventoryController {
                     Map<String, Long> selected = selection(request.getParameterValues("item"), request.getParameterValues("version"));
                     int updated = updateThresholds(connection, dao, store, selected, threshold, reason, memberId);
                     message = updated == 0 ? "변경할 부족 기준이 없습니다." : updated + "개 상품의 부족 기준을 변경했습니다.";
+                } else if (count) {
+                    String product = ProductQueries.text(request, "item", 100);
+                    if (!validProductId(product)) throw new StoreStocktake.Conflict();
+                    StoreStocktake.Baseline baseline = StoreStocktake.find(session,
+                            ProductQueries.text(request, "countBaseline", 36), memberId, "STORE_MANAGER",
+                            store, product, true);
+                    Integer physical = ProductQueries.integer(request, "amount", null, 0, Integer.MAX_VALUE);
+                    if (physical == null || !request.getParameter("amount").matches("[0-9]{1,10}")) {
+                        throw new IllegalArgumentException("실제 보유 수량을 정수로 입력해 주세요.");
+                    }
+                    Stock current = dao.find(connection, store, product, true);
+                    int available = StoreStocktake.compare(connection, baseline, current,
+                            StoreStocktake.revision(connection, store), physical);
+                    StoreStocktake.save(connection, dao, baseline, current, physical, available, reason);
+                    message = available == current.quantity ? "변경된 판매 가능 재고가 없습니다." : "실사 재고를 저장했습니다.";
                 } else {
                     Map<String, Integer> amounts = quantities(request, operation == Save.ADJUST);
                     StoreManagerQuantityChange.apply(connection, dao, store, change, amounts, reason, memberId);
@@ -255,9 +334,19 @@ public final class StoreManagerInventoryController {
                 }
                 connection.commit();
                 notice = new Notice(store, message, false);
-            } catch (IllegalArgumentException | SQLException failure) {
+            } catch (IllegalArgumentException | SQLException | StoreInventoryCountPreview.UncertainPickup failure) {
                 try { connection.rollback(); } catch (SQLException rollback) { failure.addSuppressed(rollback); }
                 if (failure instanceof SQLException) throw (SQLException) failure;
+                if (count) {
+                    int status = failure instanceof StoreStocktake.Conflict || failure instanceof ExpiredForm
+                            || failure instanceof StoreInventoryCountPreview.UncertainPickup ? 409 : 400;
+                    if (failure instanceof StoreInventoryCountPreview.UncertainPickup) {
+                        response.sendError(status, failure.getMessage() + " 실제 재고를 다시 확인해 주세요.");
+                    } else {
+                        response.sendError(status, failure.getMessage());
+                    }
+                    return null;
+                }
                 notice = new Notice(store, failure.getMessage(), true);
             }
         } catch (SQLException | NamingException error) {
@@ -289,9 +378,15 @@ public final class StoreManagerInventoryController {
         synchronized (session) {
             Map<String, String> tokens = state(session).tokens;
             if (!store.equals(tokens.get(token))) {
-                throw new IllegalArgumentException("이미 처리됐거나 매장이 변경된 요청입니다. 목록에서 다시 확인해 주세요.");
+                throw new ExpiredForm();
             }
             tokens.remove(token);
+        }
+    }
+
+    private static final class ExpiredForm extends IllegalArgumentException {
+        ExpiredForm() {
+            super("이미 처리됐거나 매장이 변경된 요청입니다. 목록에서 다시 확인해 주세요.");
         }
     }
 
@@ -439,6 +534,7 @@ public final class StoreManagerInventoryController {
         public final List<InventorySnapshot> rows;
         public final Summary summary;
         public final long total, first, last;
+        public final long recoveredUncarried;
         public final String token;
         public final Notice notice;
         public final InventoryPagination pagination;
@@ -446,7 +542,7 @@ public final class StoreManagerInventoryController {
         public final State state;
 
         private Page(String context, Filters filters, int page, int pages, long total, Map<String, String> categories,
-                Summary summary, List<InventorySnapshot> rows, String token, Notice notice) {
+                Summary summary, List<InventorySnapshot> rows, String token, Notice notice, long recoveredUncarried) {
             this.context = context;
             params = filters.params(page);
             this.categories = categories;
@@ -455,6 +551,7 @@ public final class StoreManagerInventoryController {
             this.total = total;
             this.token = token;
             this.notice = notice;
+            this.recoveredUncarried = recoveredUncarried;
             this.sort = filters.sort;
             this.state = filters.state;
             first = total == 0 ? 0 : (page - 1L) * filters.size + 1;

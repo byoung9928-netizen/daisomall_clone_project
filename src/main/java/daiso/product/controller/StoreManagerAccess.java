@@ -1,5 +1,6 @@
 package daiso.product.controller;
 
+import daiso.order.db.PickupStockTransaction;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -37,13 +38,28 @@ final class StoreManagerAccess {
         return memberId instanceof String && !((String) memberId).isBlank() ? (String) memberId : null;
     }
 
+    static StoreManagerAccess findForWrite(Connection connection, String memberId) throws SQLException {
+        if (!PickupStockTransaction.enabled(connection)) return find(connection, memberId, true);
+        StoreManagerAccess scope = find(connection, memberId, false);
+        if (scope == null) return null;
+        PickupStockTransaction.lockStore(connection, scope.storeId);
+        return find(connection, memberId, true, scope.storeId);
+    }
+
     static StoreManagerAccess find(Connection connection, String memberId, boolean lock) throws SQLException {
+        return find(connection, memberId, lock, null);
+    }
+
+    private static StoreManagerAccess find(Connection connection, String memberId, boolean lock, String store)
+            throws SQLException {
         if (memberId == null || memberId.isBlank()) {
             return null;
         }
-        String sql = lock ? ASSIGNMENT_SQL + " FOR UPDATE" : ASSIGNMENT_SQL;
+        String sql = store != null ? ASSIGNMENT_SQL + " AND a.store_id = ? FOR UPDATE OF a, m"
+                : lock ? ASSIGNMENT_SQL + " FOR UPDATE" : ASSIGNMENT_SQL;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, memberId);
+            if (store != null) statement.setString(2, store);
             try (ResultSet row = statement.executeQuery()) {
                 return row.next()
                         ? new StoreManagerAccess(row.getString("store_id"), row.getString("store_name"), row.getString("login_id"))

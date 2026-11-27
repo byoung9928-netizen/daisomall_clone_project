@@ -115,6 +115,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockIfEnabled(con, storeId) == null ? null : storeId;
 		            long orderId;
 		            if( usedPoints>0) {
 		            	checkAvailablePoints(con,order.getMemberId(),usedPoints);
@@ -188,6 +189,7 @@ public class OrderDAO {
 		            }
 
 		            // 주문과 상품 저장이 모두 성공하면 확정
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 
 		            return orderId;
@@ -236,6 +238,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, orderId);
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(sql)) {
 
@@ -253,6 +256,7 @@ public class OrderDAO {
 		                }
 		            }
 
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 
 		        } catch (SQLException | RuntimeException e) {
@@ -403,12 +407,12 @@ public class OrderDAO {
 		    }
 
 		    String checkSql =
-		        "SELECT o.status AS order_status, o.total_amount, "
+		        "SELECT o.status AS order_status, o.total_amount, o.stock_deducted, "
 		        + "p.status AS payment_status, p.amount "
 		        + "FROM orders o "
 		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
 		        + "WHERE o.order_id = ? "
-		        + "AND o.member_id = ? "
+		        + "AND o.member_id = ? AND o.fulfillment_type = 'DELIVERY' "
 		        + "AND p.tid = ? FOR UPDATE";
 
 		    try (Connection con = ds.getConnection()) {
@@ -420,6 +424,7 @@ public class OrderDAO {
 		        try {
 		            String orderStatus;
 		            String paymentStatus;
+		            boolean stockDeducted;
 
 		            // 처리 중에는 같은 결제 건을 다른 요청이 변경하지 못하게 잠금
 		            try (PreparedStatement pstmt =
@@ -445,17 +450,18 @@ public class OrderDAO {
 
 		                    orderStatus = rs.getString("order_status");
 		                    paymentStatus = rs.getString("payment_status");
+		                    stockDeducted = rs.getBoolean("stock_deducted");
 		                }
 		            }
 
 		            // 이미 반영된 결제라면 중복 변경하지 않음
 		            if ("PAID".equals(orderStatus)
-		                    && "APPROVED".equals(paymentStatus)) {
+		                    && "APPROVED".equals(paymentStatus) && stockDeducted) {
 		                con.commit();
 		                return;
 		            }
 
-		            if (!"APPROVING".equals(orderStatus)
+		            if (stockDeducted || !"APPROVING".equals(orderStatus)
 		                    || !"APPROVING".equals(paymentStatus)) {
 		                throw new SQLException(
 		                    "승인 처리할 수 없는 주문 상태입니다."
@@ -527,7 +533,7 @@ public class OrderDAO {
 		            			+ "carrier_id = 'dev.track.dummy', "
 		            			+ "tracking_number = ? "
 		            			+ "WHERE order_id = ? AND member_id = ? "
-		            			+ "AND status = 'APPROVING'";
+                                + "AND status = 'APPROVING' AND fulfillment_type = 'DELIVERY' AND stock_deducted = FALSE";
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(orderSql)) {
 
@@ -807,8 +813,8 @@ public class OrderDAO {
 		        String memberId, String orderNo) throws SQLException {
 
 		    String sql =
-		        "SELECT o.order_id, o.order_no, o.total_amount, "
-		        + "p.payment_id, p.tid, p.status AS payment_status "
+		        "SELECT o.order_id, o.order_no, o.total_amount, o.fulfillment_type, "
+		        + "p.payment_id, p.tid, p.method, p.status AS payment_status "
 		        + "FROM orders o "
 		        + "LEFT JOIN payment_attempts p "
 		        + "ON p.payment_id = ("
@@ -838,6 +844,8 @@ public class OrderDAO {
 		            order.put("orderId", rs.getLong("order_id"));
 		            order.put("orderNo", rs.getString("order_no"));
 		            order.put("total", rs.getInt("total_amount"));
+		            order.put("fulfillmentType", rs.getString("fulfillment_type"));
+		            order.put("paymentMethod", rs.getString("method"));
 
 		            // 결제 준비 기록이 없으면 null
 		            order.put("paymentId", rs.getObject("payment_id"));
@@ -904,6 +912,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, orderId);
 		            int updated;
 		            try (PreparedStatement pstmt = con.prepareStatement(expireOrderSql)) {
 		                pstmt.setLong(1, orderId);
@@ -921,6 +930,7 @@ public class OrderDAO {
 		            }
 
 		            restoreUsedPoints(con, orderId);
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 		            return true;
 		        } catch (SQLException | RuntimeException e) {
@@ -957,6 +967,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, memberId, orderNo);
 		            int updated;
 
 		            try (PreparedStatement pstmt =
@@ -985,6 +996,7 @@ public class OrderDAO {
 		                    }
 		                }
 		            }
+		            if (updated > 0) PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 
 		            // 두 테이블을 변경하므로 1이 아닌 양수인지 검사
@@ -1028,6 +1040,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, memberId, orderNo);
 		            long orderId;
 		            try (PreparedStatement stmt = con.prepareStatement(findOrderSql)) {
 		                stmt.setString(1, memberId);
@@ -1060,6 +1073,7 @@ public class OrderDAO {
 		                }
 		            }
 
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 		            return orderId;
 		        } catch (SQLException | RuntimeException e) {
@@ -1125,6 +1139,7 @@ public class OrderDAO {
 		        
 				String orderNo, boolean markPickedUp,String pickupToken) throws SQLException {
 			
+		    String revision = PickupStockTransaction.lockIfEnabled(connection, storeId);
 		    String sql = "UPDATE orders o SET o.pickup_status = ? "
 		            + "WHERE o.order_no = ? AND o.pickup_store_id = ? "
 		            + "AND o.fulfillment_type = 'PICKUP' AND o.status = 'PAID' "
@@ -1157,6 +1172,7 @@ public class OrderDAO {
 		    	   issuePickupToken(connection, storeId, orderNo);
 		    	   enqueuePickupReadyEmail(connection,orderNo);
 		       }
+		       if (changed && revision != null) PickupStockTransaction.advance(connection, storeId);
 		       return changed;
 		    }
 		}
@@ -1290,9 +1306,9 @@ public class OrderDAO {
 
 
 		    String lockSql =
-		            "SELECT o.pickup_store_id, o.status AS order_status, p.status AS pay_status "
+		            "SELECT o.pickup_store_id, o.status AS order_status, p.status AS pay_status, o.stock_deducted "
 		            + "FROM orders o JOIN payment_attempts p ON p.order_id = o.order_id "
-		            + "WHERE o.order_id = ? AND o.member_id = ? AND o.fulfillment_type = 'PICKUP' "
+		            + "WHERE o.order_id = ? AND o.member_id = ? AND o.fulfillment_type = 'PICKUP' AND o.pickup_store_id IS NOT NULL "
 		            + "AND o.total_amount = ? AND p.amount = ? AND p.method = ? "
 		            + "AND p.tid = ? FOR UPDATE";
 
@@ -1312,6 +1328,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, orderId);
 		            String storeId;
 		            try (PreparedStatement stmt = con.prepareStatement(lockSql)) {
 		                stmt.setLong(1, orderId);
@@ -1323,12 +1340,13 @@ public class OrderDAO {
 
 		                try (ResultSet rs = stmt.executeQuery()) {
 		                    if (!rs.next()) throw new SQLException("일치하는 픽업 결제가 없습니다.");
+		                    boolean stockDeducted = rs.getBoolean("stock_deducted");
 		                    if ("PAID".equals(rs.getString("order_status"))
-		                            && "APPROVED".equals(rs.getString("pay_status"))) {
+		                            && "APPROVED".equals(rs.getString("pay_status")) && stockDeducted) {
 		                        con.commit();
 		                        return;
 		                    }
-		                    if (!"APPROVING".equals(rs.getString("order_status"))
+		                    if (stockDeducted || !"APPROVING".equals(rs.getString("order_status"))
 		                            || !"APPROVING".equals(rs.getString("pay_status"))) {
 		                        throw new SQLException("승인 처리 중인 픽업 주문이 아닙니다.");
 		                    }
@@ -1336,22 +1354,27 @@ public class OrderDAO {
 		                }
 		            }
 
-		            try (PreparedStatement items = con.prepareStatement(itemsSql);
-		                 PreparedStatement stock = con.prepareStatement(stockSql)) {
-		                items.setLong(1, orderId);
-		                try (ResultSet rs = items.executeQuery()) {
-		                    if (!rs.next()) throw new SQLException("픽업 주문상품이 없습니다.");
-		                    do {
-		                        long qty = rs.getLong("qty");
-		                        if (qty <= 0) throw new SQLException("픽업 주문 수량이 잘못됐습니다.");
-		                        stock.setLong(1, qty);
-		                        stock.setString(2, storeId);
-		                        stock.setString(3, rs.getString("product_id"));
-		                        stock.setLong(4, qty);
-		                        if (stock.executeUpdate() != 1) {
-		                            throw new SQLException("선택 매장의 픽업 재고가 부족합니다.");
-		                        }
-		                    } while (rs.next());
+		            if (lockedStore != null) {
+		                PickupStockTransaction.adjustItems(con, orderId, lockedStore,
+		                        PickupStockTransaction.Movement.PICKUP_PAYMENT);
+		            } else {
+		                try (PreparedStatement items = con.prepareStatement(itemsSql);
+		                     PreparedStatement stock = con.prepareStatement(stockSql)) {
+		                    items.setLong(1, orderId);
+		                    try (ResultSet rs = items.executeQuery()) {
+		                        if (!rs.next()) throw new SQLException("픽업 주문상품이 없습니다.");
+		                        do {
+		                            long qty = rs.getLong("qty");
+		                            if (qty <= 0) throw new SQLException("픽업 주문 수량이 잘못됐습니다.");
+		                            stock.setLong(1, qty);
+		                            stock.setString(2, storeId);
+		                            stock.setString(3, rs.getString("product_id"));
+		                            stock.setLong(4, qty);
+		                            if (stock.executeUpdate() != 1) {
+		                                throw new SQLException("선택 매장의 픽업 재고가 부족합니다.");
+		                            }
+		                        } while (rs.next());
+		                    }
 		                }
 		            }
 
@@ -1360,7 +1383,8 @@ public class OrderDAO {
 		                    		+ "WHERE order_id = ? AND tid = ? AND method = ? AND status = 'APPROVING'");
 		                 PreparedStatement order = con.prepareStatement(
 		                    "UPDATE orders SET status = 'PAID', stock_deducted = TRUE "
-		                    + "WHERE order_id = ? AND status = 'APPROVING'");
+		                    + "WHERE order_id = ? AND status = 'APPROVING' "
+		                    + "AND fulfillment_type = 'PICKUP' AND stock_deducted = FALSE");
 		                 PreparedStatement cart = con.prepareStatement(
 		                    "DELETE c FROM pickup_cart_items c JOIN order_items i "
 		                    + "ON i.order_id = ? AND i.product_id = c.product_id "
@@ -1381,6 +1405,7 @@ public class OrderDAO {
 		                cart.executeUpdate();
 		            }
 		            earnDaisoPoints(con, orderId);
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 		        } catch (SQLException | RuntimeException e) {
 		            con.rollback();
@@ -1395,17 +1420,33 @@ public class OrderDAO {
 		        String memberId,
 		        String orderNo,
 		        String tid) throws SQLException {
+		    return beginPaymentApproval(memberId, orderNo, tid, null, 0);
+		}
+
+		public boolean beginKakaoPaymentReconciliation(String memberId, String orderNo, String tid,
+		        String fulfillmentType, int amount) throws SQLException {
+		    if (!"DELIVERY".equals(fulfillmentType) && !"PICKUP".equals(fulfillmentType)) return false;
+		    return beginPaymentApproval(memberId, orderNo, tid, fulfillmentType, amount);
+		}
+
+		private boolean beginPaymentApproval(String memberId, String orderNo, String tid,
+		        String fulfillmentType, int amount) throws SQLException {
+		    boolean reconciliation = fulfillmentType != null;
 
 		    String sql =
 		        "UPDATE orders o "
 		        + "JOIN payment_attempts p ON p.order_id = o.order_id "
+		        + (reconciliation ? "LEFT JOIN payment_attempts newer "
+		                + "ON newer.order_id = o.order_id AND newer.payment_id > p.payment_id " : "")
 		        + "SET o.status = 'APPROVING', "
 		        + "p.status = 'APPROVING' "
 		        + "WHERE o.member_id = ? "
 		        + "AND o.order_no = ? "
 		        + "AND p.tid = ? "
-		        + "AND o.status = 'PENDING' "
-		        + "AND p.status = 'PENDING'";
+		        + "AND o.status = 'PENDING' AND o.stock_deducted = FALSE "
+		        + "AND p.status = 'PENDING'"
+		        + (reconciliation ? " AND o.fulfillment_type = ? AND o.total_amount = ? AND p.amount = o.total_amount "
+		                + "AND p.method = 'KAKAOPAY' AND newer.payment_id IS NULL AND o.hidden_at IS NULL" : "");
 
 		    try (Connection con = ds.getConnection()) {
 		        boolean originalAutoCommit = con.getAutoCommit();
@@ -1414,6 +1455,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, memberId, orderNo);
 		            int updated;
 
 		            try (PreparedStatement pstmt =
@@ -1422,10 +1464,15 @@ public class OrderDAO {
 		                pstmt.setString(1, memberId);
 		                pstmt.setString(2, orderNo);
 		                pstmt.setString(3, tid);
+		                if (reconciliation) {
+		                    pstmt.setString(4, fulfillmentType);
+		                    pstmt.setInt(5, amount);
+		                }
 
 		                updated = pstmt.executeUpdate();
 		            }
 
+		            if (updated > 0) PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 		            return updated > 0;
 
@@ -1471,6 +1518,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, memberId, orderNo);
 		            Map<String, Object> order = new HashMap<>();
 		            boolean restoreStock;
 
@@ -1547,6 +1595,7 @@ public class OrderDAO {
 		                }
 		            }
 
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 
 		            return order;
@@ -1592,6 +1641,7 @@ public class OrderDAO {
 		        con.setAutoCommit(false);
 
 		        try {
+		            String lockedStore = PickupStockTransaction.lockOrder(con, orderId);
 		            boolean restoreStock;
 		            try (PreparedStatement pstmt =
 		                    con.prepareStatement(checkSql)) {
@@ -1640,7 +1690,7 @@ public class OrderDAO {
 		            }
 
 		            if (restoreStock) {
-		                OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_CANCEL);
+		                OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_CANCEL, lockedStore);
 		            }
 
 		            String paymentSql =
@@ -1685,6 +1735,7 @@ public class OrderDAO {
 		            }
 		            reverseDaisoPoints(con,orderId);//적립한 포인트 회수
 		            restoreUsedPoints(con,orderId);//결제할 때 사용했던 포인트 반환
+		            PickupStockTransaction.advance(con, lockedStore);
 		            con.commit();
 
 		        } catch (SQLException | RuntimeException e) {

@@ -124,9 +124,15 @@ public class AdminOrderDAO {
 	        return orders;
 				}
 	// 주문번호로 주문 기본정보와 주문상품 조회
-	public OrderBean getOrderDetail(String orderNo)
-	        throws SQLException {
+	public OrderBean getOrderDetail(String orderNo) throws SQLException {
+	    return getOrderDetail(orderNo, false);
+	}
 
+	public OrderBean getDeliveryOrderDetail(String orderNo) throws SQLException {
+	    return getOrderDetail(orderNo, true);
+	}
+
+	private OrderBean getOrderDetail(String orderNo, boolean deliveryOnly) throws SQLException {
 	    String orderSql =
 	        "SELECT o.*, p.status AS payment_status "
 	        + "FROM orders o "
@@ -136,7 +142,8 @@ public class AdminOrderDAO {
 	        + "FROM payment_attempts p2 "
 	        + "WHERE p2.order_id = o.order_id"
 	        + ") "
-	        + "WHERE o.order_no = ?";
+	        + "WHERE o.order_no = ?"
+	        + (deliveryOnly ? " AND o.fulfillment_type = 'DELIVERY'" : "");
 
 	    try (Connection con = ds.getConnection()) {
 	        OrderBean order = new OrderBean();
@@ -288,7 +295,7 @@ public class AdminOrderDAO {
 	    return orders;
 	}
 	
-	public void updateDeliveryStatus(
+	public boolean updateDeliveryStatus(
 	        String orderNo,
 	        String carrierId,
 	        String trackingNumber,
@@ -301,19 +308,17 @@ public class AdminOrderDAO {
 	        );
 	    }
 
-	    String sql =
-	        "UPDATE orders o "
+	    String approvedOrder =
+	        "orders o "
 	        + "JOIN payment_attempts p "
 	        + "ON p.payment_id = ("
 	        + "SELECT MAX(p2.payment_id) "
 	        + "FROM payment_attempts p2 "
 	        + "WHERE p2.order_id = o.order_id"
-	        + ") "
-	        + "SET o.status = ? "
-	        + "WHERE o.order_no = ? "
-	        + "AND o.carrier_id = ? "
-	        + "AND o.tracking_number = ? "
-	        + "AND p.status = 'APPROVED' "
+	        + ") ";
+	    String target = "WHERE o.order_no = ? AND o.carrier_id = ? AND o.tracking_number = ? "
+	        + "AND o.fulfillment_type = 'DELIVERY' AND p.status = 'APPROVED' ";
+	    String sql = "UPDATE " + approvedOrder + "SET o.status = ? " + target
 	        + "AND o.status IN ('PAID', 'PREPARING', 'SHIPPED') "
 	        + "AND (? = 'DELIVERED' "
 	        + "OR o.status IN ('PAID', 'PREPARING'))";
@@ -325,6 +330,7 @@ public class AdminOrderDAO {
 	        con.setAutoCommit(false);
 
 	        try {
+	            boolean applied;
 	            try (PreparedStatement pstmt =
 	                    con.prepareStatement(sql)) {
 
@@ -334,13 +340,27 @@ public class AdminOrderDAO {
 	                pstmt.setString(4, trackingNumber);
 	                pstmt.setString(5, nextStatus);
 
-	               int updatedRows= pstmt.executeUpdate();
-	               if(updatedRows == 1 && "SHIPPED".equals(nextStatus)) {
-	            	   enqueueShippingEmail(con,orderNo);
-	               }
+	                applied = pstmt.executeUpdate() == 1;
+	            }
+
+	            if (applied && "SHIPPED".equals(nextStatus)) {
+	                enqueueShippingEmail(con, orderNo);
+	            } else if (!applied) {
+	                // Repeated tracking results for a matching delivery order are harmless.
+	                try (PreparedStatement current = con.prepareStatement(
+	                        "SELECT 1 FROM " + approvedOrder + target + "AND o.status = ? FOR UPDATE")) {
+	                    current.setString(1, orderNo);
+	                    current.setString(2, carrierId);
+	                    current.setString(3, trackingNumber);
+	                    current.setString(4, nextStatus);
+	                    try (ResultSet rows = current.executeQuery()) {
+	                        applied = rows.next();
+	                    }
+	                }
 	            }
 
 	            con.commit();
+	            return applied;
 
 	        } catch (SQLException | RuntimeException e) {
 	            con.rollback();

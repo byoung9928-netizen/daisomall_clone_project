@@ -40,7 +40,7 @@ final class AdminProductSuggestions {
     }
 
     static void add(JsonArray items, String context, String id, String name, String code, String image,
-            int price, int stock, String stockStatus) {
+            int price, Integer stock, String stockStatus) {
         JsonObject item = new JsonObject();
         item.addProperty("id", id);
         item.addProperty("name", name);

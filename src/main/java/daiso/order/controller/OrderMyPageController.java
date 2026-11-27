@@ -564,6 +564,14 @@ public class OrderMyPageController {
                 return "결제 상태가 변경되었습니다. 새로고침해 주세요.";
             }
 
+            String fulfillmentType = (String) order.get("fulfillmentType");
+            if (!"DELIVERY".equals(fulfillmentType) && !"PICKUP".equals(fulfillmentType)) {
+                return "주문 유형을 확인할 수 없습니다.";
+            }
+            if (!"KAKAOPAY".equals(order.get("paymentMethod"))) {
+                return "카카오페이 결제 건만 이 화면에서 상태를 확인할 수 있습니다.";
+            }
+
             // DB 상태뿐 아니라 카카오페이의 실제 상태도 조회
             JsonObject payment =
                 new kakaoPayClient().getPayment(tid);
@@ -608,8 +616,8 @@ public class OrderMyPageController {
                     .get("total").getAsInt();
 
                 // 다른 승인·취소 요청과 겹치지 않도록 먼저 상태 변경
-                boolean started = dao.beginPaymentApproval(
-                    memberId, orderNo, tid
+                boolean started = dao.beginKakaoPaymentReconciliation(
+                    memberId, orderNo, tid, fulfillmentType, amount
                 );
 
                 if (!started) {
@@ -618,9 +626,11 @@ public class OrderMyPageController {
 
                 // 이미 받은 승인 결과를 DB에 반영
                 // 카카오페이에 승인을 다시 요청하는 것이 아님
-                dao.approvePayment(
-                    memberId, orderId, tid, amount, approvedAt, DemoTrackingNumber.create()
-                );
+                if ("PICKUP".equals(fulfillmentType)) {
+                    dao.completePickupApproval(memberId, orderId, tid, amount, approvedAt, "KAKAOPAY");
+                } else {
+                    dao.approvePayment(memberId, orderId, tid, amount, approvedAt, DemoTrackingNumber.create());
+                }
 
                 return "이미 결제된 주문이라 결제완료로 복구했습니다. "
                     + "화면을 새로고침해 주세요.";
@@ -714,6 +724,10 @@ public class OrderMyPageController {
 
             String status = (String) order.get("status");
 
+            if (!"DELIVERY".equals(order.get("fulfillmentType"))) {
+                return "택배 배송 주문만 배송 상태를 조회할 수 있습니다.";
+            }
+
             boolean canTrack =
                 "PAID".equals(status)
                 || "PREPARING".equals(status)
@@ -760,11 +774,11 @@ public class OrderMyPageController {
             }
 
             // 관리자 배송조회와 같은 DB 갱신 메서드 재사용
-            new AdminOrderDAO().updateDeliveryStatus(
+            boolean updated = new AdminOrderDAO().updateDeliveryStatus(
                 orderNo, carrierId, trackingNumber, nextStatus
             );
 
-            return "OK";
+            return updated ? "OK" : "배송 상태를 변경할 수 없는 주문입니다.";
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

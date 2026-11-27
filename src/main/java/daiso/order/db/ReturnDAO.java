@@ -101,6 +101,7 @@ public class ReturnDAO {
             con.setAutoCommit(false);
 
             try {
+                String lockedStore = PickupStockTransaction.lockOrder(con, memberId, orderNo);
                 int inserted;
 
                 try (PreparedStatement pstmt =
@@ -114,6 +115,7 @@ public class ReturnDAO {
                     inserted = pstmt.executeUpdate();
                 }
 
+                if (inserted == 1) PickupStockTransaction.advance(con, lockedStore);
                 con.commit();
 
                 return inserted == 1;
@@ -139,7 +141,7 @@ public class ReturnDAO {
             }
         }
     }
-    
+
     // 전체 회원의 최근 반품 신청 50건 조회
     public List<Map<String, Object>> getReturnList() throws SQLException {
         return getReturnList(false);
@@ -155,7 +157,7 @@ public class ReturnDAO {
     public List<Map<String, Object>> getReturnsForExport() throws SQLException {
         return queryReturns(false, false);
     }
-    
+
     private List<Map<String, Object>> queryReturns(boolean limited, boolean pendingOnly)
             throws SQLException {
         String sql =
@@ -220,7 +222,7 @@ public class ReturnDAO {
 
         return returns;
     }
-    
+
     //반품, 주문, 결제정보 검증, 중복환불막기위해 환불 처리중으로 변경
     public Map<String, Object> beginRefund(long returnId)
             throws SQLException {
@@ -267,6 +269,7 @@ public class ReturnDAO {
             con.setAutoCommit(false);
 
             try {
+                String lockedStore = PickupStockTransaction.lockReturn(con, returnId);
                 Map<String, Object> target = new HashMap<>();
                 boolean restoreStock;
 
@@ -341,6 +344,7 @@ public class ReturnDAO {
                     }
                 }
 
+                PickupStockTransaction.advance(con, lockedStore);
                 con.commit();
 
                 return target;
@@ -354,7 +358,7 @@ public class ReturnDAO {
             }
         }
     }
-    
+
     // 카카오페이 취소 성공 확인 후 반품·주문·결제 상태를 함께 확정
     public void completeRefund(
             long returnId,
@@ -399,6 +403,7 @@ public class ReturnDAO {
             con.setAutoCommit(false);
 
             try {
+                String lockedStore = PickupStockTransaction.lockReturn(con, returnId);
                 long orderId;
                 boolean restoreStock;
                 try (PreparedStatement pstmt =
@@ -452,7 +457,7 @@ public class ReturnDAO {
                 }
 
                 if (restoreStock) {
-                    OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_REFUND);
+                    OnlineStockRestoration.restore(con, orderId, OnlineStockRestoration.Reason.ORDER_REFUND, lockedStore);
                 }
 
                 try (PreparedStatement pstmt =
@@ -470,6 +475,7 @@ public class ReturnDAO {
                     }
                 }
 
+                PickupStockTransaction.advance(con, lockedStore);
                 con.commit();
 
             } catch (SQLException | RuntimeException e) {
@@ -481,7 +487,7 @@ public class ReturnDAO {
             }
         }
     }
-    
+
     // 접수 상태인 반품만 반려하고 사유를 저장
     public boolean rejectReturn(long returnId, String adminNote)
             throws SQLException {
@@ -498,11 +504,16 @@ public class ReturnDAO {
             con.setReadOnly(false);
             con.setAutoCommit(false);
 
-            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-                pstmt.setString(1, adminNote);
-                pstmt.setLong(2, returnId);
+            try {
+                String lockedStore = PickupStockTransaction.lockReturn(con, returnId);
+                boolean rejected;
+                try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                    pstmt.setString(1, adminNote);
+                    pstmt.setLong(2, returnId);
 
-                boolean rejected = pstmt.executeUpdate() == 1;
+                    rejected = pstmt.executeUpdate() == 1;
+                }
+                if (rejected) PickupStockTransaction.advance(con, lockedStore);
                 con.commit();
                 return rejected;
 

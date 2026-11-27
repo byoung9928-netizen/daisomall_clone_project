@@ -33,7 +33,7 @@ final class OnlineStockRestoration {
         }
     }
 
-    static void restore(Connection connection, long orderId, Reason reason) throws SQLException {
+    static void restore(Connection connection, long orderId, Reason reason, String lockedStore) throws SQLException {
         String orderNo;
         String pickupStoreId;
         String lock = "SELECT order_no, stock_restored_at, fulfillment_type, pickup_store_id FROM orders "
@@ -55,8 +55,13 @@ final class OnlineStockRestoration {
 
         if (pickupStoreId == null) {
             restoreOnlineStock(connection, orderId, orderNo, reason);
-        } else {
+        } else if (lockedStore == null) {
             restorePickupStock(connection, orderId, pickupStoreId);
+        } else {
+            if (!lockedStore.equals(pickupStoreId)) throw new SQLException("픽업 복구 매장 정보가 변경되었습니다.");
+            PickupStockTransaction.adjustItems(connection, orderId, lockedStore,
+                    reason == Reason.ORDER_CANCEL ? PickupStockTransaction.Movement.PICKUP_CANCEL
+                            : PickupStockTransaction.Movement.PICKUP_REFUND);
         }
 
         try (PreparedStatement mark = connection.prepareStatement("UPDATE orders SET stock_restored_at = CURRENT_TIMESTAMP(6) "

@@ -14,6 +14,7 @@
             ? (Map<?, ?>) request.getAttribute("storeDraft") : Map.of();
     Object storeFieldError = request.getAttribute("storeFieldError");
     boolean editingStock = inventoryPage != null && inventoryPage.editing != null;
+    boolean countSaveEnabled = Boolean.TRUE.equals(request.getAttribute("storeStocktakeEnabled"));
 %>
 <!DOCTYPE html>
 <html lang="ko">
@@ -155,7 +156,8 @@
                         <label class="field">변경 유형 <select name="historyType">
                             <% for (String[] type : new String[][] {{"", "전체"}, {"INITIAL", "초기 등록"}, {"RECEIVE", "입고"}, {"ISSUE", "출고"},
                                     {"DAMAGE", "파손"}, {"RETURN", "반품 입고"}, {"COUNT", "재고 조사"}, {"THRESHOLD", "부족 기준"},
-                                    {"TRANSFER", "매장 이동"}, {"REGISTER", "취급 등록"}, {"RESUME","취급 재개"}, {"UNLIST","취급 해제"}}) { %>
+                                    {"TRANSFER", "매장 이동"}, {"PICKUP_PAYMENT", "픽업 결제 차감"},
+                                    {"PICKUP_CANCEL", "픽업 주문 취소 복구"}, {"PICKUP_REFUND", "픽업 환불 복구"}, {"REGISTER", "취급 등록"}, {"RESUME","취급 재개"}, {"UNLIST","취급 해제"}}) { %>
                                 <option value="<%= type[0] %>" <%= type[0].equals(inventoryPage.filters.get("historyType")) ? "selected" : "" %>><%= type[1] %></option>
                             <% } %>
                         </select></label>
@@ -198,7 +200,10 @@
                             <% if (storeError != null) { %>
                                 <p class="error-message" id="store-adjustment-error" role="alert"><%= ProductView.escape(storeError) %></p>
                             <% } %>
-                            <form method="post" data-admin-draft data-stock-editor data-store-write data-before="<%= stock.quantity %>" action="<%= ProductView.escape(storeRoute) %>/adjust">
+                            <form method="post" data-admin-draft data-stock-editor data-store-write data-before="<%= stock.quantity %>"
+                                  <% if (countSaveEnabled && preview == null) { %>
+                                  data-count-url="<%= ProductView.escape(storeRoute + "/count-preview") %>"
+                                  <% } %> action="<%= ProductView.escape(storeRoute) %>/adjust">
                                 <% for (Map.Entry<String, String> field : inventoryPage.filters.entrySet()) { %>
                                     <input type="hidden" name="<%= field.getKey() %>" value="<%= ProductView.escape(field.getValue()) %>">
                                 <% } %>
@@ -206,7 +211,21 @@
                                 <input type="hidden" name="product" value="<%= ProductView.escape(stock.id) %>">
                                 <input type="hidden" name="version" value="<%= stock.version %>">
                                 <% if (preview == null) { %>
-                                    <p>현재 매장 재고 <strong><%= stock.quantity %>개</strong></p>
+                                    <p>현재 판매 가능 재고 <strong data-count-available><%= stock.quantity %>개</strong></p>
+                                    <% if (countSaveEnabled) { %>
+                                        <noscript><p>실사 기준을 조회하려면 JavaScript가 필요합니다.</p></noscript>
+                                        <input type="hidden" name="countBaseline">
+                                        <section data-count-details hidden aria-label="실사 기준">
+                                            <p>미수령 픽업 상품도 실물 수량에 포함하세요. 실사 중 입출고와 고객 인도를 직원과 조정하고, 실물 이동이 있었다면 다시 세어 주세요.</p>
+                                            <dl class="store-adjustment-summary">
+                                                <div><dt>미수령 픽업 할당</dt><dd data-count-allocated>—</dd></div>
+                                                <div><dt>예상 실제 보유</dt><dd data-count-physical>—</dd></div>
+                                                <div><dt>실사 기준 시각</dt><dd data-count-checked>—</dd></div>
+                                            </dl>
+                                            <button type="button" class="button secondary" data-count-refresh>실사 기준 다시 확인</button>
+                                            <p data-count-status role="status"></p>
+                                        </section>
+                                    <% } %>
                                     <div class="store-adjustment-fields">
                                         <label class="field">변경 유형
                                             <select name="change" required <%= "change".equals(storeFieldError) ? "aria-invalid=\"true\" aria-describedby=\"store-adjustment-error\"" : "" %>>
@@ -246,6 +265,11 @@
                                         <div><dt>변경 전</dt><dd><%= stock.quantity %>개</dd></div>
                                         <div><dt>변경량</dt><dd><%= preview.after > stock.quantity ? "+" : "" %><%= preview.after - stock.quantity %>개</dd></div>
                                         <div><dt>변경 후</dt><dd><strong><%= preview.after %>개</strong></dd></div>
+                                        <% if (preview.allocated != null) { %>
+                                            <div><dt>실제 보유</dt><dd><%= preview.adjustment.amount %>개</dd></div>
+                                            <div><dt>미수령 픽업 할당</dt><dd><%= preview.allocated %>개</dd></div>
+                                            <div><dt>실사 기준 시각</dt><dd><%= ProductView.escape(preview.countStarted) %> (한국시간)</dd></div>
+                                        <% } %>
                                     </dl>
                                     <p>변경 사유 · <%= ProductView.escape(preview.adjustment.reason) %></p>
                                     <div class="store-admin-links">
@@ -301,14 +325,15 @@
                                             <td><time datetime="<%= entry.date %>"><%= historyDate.format(entry.date) %></time></td>
                                             <td><%= ProductView.escape(entry.name) %><br><small><%= ProductView.escape(entry.code.isEmpty() ? entry.reference : entry.code) %></small></td>
                                             <td><%= entry.transferId == null ? entry.type : "매장 이동 · " + entry.type %>
-                                                <% if (entry.transferId != null) { %><br><small><%= ProductView.escape(entry.transferId) %></small><% } %></td>
+                                                <% if (entry.transferId != null) { %><br><small><%= ProductView.escape(entry.transferId) %></small><% } %>
+                                                <% if (entry.orderNo != null) { %><br><small>주문번호 <%= ProductView.escape(entry.orderNo) %></small><% } %></td>
                                             <td><% if (entry.beforeThreshold != null) { %>
                                                     <%= entry.beforeThreshold %>개 이하 → <%= entry.afterThreshold %>개 이하
                                                 <% } else { %>
                                                     <%= entry.before %>개 → <%= entry.after %>개 (<%= (long) entry.after - entry.before %>)
                                                 <% } %></td>
                                             <td><%= ProductView.escape(entry.reason) %></td>
-                                            <td><%= entry.administrator == null ? "초기 데이터" : ProductView.escape(entry.administrator) %></td>
+                                            <td><%= "SYSTEM".equals(entry.actorType) ? "시스템" : entry.administrator == null ? "초기 데이터" : ProductView.escape(entry.administrator) %></td>
                                         </tr>
                                     <% } %>
                                     <% if (inventoryPage.history.isEmpty()) { %>

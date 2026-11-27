@@ -319,6 +319,14 @@ public final class StoreInventoryDAO {
         String scope = " FROM store_inventory i JOIN products p ON p.product_id = i.product_id" + join
                 + " WHERE i.store_id = ? AND i.is_carried = 1" + filter.state.predicate(thresholdExpression())
                 + (filter.managerSearch ? MANAGER_SEARCH : STOCK_SEARCH);
+        scope += categoryScope(filter);
+        if (filter.minimum != null) scope += " AND i.quantity >= ?";
+        if (filter.maximum != null) scope += " AND i.quantity <= ?";
+        return scope;
+    }
+
+    private static String categoryScope(InventoryFilter filter) {
+        String scope = "";
         if (!filter.category.isEmpty()) {
             scope += " AND p.category_id IN (WITH RECURSIVE descendants AS ("
                     + "SELECT category_id FROM categories WHERE category_id = ? UNION ALL "
@@ -326,10 +334,131 @@ public final class StoreInventoryDAO {
                     + "SELECT category_id FROM descendants)";
         }
         if (!filter.productId.isEmpty()) scope += " AND p.product_id = ?";
-        if (filter.minimum != null) scope += " AND i.quantity >= ?";
-        if (filter.maximum != null) scope += " AND i.quantity <= ?";
         return scope;
     }
+
+    public long countRecoveredUncarried(Connection connection, String store) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM store_inventory WHERE store_id = ? AND is_carried = 0 AND quantity > 0";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, store);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    public enum ManagerAssortment {
+        ALL("전체 상품", ""), ACTIVE("취급 중", " AND i.is_carried = 1"),
+        NEW("미취급", " AND i.product_id IS NULL"), ENDED("취급 종료", " AND i.is_carried = 0"),
+        RECOVERED("복구 재고", " AND i.is_carried = 0 AND i.quantity > 0");
+
+        public final String label;
+        private final String predicate;
+
+        ManagerAssortment(String label, String predicate) {
+            this.label = label;
+            this.predicate = predicate;
+        }
+    }
+
+    private static final String PUBLIC_ASSORTMENT_CATEGORY =
+            "p.category_id IN (WITH RECURSIVE public_categories AS ("
+            + "SELECT category_id FROM categories WHERE parent_id IS NULL AND is_visible = 1 UNION ALL "
+            + "SELECT c.category_id FROM categories c JOIN public_categories v ON c.parent_id = v.category_id "
+            + "WHERE c.is_visible = 1) SELECT category_id FROM public_categories)";
+    private static final String ELIGIBLE_ASSORTMENT =
+            "(p.status IN ('AVAILABLE', 'SOLD_OUT') AND " + PUBLIC_ASSORTMENT_CATEGORY + ")";
+    private static final String MANAGER_ASSORTMENT_FROM =
+            " FROM products p LEFT JOIN store_inventory i ON i.product_id = p.product_id AND i.store_id = ?";
+
+    private static String assortmentManagerScope(InventoryFilter filter) {
+        return MANAGER_ASSORTMENT_FROM + " WHERE (i.product_id IS NOT NULL OR " + ELIGIBLE_ASSORTMENT + ")"
+                + MANAGER_SEARCH + categoryScope(filter);
+    }
+
+    public java.util.Map<ManagerAssortment, Long> managerAssortmentSummary(Connection connection,
+            InventoryFilter filter) throws SQLException {
+        String sql = "SELECT COUNT(*), COUNT(CASE WHEN i.is_carried = 1 THEN 1 END), "
+                + "COUNT(CASE WHEN i.product_id IS NULL THEN 1 END), COUNT(CASE WHEN i.is_carried = 0 THEN 1 END), "
+                + "COUNT(CASE WHEN i.is_carried = 0 AND i.quantity > 0 THEN 1 END)" + assortmentManagerScope(filter);
+        java.util.Map<ManagerAssortment, Long> result = new java.util.EnumMap<>(ManagerAssortment.class);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            filter.bind(statement);
+            try (ResultSet row = statement.executeQuery()) {
+                row.next();
+                for (ManagerAssortment status : ManagerAssortment.values()) result.put(status, row.getLong(status.ordinal() + 1));
+            }
+        }
+        return result;
+    }
+
+    public List<AssortmentItem> managerAssortment(Connection connection, InventoryFilter filter,
+            ManagerAssortment state, ManagerSort sort, int limit, long offset, boolean suggestions) throws SQLException {
+        String history = suggestions ? "NULL" : "(SELECT MAX(h.changed_at) FROM store_inventory_history h "
+                + "WHERE h.store_id = i.store_id AND h.product_reference = p.product_id "
+                + "AND h.change_type IN ('REGISTER','RESUME','UNLIST'))";
+        String sql = assortmentItemFields() + ", " + history + " AS last_assortment" + assortmentManagerScope(filter)
+                + state.predicate + " ORDER BY " + (suggestions
+                ? "CASE WHEN p.product_code = ? OR p.product_id = ? OR p.name = ? THEN 0 "
+                    + "WHEN LOCATE(?, p.name) = 1 THEN 1 ELSE 2 END, CHAR_LENGTH(p.name), p.name"
+                : sort.order) + ", p.product_id LIMIT ? OFFSET ?";
+        List<AssortmentItem> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int next = filter.bind(statement);
+            if (suggestions) for (int i = 0; i < 4; i++) statement.setString(next++, filter.keyword);
+            statement.setInt(next++, limit);
+            statement.setLong(next, offset);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(new AssortmentItem(rows));
+            }
+        }
+        return result;
+    }
+
+    private String assortmentItemFields() {
+        return stockFields() + ", p.category_id, p.brand, p.price, p.status, " + ELIGIBLE_ASSORTMENT + " AS eligible";
+    }
+
+    public AssortmentItem managerAssortmentItem(Connection connection, String store, String product) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(assortmentItemFields()
+                + ", NULL AS last_assortment" + MANAGER_ASSORTMENT_FROM + " WHERE p.product_id = ?")) {
+            statement.setString(1, store);
+            statement.setString(2, product);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? new AssortmentItem(rows) : null;
+            }
+        }
+    }
+
+    public List<String> assortmentProductOrder(Connection connection, Collection<String> products) throws SQLException {
+        String sql = "SELECT product_id FROM products WHERE product_id IN ("
+                + String.join(",", Collections.nCopies(products.size(), "?")) + ") ORDER BY product_id";
+        return orderedKeys(connection, sql, null, products);
+    }
+
+    public static final class AssortmentItem {
+        public final Stock stock;
+        public final String categoryId, brand, saleStatus;
+        public final int price;
+        public final boolean eligible;
+        public final LocalDateTime lastChange;
+
+        private AssortmentItem(ResultSet row) throws SQLException {
+            stock = readStock(row);
+            categoryId = row.getString("category_id");
+            brand = row.getString("brand");
+            price = row.getInt("price");
+            saleStatus = row.getString("status");
+            eligible = row.getBoolean("eligible");
+            lastChange = row.getObject("last_assortment", LocalDateTime.class);
+        }
+
+        public ManagerAssortment state() {
+            return stock.version < 0 ? ManagerAssortment.NEW : stock.carried ? ManagerAssortment.ACTIVE : ManagerAssortment.ENDED;
+        }
+    }
+
 
     public enum AssortmentFilter {
         UNREGISTERED("미등록", " AND i.product_id IS NULL"),
@@ -460,6 +589,9 @@ public final class StoreInventoryDAO {
     }
 
     public static final class HistoryFilter {
+        public static final Set<String> TYPES = Set.of("", "INITIAL", "RECEIVE", "ISSUE", "DAMAGE", "RETURN",
+                "COUNT", "REGISTER", "RESUME", "UNLIST", "THRESHOLD", "TRANSFER", "PICKUP_PAYMENT",
+                "PICKUP_CANCEL", "PICKUP_REFUND");
         public final LocalDateTime start;
         public final LocalDateTime end;
         public final String type;
@@ -508,9 +640,11 @@ public final class StoreInventoryDAO {
             throws SQLException {
         String thresholdFields = thresholdsEnabled ? "before_threshold, after_threshold"
                 : "NULL AS before_threshold, NULL AS after_threshold";
+        String pickupFields = daiso.order.db.PickupStockTransaction.hasHistorySchema(connection)
+                ? ", actor_type, order_no" : ", NULL AS actor_type, NULL AS order_no";
         String sql = "SELECT product_name, product_code, product_reference, change_type, before_quantity, "
                 + "after_quantity, reason, administrator_id, changed_at, " + thresholdFields
-                + (transferEnabled ? ", transfer_id" : ", NULL AS transfer_id") + filter.scope(transferEnabled)
+                + (transferEnabled ? ", transfer_id" : ", NULL AS transfer_id") + pickupFields + filter.scope(transferEnabled)
                 + (filter.oldest ? " ORDER BY changed_at ASC, history_id ASC" : " ORDER BY changed_at DESC, history_id DESC")
                 + " LIMIT ? OFFSET ?";
         List<History> result = new ArrayList<>();
@@ -636,6 +770,23 @@ public final class StoreInventoryDAO {
 
     public void update(Connection connection, String store, Stock before, int after, Change change, String reason,
             String administrator, String transferId) throws SQLException {
+        writeQuantity(connection, store, before, after);
+        recordChange(connection, store, before, after, change.name(), reason, administrator, null, transferId);
+    }
+
+    public void updateCount(Connection connection, String store, Stock before, int after, int physical,
+            int allocated, String reason, String administrator) throws SQLException {
+        if (physical < allocated || allocated < 0 || physical - allocated != after
+                || reason == null || reason.isBlank() || administrator == null || administrator.isBlank()) {
+            throw new IllegalArgumentException("실사 수량과 관리자 정보를 확인해 주세요.");
+        }
+        if (before.quantity == after) return;
+        writeQuantity(connection, store, before, after);
+        recordChange(connection, store, before, after, Change.COUNT.name(), reason, administrator,
+                null, null, physical, allocated);
+    }
+
+    private void writeQuantity(Connection connection, String store, Stock before, int after) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("UPDATE store_inventory "
                 + "SET quantity = ?, version = version + 1 "
                 + "WHERE store_id = ? AND product_id = ? AND version = ? AND is_carried = 1")) {
@@ -645,7 +796,6 @@ public final class StoreInventoryDAO {
             statement.setLong(4, before.version);
             if (statement.executeUpdate() != 1) throw new SQLException("Store inventory row could not be updated");
         }
-        recordChange(connection, store, before, after, change.name(), reason, administrator, null, transferId);
     }
 
     public void updateThreshold(Connection connection, String store, Stock before, int threshold,
@@ -693,19 +843,36 @@ public final class StoreInventoryDAO {
 
     public void changeAssortment(Connection connection, String store, Stock before, int quantity, Assortment action,
             String reason, String administrator) throws SQLException {
+        changeAssortment(connection, store, before, quantity, action, reason, administrator, null);
+    }
+
+    public void changeAssortment(Connection connection, String store, Stock before, int quantity, Assortment action,
+            String reason, String administrator, Integer threshold) throws SQLException {
         String sql = action == Assortment.REGISTER
-                ? "INSERT INTO store_inventory (quantity, is_carried, store_id, product_id) VALUES (?, ?, ?, ?)"
+                ? "INSERT INTO store_inventory (quantity, is_carried, store_id, product_id"
+                    + (threshold == null ? "" : ", low_stock_threshold") + ") VALUES (?, ?, ?, ?"
+                    + (threshold == null ? "" : ", ?") + ")"
                 : "UPDATE store_inventory SET quantity = ?, is_carried = ?, version = version + 1 "
+                    + (threshold == null ? "" : ", low_stock_threshold = ? ")
                     + "WHERE store_id = ? AND product_id = ? AND version = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, quantity);
             statement.setBoolean(2, action != Assortment.UNLIST);
-            statement.setString(3, store);
-            statement.setString(4, before.id);
-            if (action != Assortment.REGISTER) statement.setLong(5, before.version);
+            int next = 3;
+            if (action != Assortment.REGISTER && threshold != null) statement.setInt(next++, threshold);
+            statement.setString(next++, store);
+            statement.setString(next++, before.id);
+            if (action != Assortment.REGISTER) statement.setLong(next, before.version);
+            else if (threshold != null) statement.setInt(next, threshold);
             if (statement.executeUpdate() != 1) throw new SQLException("Store assortment row could not be changed");
         }
         recordChange(connection, store, before, quantity, action.name(), reason, administrator);
+        if (threshold != null && before.threshold != threshold) {
+            // The existing CHECK reserves threshold columns for quantity-neutral THRESHOLD entries.
+            Stock afterQuantity = new Stock(before.id, before.name, before.code, before.image, quantity,
+                    before.version, true, before.threshold);
+            recordChange(connection, store, afterQuantity, quantity, "THRESHOLD", reason, administrator, threshold, null);
+        }
     }
 
     private void recordChange(Connection connection, String store, Stock before, int after, String type,
@@ -715,14 +882,21 @@ public final class StoreInventoryDAO {
 
     private void recordChange(Connection connection, String store, Stock before, int after, String type,
             String reason, String administrator, Integer threshold, String transferId) throws SQLException {
+        recordChange(connection, store, before, after, type, reason, administrator, threshold, transferId, null, null);
+    }
+
+    private void recordChange(Connection connection, String store, Stock before, int after, String type,
+            String reason, String administrator, Integer threshold, String transferId, Integer physical, Integer allocated)
+            throws SQLException {
         String thresholdColumns = threshold == null ? "" : ", before_threshold, after_threshold";
         String thresholdValues = threshold == null ? "" : ", ?, ?";
         try (PreparedStatement statement = connection.prepareStatement("INSERT INTO store_inventory_history "
                 + "(store_id, product_id, product_reference, product_name, product_code, change_type, "
                 + "before_quantity, after_quantity, reason, administrator_id" + thresholdColumns
                 + (transferId == null ? "" : ", transfer_id")
+                + (physical == null ? "" : ", counted_physical, counted_pickup_units")
                 + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?" + thresholdValues
-                + (transferId == null ? "" : ", ?") + ")")) {
+                + (transferId == null ? "" : ", ?") + (physical == null ? "" : ", ?, ?") + ")")) {
             statement.setString(1, store);
             statement.setString(2, before.id);
             statement.setString(3, before.id);
@@ -738,7 +912,11 @@ public final class StoreInventoryDAO {
                 statement.setInt(12, threshold);
             }
             if (transferId != null) statement.setString(11, transferId);
-            statement.executeUpdate();
+            if (physical != null) {
+                statement.setInt(11, physical);
+                statement.setInt(12, allocated);
+            }
+            if (statement.executeUpdate() != 1) throw new SQLException("Store inventory history could not be saved");
         }
     }
 
@@ -847,6 +1025,8 @@ public final class StoreInventoryDAO {
         public final String administrator;
         public final LocalDateTime date;
         public final String transferId;
+        public final String actorType;
+        public final String orderNo;
 
         private History(ResultSet row) throws SQLException {
             name = row.getString("product_name");
@@ -855,6 +1035,9 @@ public final class StoreInventoryDAO {
             String value = row.getString("change_type");
             switch (value) {
                 case "INITIAL": type = "초기 등록"; break;
+                case "PICKUP_PAYMENT": type = "픽업 결제 차감"; break;
+                case "PICKUP_CANCEL": type = "픽업 주문 취소 복구"; break;
+                case "PICKUP_REFUND": type = "픽업 환불 복구"; break;
                 case "THRESHOLD": type = "부족 기준 변경"; break;
                 case "REGISTER":
                 case "RESUME":
@@ -869,6 +1052,8 @@ public final class StoreInventoryDAO {
             administrator = row.getString("administrator_id");
             date = row.getObject("changed_at", LocalDateTime.class);
             transferId = row.getString("transfer_id");
+            actorType = row.getString("actor_type");
+            orderNo = row.getString("order_no");
         }
     }
 }

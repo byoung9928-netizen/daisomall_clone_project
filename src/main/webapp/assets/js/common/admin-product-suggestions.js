@@ -97,7 +97,8 @@
                 image.width = image.height = 40;
                 const detail = make('span', '', 'admin-product-suggest-detail');
                 detail.append(make('strong', item.name), make('small', '품번 ' + item.code + ' · ' + money.format(item.price) + '원'),
-                    make('small', wrapper.dataset.suggestStockLabel + ' ' + money.format(item.stock) + '개 · ' + item.stockStatus));
+                    make('small', item.stock == null ? item.stockStatus
+                        : wrapper.dataset.suggestStockLabel + ' ' + money.format(item.stock) + '개 · ' + item.stockStatus));
                 button.append(image, detail);
                 button.addEventListener('mousedown', event => event.preventDefault());
                 button.addEventListener('click', () => choose(item));

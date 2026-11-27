@@ -1,5 +1,8 @@
 package daiso.product.controller;
 
+import com.google.gson.JsonObject;
+import daiso.order.db.PickupStockTransaction;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import daiso.admin.report.AdminReport;
 import java.nio.charset.StandardCharsets;
@@ -71,6 +74,43 @@ public final class StoreInventoryController {
         });
     }
 
+    @DaisoGetMapping(MAPPING + "/count-preview")
+    public String countPreview(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        response.setHeader("Cache-Control", "private, no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        HttpSession session = AdminProductController.adminSession(request);
+        if (session == null) return StoreStocktake.respond(response, new JsonObject(), 403);
+        JsonObject result = new JsonObject();
+        int status = 200;
+        try (Connection connection = ProductQueries.connect()) {
+            Filters filters = new Filters(request);
+            if (filters.store.isEmpty() || filters.product.isEmpty()) throw new IllegalArgumentException();
+            if (!StoreStocktake.enabled(connection)) throw new StoreStocktake.Conflict("실사 저장 전환이 아직 활성화되지 않았습니다.");
+            String member = session.getAttribute("member_id").toString();
+            StoreStocktake.requireAdministrator(connection, member, false);
+            StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
+            Location selected = filters.selectStore(dao.locations(connection));
+            Stock stock = selected == null ? null : dao.find(connection, selected.id, filters.product, false);
+            if (stock == null || !stock.carried || !stock.id.equals(filters.product)) {
+                throw new StoreStocktake.Conflict("취급 중인 매장 상품을 다시 선택해 주세요.");
+            }
+            StoreStocktake.Baseline baseline = StoreStocktake.issue(connection, session, member, "ADMIN", selected.id, stock);
+            StoreStocktake.present(result, selected.id, stock, baseline.orders.allocated, baseline);
+            connection.commit();
+        } catch (StoreStocktake.Conflict | StoreInventoryCountPreview.UncertainPickup error) {
+            status = 409;
+            result.addProperty("message", error.getMessage());
+        } catch (IllegalArgumentException error) {
+            status = 400;
+            result.addProperty("message", "실사할 매장과 상품을 다시 선택해 주세요.");
+        } catch (SQLException | NamingException error) {
+            request.getServletContext().log("관리자 실사 기준 조회 실패", error);
+            status = 503;
+            result.addProperty("message", "현재 픽업 할당 수량을 조회할 수 없습니다.");
+        }
+        return StoreStocktake.respond(response, result, status);
+    }
+
     @DaisoPostMapping(MAPPING + "/adjust")
     public String adjust(HttpServletRequest request, HttpServletResponse response)
             throws UnsupportedEncodingException {
@@ -111,6 +151,12 @@ public final class StoreInventoryController {
 
         Preview preview = null;
         try (Connection connection = ProductQueries.connect()) {
+            boolean count = adjustment.change == Change.COUNT;
+            if (count && confirm) StoreStocktake.beginCurrentRead(connection);
+            boolean stocktake = count && StoreStocktake.enabled(connection);
+            if (count && !stocktake && !adjustment.countBaseline.isEmpty()) {
+                throw new StoreStocktake.Conflict("실사 저장 전환이 활성화되지 않았습니다. 수량을 다시 확인해 주세요.");
+            }
             StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
             try {
                 if (confirm && !dao.lockStore(connection, filters.store, filters.city)) {
@@ -124,13 +170,25 @@ public final class StoreInventoryController {
                             "미리보기 이후 재고가 변경되었거나 취급이 종료됐습니다. 최신 재고로 미리보기를 다시 만들어 주세요.");
                 }
                 request.setAttribute("storeFieldError", "amount");
-                int after = adjustment.change.after(before.quantity, adjustment.amount);
-                request.removeAttribute("storeFieldError");
-                if (confirm) {
-                    dao.update(connection, filters.store, before, after, adjustment.change,
-                            adjustment.reason, session.getAttribute("member_id").toString());
+                String member = session.getAttribute("member_id").toString();
+                StoreStocktake.Baseline baseline = null;
+                int after;
+                if (stocktake) {
+                    StoreStocktake.requireAdministrator(connection, member, confirm);
+                    baseline = StoreStocktake.find(session, adjustment.countBaseline, member, "ADMIN",
+                            filters.store, filters.product, confirm);
+                    after = StoreStocktake.compare(connection, baseline, before,
+                            StoreStocktake.revision(connection, filters.store), adjustment.amount);
                 } else {
-                    preview = new Preview(filters.store, before, after, adjustment);
+                    after = adjustment.change.after(before.quantity, adjustment.amount);
+                }
+                request.removeAttribute("storeFieldError");
+                if (!confirm) {
+                    preview = new Preview(filters.store, before, after, adjustment, baseline);
+                } else if (baseline != null) {
+                    StoreStocktake.save(connection, dao, baseline, before, adjustment.amount, after, adjustment.reason);
+                } else {
+                    dao.update(connection, filters.store, before, after, adjustment.change, adjustment.reason, member);
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
@@ -141,6 +199,8 @@ public final class StoreInventoryController {
                 }
                 throw error;
             }
+        } catch (StoreStocktake.Conflict | StoreInventoryCountPreview.UncertainPickup error) {
+            return problem(request, response, session, filters, 409, error.getMessage());
         } catch (IllegalArgumentException error) {
             return problem(request, response, session, filters, 400, error.getMessage());
         } catch (SQLException | NamingException error) {
@@ -150,7 +210,8 @@ public final class StoreInventoryController {
         }
 
         if (confirm) {
-            return savedRedirect(session, filters, "매장 재고를 조정했습니다.");
+            return savedRedirect(session, filters, confirmed != null && confirmed.after == confirmed.stock.quantity
+                    ? "변경된 판매 가능 재고가 없습니다." : "매장 재고를 조정했습니다.");
         }
         rememberAdjustment(session, preview);
         return show(request, response, session, filters, preview);
@@ -296,6 +357,7 @@ public final class StoreInventoryController {
             return problem(request, response, session, filters, 409, "취급 해제 내용을 다시 확인해 주세요.");
         }
         try (Connection connection = ProductQueries.connect()) {
+            if (confirm && action == Assortment.UNLIST) StoreStocktake.beginCurrentRead(connection);
             StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
             try {
                 if (confirm && !dao.lockStore(connection, filters.store, filters.city)) {
@@ -306,6 +368,12 @@ public final class StoreInventoryController {
                     before = dao.findProduct(connection, filters.product);
                 }
                 validateAssortment(before, action, expectedVersion);
+                if (confirm && action == Assortment.UNLIST && PickupStockTransaction.enabled(connection)) {
+                    StoreStocktake.requireAdministrator(connection, session.getAttribute("member_id").toString(), true);
+                    if (StoreInventoryCountPreview.allocated(connection, filters.store, before.id) > 0) {
+                        throw new StoreStocktake.Conflict("미수령 픽업 할당이 있는 상품은 취급을 종료할 수 없습니다.");
+                    }
+                }
                 if (confirm) {
                     dao.changeAssortment(connection, filters.store, before, quantity, action, reason,
                             session.getAttribute("member_id").toString());
@@ -325,7 +393,7 @@ public final class StoreInventoryController {
                 }
                 throw error;
             }
-        } catch (IllegalArgumentException error) {
+        } catch (IllegalArgumentException | StoreInventoryCountPreview.UncertainPickup error) {
             return problem(request, response, session, filters, 409, error.getMessage());
         } catch (SQLException | NamingException error) {
             request.getServletContext().log("매장 취급 상태 저장 실패", error);
@@ -475,6 +543,7 @@ public final class StoreInventoryController {
                     categories,
                     inventory, history, editing, preview, summary, page, pages, total, dao.thresholdsEnabled()));
             request.setAttribute("storeInventoryCsrf", AdminProductController.token(session));
+            if (editing != null) request.setAttribute("storeStocktakeEnabled", StoreStocktake.enabled(connection));
             connection.commit();
             showSaved(request, response, session, selectedId, inventory);
             request.setAttribute("inventoryBatchNotice", AdminInventoryBatchController.takeNotice(request, session, MAPPING));
@@ -597,9 +666,8 @@ public final class StoreInventoryController {
                     ? historyDate(request, "historyStart") : period.start(today);
             java.time.LocalDate end = period == AdminReviewController.Period.CUSTOM ? historyDate(request, "historyEnd") : today;
             if (start != null && start.isAfter(end)) throw new IllegalArgumentException("이력 날짜");
-            String type = history ? ProductQueries.text(request, "historyType", 12) : "";
-            if (!Set.of("", "INITIAL", "RECEIVE", "ISSUE", "DAMAGE", "RETURN", "COUNT", "REGISTER", "RESUME",
-                    "UNLIST", "THRESHOLD", "TRANSFER").contains(type)) throw new IllegalArgumentException("이력 유형");
+            String type = history ? ProductQueries.text(request, "historyType", 14) : "";
+            if (!StoreInventoryDAO.HistoryFilter.TYPES.contains(type)) throw new IllegalArgumentException("이력 유형");
             historyFilter = new StoreInventoryDAO.HistoryFilter(start == null ? null : start.atStartOfDay(),
                     start == null ? null : end.plusDays(1).atStartOfDay(), type,
                     history ? ProductQueries.text(request, "historyActor", 100) : "",
@@ -676,12 +744,14 @@ public final class StoreInventoryController {
         public final int amount;
         public final long version;
         public final String reason;
+        private final String countBaseline;
 
-        private Adjustment(Change change, int amount, long version, String reason) {
+        private Adjustment(Change change, int amount, long version, String reason, String countBaseline) {
             this.change = change;
             this.amount = amount;
             this.version = version;
             this.reason = reason;
+            this.countBaseline = countBaseline;
         }
 
         private static Adjustment read(HttpServletRequest request) {
@@ -698,7 +768,11 @@ public final class StoreInventoryController {
                 String reason = ProductQueries.text(request, "reason", 255);
                 if (reason.isEmpty()) throw new IllegalArgumentException();
                 request.removeAttribute("storeFieldError");
-                return new Adjustment(change, amount, version, reason);
+                String baseline = ProductQueries.text(request, "countBaseline", 36);
+                if (change == Change.COUNT && !baseline.isEmpty() && !request.getParameter("amount").matches("[0-9]{1,10}")) {
+                    throw new IllegalArgumentException();
+                }
+                return new Adjustment(change, amount, version, reason, baseline);
             } catch (IllegalArgumentException error) {
                 throw new IllegalArgumentException("변경 유형, 수량, 사유를 확인해 주세요.", error);
             }
@@ -712,12 +786,17 @@ public final class StoreInventoryController {
         public final Stock stock;
         public final int after;
         public final Adjustment adjustment;
+        public final Integer allocated;
+        public final String countStarted;
 
-        private Preview(String store, Stock stock, int after, Adjustment adjustment) {
+        private Preview(String store, Stock stock, int after, Adjustment adjustment, StoreStocktake.Baseline baseline) {
             this.store = store;
             this.stock = stock;
             this.after = after;
             this.adjustment = adjustment;
+            this.allocated = baseline == null ? null : baseline.orders.allocated;
+            this.countStarted = baseline == null ? null : baseline.started.format(
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         }
     }
 
