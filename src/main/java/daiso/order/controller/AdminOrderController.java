@@ -19,6 +19,9 @@ import daiso.common.annotation.DaisoResponseBody;
 import daiso.order.db.AdminOrderDAO;
 import daiso.order.db.OrderBean;
 import daiso.order.delivery.DeliveryTrackerClient;
+import java.util.Map;
+import daiso.product.controller.InventoryPagination;
+import daiso.product.controller.ProductView;
 
 @DaisoController
 public class AdminOrderController {
@@ -80,21 +83,25 @@ public class AdminOrderController {
         }
 
         try {
-            AdminOrderDAO dao = new AdminOrderDAO();
+        	AdminOrderDAO dao = new AdminOrderDAO();
+        	long totalOrders = dao.countOrders(keyword, awaitingShipment);
 
-            List<OrderBean> orders =
-            		dao.getOrderList(keyword, page, awaitingShipment);
+        	int totalPages = totalOrders == 0 ? 1 : Math.toIntExact(
+        	        (totalOrders - 1) / AdminOrderDAO.ORDERS_PER_PAGE + 1);
+        	int currentPage = Math.min(page, totalPages);
 
-            boolean hasNext = orders.size() > 50;
+        	List<OrderBean> orders = dao.getOrderList(keyword, currentPage, awaitingShipment);
+        	request.setAttribute("adminOrders", orders);
+        	request.setAttribute("adminOrderPage", currentPage);
 
-            // 다음 페이지 확인용으로 가져온 51번째 항목 제거
-            if (hasNext) {
-                orders.remove(50);
-            }
+        	String searchQuery = keyword;
+        	String filter = awaitingShipment ? "awaiting-shipment" : "";
 
-            request.setAttribute("adminOrders", orders);
-            request.setAttribute("adminOrderPage", page);
-            request.setAttribute("adminOrderHasNext", hasNext); 
+        	request.setAttribute("adminOrderPagination",
+        	        new InventoryPagination(currentPage, totalPages,
+        	                target -> ProductView.url(request.getContextPath(), "/app/admin/orders",
+        	                        Map.of("query", searchQuery, "filter", filter,
+        	                                "page", Integer.toString(target))))); 
         }catch (SQLException e) {
             request.getServletContext().log(
                 "관리자 주문 목록 조회 실패", e

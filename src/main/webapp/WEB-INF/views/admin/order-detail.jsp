@@ -29,7 +29,7 @@ DateTimeFormatter dateFormat =
 <head>
     <%@ include file="../common/admin-head.jspf" %>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
 
 <a class="skip-link" href="#admin-content">
     관리자 본문 바로가기

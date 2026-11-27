@@ -13,7 +13,26 @@ import javax.sql.DataSource;
 import daiso.cart.db.CartBean;
 
 public class AdminOrderDAO {
+	public static final int ORDERS_PER_PAGE = 50;
 	private final DataSource ds;
+	
+	private static final String ORDER_LIST_SCOPE =
+	        "FROM orders o "
+	        + "LEFT JOIN payment_attempts p ON p.payment_id = ("
+	        + "SELECT MAX(p2.payment_id) FROM payment_attempts p2 "
+	        + "WHERE p2.order_id = o.order_id"
+	        + ") "
+	        + "WHERE (? = '' "
+	        + "OR LOCATE(?, o.order_no) > 0 "
+	        + "OR LOCATE(?, o.member_id) > 0 "
+	        + "OR EXISTS ("
+	        + "SELECT 1 FROM order_items search_item "
+	        + "WHERE search_item.order_id = o.order_id "
+	        + "AND LOCATE(?, search_item.product_name) > 0"
+	        + ")) "
+	        + "AND (? = 0 OR (p.status = 'APPROVED' "
+	        + "AND o.status IN ('PAID', 'PREPARING') "
+	        + "AND o.canceled_at IS NULL)) ";
 	
 	public AdminOrderDAO() {
 		try {
@@ -29,12 +48,31 @@ public class AdminOrderDAO {
         if (page < 1) {
 			throw new IllegalArgumentException("페이지 번호를 확인해 주세요.");
 		}
-        return queryOrders(keyword, awaitingShipment, (page - 1L) * 50);
+        return queryOrders(keyword, awaitingShipment, (page - 1L) * ORDERS_PER_PAGE);
     }
 
     // ===== 엑셀용: 화면과 조회 조건을 공유하고 페이지 제한만 제외 =====
     public List<OrderBean> getOrdersForExport(String keyword, boolean awaitingShipment) throws SQLException {
         return queryOrders(keyword, awaitingShipment, null);
+    }
+    
+    public long countOrders(String keyword, boolean awaitingShipment) throws SQLException {
+        String query = keyword == null ? "" : keyword.trim();
+        String sql = "SELECT COUNT(*) " + ORDER_LIST_SCOPE;
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, query);
+            statement.setString(2, query);
+            statement.setString(3, query);
+            statement.setString(4, query);
+            statement.setBoolean(5, awaitingShipment);
+
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
     }
 
     private List<OrderBean> queryOrders(String keyword, boolean awaitingShipment, Long offset) throws SQLException {
@@ -53,26 +91,9 @@ public class AdminOrderDAO {
 			            + "ORDER BY oi.order_item_id LIMIT 1) AS first_product_name, "
 			            + "(SELECT COUNT(*) FROM order_items oi2 "
 			            + "WHERE oi2.order_id = o.order_id) AS product_count "
-			            + "FROM orders o "
-			            + "LEFT JOIN payment_attempts p "
-			            + "ON p.payment_id = ("
-			            + "SELECT MAX(p2.payment_id) "
-			            + "FROM payment_attempts p2 "
-			            + "WHERE p2.order_id = o.order_id"
-			            + ") "
-			            + "WHERE (? = '' "
-			            + "OR LOCATE(?, o.order_no) > 0 "//locate는 문자열 안에 검색어가 있는지 찾는 mysql함수
-			            + "OR LOCATE(?, o.member_id) > 0 "//검색어가 들어있으면 위치가 1이상으로 나오기때문에 조건이 참
-			            + "OR EXISTS ("
-			            + "SELECT 1 FROM order_items search_item "//
-			            + "WHERE search_item.order_id = o.order_id "//이 주문의 상품 중 검색어가 들어간 상품이 하나라도 있는가?
-			            + "AND LOCATE(?, search_item.product_name) > 0"//
-			            + ")) "
-						+ "AND (? = 0 OR (p.status = 'APPROVED' " 
-			            + "AND o.status IN ('PAID', 'PREPARING') "
-						+ "AND o.canceled_at IS NULL)) "
+			            + ORDER_LIST_SCOPE
 			            + "ORDER BY o.created_at DESC, o.order_id DESC "
-			            + (offset == null ? "" : "LIMIT 51 OFFSET ?");
+			            + (offset == null ? "" : "LIMIT " + ORDERS_PER_PAGE + " OFFSET ?");
 		List<OrderBean> orders = new ArrayList<>();
 		
 		try(

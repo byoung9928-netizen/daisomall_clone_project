@@ -11,7 +11,7 @@
     <%@ include file="../common/admin-head.jspf" %>
     <style>
         .sales-metrics {display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin:16px 0}
-        .sales-metrics>div,.sales-graph {background:#fff;border:1px solid #e4d8d8;border-radius:8px;padding:14px}
+        .sales-metrics>div,.sales-graph {background:#fff;border:1px solid var(--admin-line);border-radius:8px;padding:14px}
         .sales-metrics dt,.sales-metrics small,.sales-caption {color:#545961}
         .sales-metrics dd {margin:4px 0;font-size:1.4rem;font-weight:700}
         .sales-analysis-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px;margin:16px 0}
@@ -21,7 +21,7 @@
         .sales-shortcuts {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
     </style>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
 <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
 <%@ include file="../common/admin-header.jspf" %>
 <div class="admin-layout">
@@ -113,6 +113,12 @@
                     </tbody>
                 </table>
             </div>
+            <% daiso.product.controller.InventoryPagination inventoryPagination =
+           (daiso.product.controller.InventoryPagination) request.getAttribute("salesPagination");
+   if (inventoryPagination != null && inventoryPagination.pages > 1) {
+       request.setAttribute("adminPaginationLabel", "판매순위 페이지"); %>
+    <%@ include file="inventory-pagination.jspf" %>
+<% } %>
         <% } %>
     </main>
 </div>

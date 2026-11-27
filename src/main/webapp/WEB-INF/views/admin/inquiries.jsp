@@ -17,7 +17,7 @@ List<Map<String, Object>> inquiries =
         .admin-inquiry form button { justify-self: start; }
     </style>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">
         <%@ include file="../common/admin-navigation.jspf" %>

@@ -25,7 +25,6 @@ int orderPage =
 	request.getAttribute("adminOrderPage") instanceof Number
 		?((Number) request.getAttribute("adminOrderPage")).intValue()
 		:1;
-boolean hasNext = Boolean.TRUE.equals(request.getAttribute("adminOrderHasNext"));
 boolean awaitingShipment =
 Boolean.TRUE.equals(request.getAttribute("adminOrderAwaitingShipment"));
 %>
@@ -35,7 +34,7 @@ Boolean.TRUE.equals(request.getAttribute("adminOrderAwaitingShipment"));
 <head>
     <%@ include file="../common/admin-head.jspf" %>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
 
 <a class="skip-link" href="#admin-content">
     관리자 본문 바로가기
@@ -151,29 +150,13 @@ Boolean.TRUE.equals(request.getAttribute("adminOrderAwaitingShipment"));
                     </tbody>
                 </table>
             </div>
-            <nav aria-label="주문 목록 페이지"
-     style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px;">
-
-    <% if (orderPage > 1) { %>
-        <form method="get" action="${pageContext.request.contextPath}/app/admin/orders">
-            <input type="hidden" name="filter" value="<%= awaitingShipment ? "awaiting-shipment" : "" %>">
-            <input type="hidden" name="query" value="<%= ProductView.escape(query) %>">
-            <input type="hidden" name="page" value="<%= orderPage - 1 %>">
-            <button class="button secondary" type="submit">이전</button>
-        </form>
-    <% } %>
-
-    <span aria-current="page"><%= orderPage %>페이지</span>
-
-    <% if (hasNext) { %>
-        <form method="get" action="${pageContext.request.contextPath}/app/admin/orders">
-            <input type="hidden" name="filter" value="<%= awaitingShipment ? "awaiting-shipment" : "" %>">
-            <input type="hidden" name="query" value="<%= ProductView.escape(query) %>">
-            <input type="hidden" name="page" value="<%= orderPage + 1L %>">
-            <button class="button secondary" type="submit">다음</button>
-        </form>
-    <% } %>
-</nav>
+            <% daiso.product.controller.InventoryPagination inventoryPagination =
+           (daiso.product.controller.InventoryPagination)
+                   request.getAttribute("adminOrderPagination");
+   if (inventoryPagination != null && inventoryPagination.pages > 1) {
+       request.setAttribute("adminPaginationLabel", "주문 목록 페이지"); %>
+    <%@ include file="inventory-pagination.jspf" %>
+<% } %>
         <% } %>
     </main>
 </div>

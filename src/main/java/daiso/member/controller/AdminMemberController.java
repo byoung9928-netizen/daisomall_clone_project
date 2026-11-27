@@ -16,6 +16,9 @@ import javax.servlet.http.HttpSession;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
+import java.util.Map;
+import daiso.product.controller.InventoryPagination;
+import daiso.product.controller.ProductView;
 
 @DaisoController
 public final class AdminMemberController {
@@ -80,6 +83,16 @@ public final class AdminMemberController {
         	request.setAttribute("adminMemberTotal", totalMembers);
         	request.setAttribute("adminMemberPage", currentPage);
         	request.setAttribute("adminMemberTotalPages", totalPages);
+        	String pageQuery = (String) request.getAttribute("adminMemberQuery");
+        	String pageStatus = (String) request.getAttribute("adminMemberStatus");
+
+        	request.setAttribute("adminMemberPagination",
+        	        new InventoryPagination(
+        	                Math.toIntExact(currentPage),
+        	                Math.toIntExact(totalPages),
+        	                target -> ProductView.url(request.getContextPath(), "/app" + PATH,
+        	                        Map.of("query", pageQuery, "status", pageStatus,
+        	                                "page", Integer.toString(target)))));
             return VIEW;
         } catch (IllegalArgumentException error) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
