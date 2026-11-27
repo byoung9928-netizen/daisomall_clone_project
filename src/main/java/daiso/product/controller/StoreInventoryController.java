@@ -37,6 +37,8 @@ public final class StoreInventoryController {
     private static final String MAPPING = "/admin/stores";
     private static final String VIEW = "admin/stores";
     private static final String SAVED = StoreInventoryController.class.getName() + ".saved";
+    private static final String ADJUST_PREVIEWS = StoreInventoryController.class.getName() + ".adjustPreviews";
+    private static final int ADJUST_PREVIEW_LIMIT = 8;
     private static final String UNLIST = StoreInventoryController.class.getName() + ".unlist";
     private static final int PAGE_SIZE = 20;
     private static final Set<String> CITIES = Set.of("", "서울", "부산");
@@ -93,16 +95,18 @@ public final class StoreInventoryController {
         if ("revise".equals(request.getParameter("action"))) {
             return show(request, response, session, filters, null);
         }
-        Adjustment adjustment;
-        try {
-            adjustment = Adjustment.read(request);
-        } catch (IllegalArgumentException error) {
-            return problem(request, response, session, filters, 400, error.getMessage());
-        }
-
         boolean confirm = "save".equals(request.getParameter("action"));
         if (!confirm && !"preview".equals(request.getParameter("action"))) {
             return problem(request, response, session, filters, 400, "미리보기 또는 반영을 선택해 주세요.");
+        }
+
+        Adjustment adjustment;
+        Preview confirmed = null;
+        try {
+            if (confirm) confirmed = takeAdjustment(session, filters, ProductQueries.text(request, "adjustReceipt", 36));
+            adjustment = confirmed == null ? Adjustment.read(request) : confirmed.adjustment;
+        } catch (IllegalArgumentException error) {
+            return problem(request, response, session, filters, confirm ? 409 : 400, error.getMessage());
         }
 
         Preview preview = null;
@@ -113,10 +117,11 @@ public final class StoreInventoryController {
                     throw new IllegalArgumentException("선택한 지역의 매장을 다시 골라 주세요.");
                 }
                 Stock before = dao.find(connection, filters.store, filters.product, confirm);
-                if (before == null || !before.carried || before.version != adjustment.version) {
+                if (before == null || !filters.product.equals(before.id) || !before.carried
+                        || before.version != adjustment.version || (confirmed != null && before.quantity != confirmed.stock.quantity)) {
                     connection.rollback();
                     return problem(request, response, session, filters, 409,
-                            "재고가 변경됐거나 취급이 종료됐습니다. 현재 재고를 다시 확인해 주세요.");
+                            "미리보기 이후 재고가 변경되었거나 취급이 종료됐습니다. 최신 재고로 미리보기를 다시 만들어 주세요.");
                 }
                 request.setAttribute("storeFieldError", "amount");
                 int after = adjustment.change.after(before.quantity, adjustment.amount);
@@ -125,7 +130,7 @@ public final class StoreInventoryController {
                     dao.update(connection, filters.store, before, after, adjustment.change,
                             adjustment.reason, session.getAttribute("member_id").toString());
                 } else {
-                    preview = new Preview(before, after, adjustment);
+                    preview = new Preview(filters.store, before, after, adjustment);
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
@@ -147,7 +152,34 @@ public final class StoreInventoryController {
         if (confirm) {
             return savedRedirect(session, filters, "매장 재고를 조정했습니다.");
         }
+        rememberAdjustment(session, preview);
         return show(request, response, session, filters, preview);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void rememberAdjustment(HttpSession session, Preview preview) {
+        synchronized (session) {
+            Map<String, Preview> previews = (Map<String, Preview>) session.getAttribute(ADJUST_PREVIEWS);
+            if (previews == null) {
+                previews = new LinkedHashMap<>();
+                session.setAttribute(ADJUST_PREVIEWS, previews);
+            }
+            if (previews.size() >= ADJUST_PREVIEW_LIMIT) previews.remove(previews.keySet().iterator().next());
+            previews.put(preview.receipt, preview);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Preview takeAdjustment(HttpSession session, Filters filters, String receipt) {
+        synchronized (session) {
+            Map<String, Preview> previews = (Map<String, Preview>) session.getAttribute(ADJUST_PREVIEWS);
+            Preview preview = previews == null ? null : previews.get(receipt);
+            if (preview == null || !preview.store.equals(filters.store) || !preview.stock.id.equals(filters.product)
+                    || preview.expires < System.currentTimeMillis()) {
+                throw new IllegalArgumentException("미리보기가 만료되었거나 이미 처리되었습니다. 최신 재고로 미리보기를 다시 만들어 주세요.");
+            }
+            return previews.remove(receipt);
+        }
     }
 
     @DaisoPostMapping(MAPPING + "/threshold")
@@ -674,11 +706,15 @@ public final class StoreInventoryController {
     }
 
     public static final class Preview {
+        public final String receipt = UUID.randomUUID().toString();
+        private final long expires = System.currentTimeMillis() + 600_000;
+        private final String store;
         public final Stock stock;
         public final int after;
         public final Adjustment adjustment;
 
-        private Preview(Stock stock, int after, Adjustment adjustment) {
+        private Preview(String store, Stock stock, int after, Adjustment adjustment) {
+            this.store = store;
             this.stock = stock;
             this.after = after;
             this.adjustment = adjustment;

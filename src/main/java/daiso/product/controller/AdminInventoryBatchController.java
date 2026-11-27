@@ -105,6 +105,9 @@ public final class AdminInventoryBatchController {
             }
             return "redirect:" + ProductView.rawUrl("", route,
                     ProductView.with(plan.filters, SAVED_PARAMETER, plan.receipt)) + "#inventory-batch-result";
+        } catch (StaleStorePreview error) {
+            return json ? AdminBatchResponse.failed(response, 409, error.getMessage())
+                    : problem(request, response, 409, error.getMessage());
         } catch (InvalidInput error) {
             request.setAttribute("batchErrorField", error.field);
             return json ? AdminBatchResponse.failed(response, 400, error.getMessage())
@@ -220,6 +223,9 @@ public final class AdminInventoryBatchController {
                 for (StoreInventoryDAO.Location location : stores.locations(connection)) {
                     storeNames.put(location.id, location.name);
                 }
+                if (!storeNames.containsKey(store)) {
+                    throw new InvalidInput("batchProduct", "대상 매장을 다시 선택해 주세요.");
+                }
                 if (operation == Operation.TRANSFER && !storeNames.containsKey(destination)) {
                     throw new InvalidInput("destination", "입고 매장을 다시 선택해 주세요.");
                 }
@@ -280,18 +286,15 @@ public final class AdminInventoryBatchController {
     private int commit(Plan plan, String manager) throws SQLException, NamingException {
         try (Connection conn = ProductQueries.connect()) {
             try {
-                StoreInventoryDAO stores = plan.online ? null : StoreInventoryDAO.forInventory(conn);
-                if (!plan.online) {
-                    TreeSet<String> locations = new TreeSet<>();
-                    for (Line line : plan.lines) locations.add(line.store);
-                    for (String store : locations) {
-                        if (!stores.lockStore(conn, store, "")) throw new IllegalArgumentException("매장을 찾을 수 없습니다.");
-                    }
-                }
                 int changed = 0;
-                for (Line line : plan.lines) {
-                    if (plan.online) changed += writeOnline(conn, plan, line, manager);
-                    else changed += writeStore(conn, stores, plan, line, manager);
+                if (plan.online) {
+                    for (Line line : plan.lines) changed += writeOnline(conn, plan, line, manager);
+                } else {
+                    StoreInventoryDAO stores = StoreInventoryDAO.forInventory(conn);
+                    Map<Line, Stock> locked = lockStorePreview(conn, stores, plan);
+                    for (Map.Entry<Line, Stock> row : locked.entrySet()) {
+                        changed += writeStore(conn, stores, plan, row.getKey(), row.getValue(), manager);
+                    }
                 }
                 conn.commit();
                 return changed;
@@ -316,12 +319,38 @@ public final class AdminInventoryBatchController {
         return 1;
     }
 
-    private static int writeStore(Connection conn, StoreInventoryDAO stores, Plan plan, Line line, String manager)
+    private static Map<Line, Stock> lockStorePreview(Connection conn, StoreInventoryDAO stores, Plan plan)
             throws SQLException {
-        Stock stock = stores.find(conn, line.store, line.id, true);
-        if (stock == null || !stock.carried || stock.version != line.version) {
-            throw new IllegalArgumentException("미리보기 이후 매장 재고가 바뀌었습니다. 다시 확인해 주세요.");
+        Map<String, Map<String, Line>> byStore = new LinkedHashMap<>();
+        for (Line line : plan.lines) {
+            byStore.computeIfAbsent(line.store, ignored -> new LinkedHashMap<>()).put(line.id, line);
         }
+        try {
+            List<String> orderedStores = stores.storeLockOrder(conn, byStore.keySet());
+            for (String store : orderedStores) {
+                if (!stores.lockStore(conn, store, "")) throw new StaleStorePreview();
+            }
+            Map<Line, Stock> locked = new LinkedHashMap<>();
+            for (String store : orderedStores) {
+                Map<String, Line> lines = byStore.get(store);
+                for (String product : stores.inventoryLockOrder(conn, store, lines.keySet())) {
+                    Line line = lines.get(product);
+                    Stock stock = stores.find(conn, store, product, true);
+                    if (stock == null || !product.equals(stock.id) || !stock.carried || stock.version != line.version
+                            || line.before != (plan.threshold ? stock.threshold : stock.quantity)) {
+                        throw new StaleStorePreview();
+                    }
+                    locked.put(line, stock);
+                }
+            }
+            return locked;
+        } catch (IllegalArgumentException error) {
+            throw new StaleStorePreview();
+        }
+    }
+
+    private static int writeStore(Connection conn, StoreInventoryDAO stores, Plan plan, Line line, Stock stock,
+            String manager) throws SQLException {
         if (line.before == line.after) return 0;
         if (plan.operation == Operation.THRESHOLD) {
             stores.updateThreshold(conn, line.store, stock, line.after, manager, plan.reason);
@@ -363,6 +392,12 @@ public final class AdminInventoryBatchController {
         response.setStatus(code);
         request.setAttribute("batchError", message);
         return VIEW;
+    }
+
+    private static final class StaleStorePreview extends RuntimeException {
+        private StaleStorePreview() {
+            super("미리보기 이후 재고가 변경되었습니다. 최신 재고를 확인하고 미리보기를 다시 만든 뒤 확정해 주세요.");
+        }
     }
 
     private static final class InvalidInput extends IllegalArgumentException {

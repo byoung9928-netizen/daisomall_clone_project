@@ -1296,12 +1296,14 @@ public class OrderDAO {
 		            + "AND o.total_amount = ? AND p.amount = ? AND p.method = ? "
 		            + "AND p.tid = ? FOR UPDATE";
 
+		    // order_items.product_id and store_inventory.product_id share the products PK collation.
+		    // Read the sorted item keys first, then lock each inventory row through its composite PK.
 		    String itemsSql =
 		            "SELECT product_id, SUM(quantity) AS qty FROM order_items "
 		            + "WHERE order_id = ? GROUP BY product_id ORDER BY product_id";
 
 		    String stockSql =
-		            "UPDATE store_inventory SET quantity = quantity - ? "
+		            "UPDATE store_inventory SET quantity = quantity - ?, version = version + 1 "
 		            + "WHERE store_id = ? AND product_id = ? AND is_carried = 1 AND quantity >= ?";
 
 		    try (Connection con = ds.getConnection()) {

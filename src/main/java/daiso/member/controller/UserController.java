@@ -201,7 +201,7 @@ public class UserController {
                 return "redirect:/admin/dashboard";
             }
             if ("STORE_MANAGER".equalsIgnoreCase(member.getRole())) {
-                return "redirect:/store-manager/inventory";
+                return "redirect:/store-manager/dashboard";
             }
             return "redirect:/home";
 
