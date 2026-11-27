@@ -1,0 +1,33 @@
+<%@ page pageEncoding="UTF-8" %>
+<% if ("ADMIN".equals(session.getAttribute("role")) && session.getAttribute("member_id") != null) { %>
+    <button class="button secondary" id="open-admin-chat" type="button"
+            aria-haspopup="dialog" aria-controls="admin-chat-dialog">관리 도우미</button>
+
+    <dialog id="admin-chat-dialog" class="ai-chat-dialog" aria-labelledby="admin-chat-title">
+        <div class="ai-chat-heading">
+            <h2 id="admin-chat-title">관리 도우미</h2>
+            <form method="dialog">
+                <button type="submit" class="ai-chat-close" aria-label="채팅 닫기">×</button>
+            </form>
+        </div>
+
+        <div id="admin-chat-log" class="ai-chat-log" role="log" aria-label="대화 내역">
+            <p class="ai-chat-bubble">반품 승인 대기와 온라인 품절 건수를 확인할 수 있어요.</p>
+        </div>
+        <p id="admin-chat-status" class="visually-hidden" role="status"></p>
+
+        <div id="admin-chat-actions" class="ai-chat-quick-actions">
+            <button type="button" data-question="반품 승인 대기 몇 건이야?">반품 승인 대기</button>
+            <button type="button" data-question="온라인 품절 상품 몇 종이야?">온라인 품절</button>
+        </div>
+
+        <form id="admin-chat-form" class="ai-chat-form" method="post"
+              action="${pageContext.request.contextPath}/app/admin/chat">
+            <label for="admin-chat-question" class="visually-hidden">질문 입력</label>
+            <input id="admin-chat-question" name="question" type="text"
+                   maxlength="200" required placeholder="관리할 항목을 물어보세요">
+            <button type="submit">보내기</button>
+        </form>
+    </dialog>
+    <script src="${pageContext.request.contextPath}/assets/js/common/admin-chat.js" defer></script>
+<% } %>

@@ -30,7 +30,6 @@ public final class GeminiStockQuestionClient {
             throw new IllegalArgumentException("질문을 1~200자로 입력해 주세요.");
         }
 
-        String apiKey = InitialContext.doLookup("java:comp/env/geminiApiKey");
 
         String instructions =
                 "한국어로 대화하는 AI 어시스턴트다. 일상, 공부, 코딩 질문에도 답한다. "
@@ -75,6 +74,12 @@ public final class GeminiStockQuestionClient {
         config.addProperty("maxOutputTokens", 1500);
         config.add("responseJsonSchema", schema);
         body.add("generationConfig", config);
+        
+        return JsonParser.parseString(generate(body)).getAsJsonObject();
+    }
+
+    private String generate(JsonObject body) throws Exception {
+        String apiKey = InitialContext.doLookup("java:comp/env/geminiApiKey");
 
         HttpRequest request = HttpRequest.newBuilder(API_URL)
                 .timeout(Duration.ofSeconds(25))
@@ -122,7 +127,27 @@ public final class GeminiStockQuestionClient {
         if (answer.length() == 0) {
             throw new IOException("Gemini 답변이 비어 있습니다.");
         }
-        return JsonParser.parseString(answer.toString()).getAsJsonObject();
+        return answer.toString();
+    }
+    
+    public String answerGeneral(String question) throws Exception {
+        String instructions = "한국어로 대화하는 쇼핑몰 관리자 도우미다. "
+                + "일상 대화, 개념 설명, 일반적인 업무 질문과 문구 초안에 답한다. "
+                + "실제 주문, 회원, 문의, 재고 정보는 추측하지 않는다. "
+                + "답변은 읽기 쉬운 일반 텍스트로 간결하게 작성한다.";
+
+        JsonObject body = new JsonObject();
+        body.add("systemInstruction", textContent(instructions));
+
+        JsonArray contents = new JsonArray();
+        contents.add(textContent(question));
+        body.add("contents", contents);
+
+        JsonObject config = new JsonObject();
+        config.addProperty("maxOutputTokens", 1500);
+        body.add("generationConfig", config);
+
+        return generate(body).strip();
     }
 
     private static JsonObject textContent(String value) {

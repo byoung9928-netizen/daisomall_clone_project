@@ -85,6 +85,18 @@ public class SupportInquiryDAO {
 
         return inquiries;
     }
+    
+    public long countPending() throws NamingException, SQLException {
+        String sql = "SELECT COUNT(*) FROM support_inquiries WHERE status = 'PENDING'";
+
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rows = statement.executeQuery()) {
+            rows.next();
+            return rows.getLong(1);
+        }
+    }
+    
     public List<Map<String, Object>> findForAdmin() throws NamingException, SQLException {
     	String sql = "SELECT i.inquiry_id, m.login_id, i.title, i.content, "
     	        + "i.status, i.answer, i.created_at, "

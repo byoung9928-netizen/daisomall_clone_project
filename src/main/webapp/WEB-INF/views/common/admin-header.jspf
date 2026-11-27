@@ -17,6 +17,7 @@
                 <span>엑셀 다운로드</span>
             </a>
         <% } %>
+        <%@ include file="admin-chat.jspf" %>
         <a href="${pageContext.request.contextPath}/">고객 화면 보기 ↗</a>
     </div>
 </header>

@@ -63,8 +63,17 @@
     <a href="${pageContext.request.contextPath}/search.jsp?q=디즈니"><img src="${pageContext.request.contextPath}/assets/images/home/quick-disney.png" alt="" width="104" height="104">디즈니</a>
     <a href="${pageContext.request.contextPath}/list.jsp?collection=new"><img src="${pageContext.request.contextPath}/assets/images/home/quick-new-club.png" alt="" width="104" height="104">신상클럽</a>
     <a href="${pageContext.request.contextPath}/app/stores/products"><img src="${pageContext.request.contextPath}/assets/images/home/quick-inventory.png" alt="" width="104" height="104">매장 상품 찾기</a>
-    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-delivery.png" alt="" width="104" height="104">다이소배송</button>
-    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-event.png" alt="" width="104" height="104">이벤트</button>
-    <button type="button" data-unavailable><img src="${pageContext.request.contextPath}/assets/images/home/quick-card.png" alt="" width="104" height="104">제휴카드</button>
+    <a href="${pageContext.request.contextPath}/app/guides/delivery">
+    <img src="${pageContext.request.contextPath}/assets/images/home/quick-delivery.png"
+         alt="" width="104" height="104">다이소배송
+</a>
+<a href="${pageContext.request.contextPath}/app/guides/events">
+    <img src="${pageContext.request.contextPath}/assets/images/home/quick-event.png"
+         alt="" width="104" height="104">이벤트
+</a>
+<a href="${pageContext.request.contextPath}/app/guides/partner-card">
+    <img src="${pageContext.request.contextPath}/assets/images/home/quick-card.png"
+         alt="" width="104" height="104">제휴카드
+</a>
     <a href="${pageContext.request.contextPath}/list.jsp?collection=ranking"><img src="${pageContext.request.contextPath}/assets/images/home/quick-sns.png" alt="" width="104" height="104">SNS핫템</a>
 </nav>
