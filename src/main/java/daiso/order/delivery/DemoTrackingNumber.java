@@ -17,6 +17,8 @@ public class DemoTrackingNumber {
         // 예: 현재 10시라면 12시, 현재 12시라면 15시
         int hoursToAdd = 3 - (now.getHour() % 3);
 
+//        ZonedDateTime deliveryTime = now.plusMinutes(2).withNano(0);
+//        
         ZonedDateTime deliveryTime = now
             .withMinute(0)
             .withSecond(0)
