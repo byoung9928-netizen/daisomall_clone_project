@@ -1,0 +1,61 @@
+.store-manager-inventory :is(.inventory-scope, small) { color: #566273; }
+.store-inventory-cards { gap: 12px; margin-bottom: 16px; }
+.store-inventory-cards .admin-stat {
+    display: grid;
+    gap: .35rem;
+    margin: 0;
+    padding: 16px;
+    color: var(--color-ink);
+}
+.store-inventory-cards .admin-stat[aria-current] { border-color: currentColor; }
+.store-manager-inventory [data-stock-kind="NORMAL"] { color: #17673f; }
+.store-manager-inventory [data-stock-kind="LOW"] { color: #8f4100; }
+.store-manager-inventory [data-stock-kind="SOLD_OUT"] { color: #a4001e; }
+.store-inventory-cards strong { color: inherit; font-size: 23px; }
+.store-inventory-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    align-items: end;
+    gap: 12px;
+}
+.store-inventory-filters .admin-product-suggest { grid-column: span 2; }
+.store-inventory-filters select { width: 100%; }
+.store-inventory-toolbar, .store-inventory-actions, .store-inventory-dialog-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.store-inventory-toolbar, .store-inventory-dialog-header { justify-content: space-between; }
+.store-inventory-toolbar .admin-count { margin: 0; }
+.store-inventory-table { max-height: min(68vh, 52rem); margin-top: 12px; }
+.store-inventory-table table { min-width: 950px; font-size: 14px; }
+.store-inventory-table thead th { position: sticky; inset-block-start: 0; z-index: 1; }
+.store-inventory-table .inventory-number { text-align: right; font-variant-numeric: tabular-nums; }
+.store-inventory-table small { display: block; margin-top: 4px; }
+.store-inventory-thumb { object-fit: contain; border-radius: 4px; background: #f6f7f8; }
+.store-inventory-state { display: inline-block; font-weight: 700; }
+.store-stock-management { min-width: 14rem; }
+.store-stock-management .button { margin: 0 2px 4px 0; }
+.store-stock-management details { margin-top: 4px; }
+.store-stock-management details summary { cursor: pointer; }
+.store-stock-management details input, .store-stock-management details select { width: 100%; }
+.store-inventory-dialog {
+    width: min(36rem, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+    padding: 20px;
+    color: var(--color-ink);
+}
+.store-inventory-dialog::backdrop { background: rgb(18 24 32 / 48%); }
+.store-inventory-dialog .field { margin-block: 10px; }
+.store-inventory-dialog .admin-table-scroll { max-height: 13rem; }
+.store-inventory-dialog textarea { min-height: 4rem; width: 100%; }
+@media (max-width: 740px) {
+    .store-inventory-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+    .store-inventory-filters .admin-product-suggest { grid-column: 1 / -1; }
+}

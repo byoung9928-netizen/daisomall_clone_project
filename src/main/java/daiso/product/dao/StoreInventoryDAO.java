@@ -20,6 +20,9 @@ public final class StoreInventoryDAO {
     private static final String SEARCH = " AND (LOCATE(?, %s) > 0 OR LOCATE(?, %s) > 0)";
 
     private static final String STOCK_SEARCH = String.format(SEARCH, "p.name", "p.product_code");
+    private static final String MANAGER_SEARCH =
+            " AND (LOCATE(?, p.name) > 0 OR LOCATE(?, p.product_code) > 0"
+            + " OR LOCATE(?, p.brand) > 0 OR LOCATE(?, p.product_id) > 0)";
     private static final String HISTORY_SCOPE = " FROM store_inventory_history WHERE store_id = ?"
             + String.format(SEARCH, "product_name", "product_code");
 
@@ -166,20 +169,42 @@ public final class StoreInventoryDAO {
         private final String category;
         private final String productId;
         private final State state;
+        private final Integer minimum;
+        private final Integer maximum;
+        private final boolean managerSearch;
 
         public InventoryFilter(String store, String keyword, String category, String productId, State state) {
+            this(store, keyword, category, productId, state, null, null, false);
+        }
+
+        public InventoryFilter(String store, String keyword, String category, String productId, State state,
+                Integer minimum, Integer maximum) {
+            this(store, keyword, category, productId, state, minimum, maximum, true);
+        }
+
+        private InventoryFilter(String store, String keyword, String category, String productId, State state,
+                Integer minimum, Integer maximum, boolean managerSearch) {
             this.store = store;
             this.keyword = keyword;
             this.category = category;
             this.productId = productId;
             this.state = state;
+            this.minimum = minimum;
+            this.maximum = maximum;
+            this.managerSearch = managerSearch;
         }
 
         private int bind(PreparedStatement statement) throws SQLException {
-            bindScope(statement, store, keyword);
-            int next = 4;
+            return bind(statement, 1);
+        }
+
+        private int bind(PreparedStatement statement, int next) throws SQLException {
+            statement.setString(next++, store);
+            for (int i = 0; i < (managerSearch ? 4 : 2); i++) statement.setString(next++, keyword);
             if (!category.isEmpty()) statement.setString(next++, category);
             if (!productId.isEmpty()) statement.setString(next++, productId);
+            if (minimum != null) statement.setInt(next++, minimum);
+            if (maximum != null) statement.setInt(next++, maximum);
             return next;
         }
     }
@@ -194,6 +219,56 @@ public final class StoreInventoryDAO {
             statement.setInt(next + 1, offset);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) result.add(readStock(rows));
+            }
+        }
+        return result;
+    }
+
+    public enum ManagerSort {
+        NAME("상품명", "p.name", false), NAME_DESC("상품명", "p.name", true),
+        CODE("품번", "p.product_code", false), CODE_DESC("품번", "p.product_code", true),
+        QUANTITY("재고", "i.quantity", false), QUANTITY_DESC("재고", "i.quantity", true),
+        THRESHOLD("부족 기준", "low_stock_threshold", false), THRESHOLD_DESC("부족 기준", "low_stock_threshold", true);
+
+        private final String order;
+        public final String label;
+        public final boolean descending;
+        ManagerSort(String label, String column, boolean descending) {
+            this.label = label;
+            this.descending = descending;
+            this.order = column + (descending ? " DESC" : " ASC");
+        }
+
+        public ManagerSort reverse() { return values()[ordinal() ^ 1]; }
+    }
+
+    public static final class InventorySnapshot {
+        public final Stock stock;
+        public final String categoryId;
+        public final LocalDateTime lastQuantityChange;
+
+        private InventorySnapshot(ResultSet row) throws SQLException {
+            stock = readStock(row);
+            categoryId = row.getString("category_id");
+            lastQuantityChange = row.getObject("last_quantity_change", LocalDateTime.class);
+        }
+    }
+
+    public List<InventorySnapshot> inventorySnapshots(Connection connection, InventoryFilter filter, ManagerSort sort,
+            int limit, long offset) throws SQLException {
+        String history = " LEFT JOIN (SELECT product_id, MAX(changed_at) AS last_quantity_change"
+                + " FROM store_inventory_history WHERE store_id = ? AND product_id IS NOT NULL"
+                + " AND before_quantity <> after_quantity GROUP BY product_id) h ON h.product_id = i.product_id";
+        String sql = stockFields() + ", p.category_id, h.last_quantity_change"
+                + inventoryScope(filter, history) + " ORDER BY " + sort.order + ", p.product_id LIMIT ? OFFSET ?";
+        List<InventorySnapshot> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, filter.store);
+            int next = filter.bind(statement, 2);
+            statement.setInt(next, limit);
+            statement.setLong(next + 1, offset);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(new InventorySnapshot(rows));
             }
         }
         return result;
@@ -237,8 +312,13 @@ public final class StoreInventoryDAO {
     }
 
     private String inventoryScope(InventoryFilter filter) {
-        String scope = " FROM store_inventory i JOIN products p ON p.product_id = i.product_id "
-                + "WHERE i.store_id = ? AND i.is_carried = 1" + filter.state.predicate(thresholdExpression()) + STOCK_SEARCH;
+        return inventoryScope(filter, "");
+    }
+
+    private String inventoryScope(InventoryFilter filter, String join) {
+        String scope = " FROM store_inventory i JOIN products p ON p.product_id = i.product_id" + join
+                + " WHERE i.store_id = ? AND i.is_carried = 1" + filter.state.predicate(thresholdExpression())
+                + (filter.managerSearch ? MANAGER_SEARCH : STOCK_SEARCH);
         if (!filter.category.isEmpty()) {
             scope += " AND p.category_id IN (WITH RECURSIVE descendants AS ("
                     + "SELECT category_id FROM categories WHERE category_id = ? UNION ALL "
@@ -246,6 +326,8 @@ public final class StoreInventoryDAO {
                     + "SELECT category_id FROM descendants)";
         }
         if (!filter.productId.isEmpty()) scope += " AND p.product_id = ?";
+        if (filter.minimum != null) scope += " AND i.quantity >= ?";
+        if (filter.maximum != null) scope += " AND i.quantity <= ?";
         return scope;
     }
 
@@ -384,14 +466,21 @@ public final class StoreInventoryDAO {
         public final String actor;
         public final String reference;
         public final boolean oldest;
+        private final String productReference;
 
         public HistoryFilter(LocalDateTime start, LocalDateTime end, String type, String actor, String reference, boolean oldest) {
+            this(start, end, type, actor, reference, oldest, "");
+        }
+
+        public HistoryFilter(LocalDateTime start, LocalDateTime end, String type, String actor, String reference,
+                boolean oldest, String productReference) {
             this.start = start;
             this.end = end;
             this.type = type;
             this.actor = actor;
             this.reference = reference;
             this.oldest = oldest;
+            this.productReference = productReference;
         }
 
         String scope(boolean transfers) {
@@ -399,7 +488,8 @@ public final class StoreInventoryDAO {
                     + (type.isEmpty() ? "" : "TRANSFER".equals(type)
                             ? (transfers ? " AND transfer_id IS NOT NULL" : " AND FALSE") : " AND change_type = ?")
                     + (actor.isEmpty() ? "" : " AND administrator_id = ?")
-                    + (reference.isEmpty() ? "" : transfers ? " AND transfer_id = ?" : " AND FALSE");
+                    + (reference.isEmpty() ? "" : transfers ? " AND transfer_id = ?" : " AND FALSE")
+                    + (productReference.isEmpty() ? "" : " AND product_reference = ?");
         }
 
         int bind(PreparedStatement query, String store, String keyword, boolean transfers) throws SQLException {
@@ -409,6 +499,7 @@ public final class StoreInventoryDAO {
             if (!type.isEmpty() && !"TRANSFER".equals(type)) query.setString(i++, type);
             if (!actor.isEmpty()) query.setString(i++, actor);
             if (!reference.isEmpty() && transfers) query.setString(i++, reference);
+            if (!productReference.isEmpty()) query.setString(i++, productReference);
             return i;
         }
     }
