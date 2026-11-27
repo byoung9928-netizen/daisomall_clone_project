@@ -14,7 +14,8 @@ import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
-
+import daiso.product.controller.InventoryPagination;
+import daiso.product.controller.ProductView;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.product.controller.AdminProductReports;
@@ -126,7 +127,28 @@ public class AdminExcelController {
             LocalDate[] range = salesRange(request);
             request.setAttribute("salesFrom", range[0]);
             request.setAttribute("salesThrough", range[1]);
-            request.setAttribute("salesRows", AdminReport.sales(range[0], range[1]).rows);
+            List<Object[]> rows = AdminReport.sales(range[0], range[1]).rows;
+            int pageSize = 30;
+            int totalPages = 1 + Math.max(0, rows.size() - 1) / pageSize;
+
+            int page = 1;
+            try {
+                page = Integer.parseInt(request.getParameter("page"));
+            } catch (NumberFormatException ignored) {
+                // 페이지 번호가 비어 있거나 잘못됐으면 첫 페이지를 사용한다.
+            }
+            page = Math.max(1, Math.min(page, totalPages));
+
+            int start = (page - 1) * pageSize;
+            request.setAttribute("salesRows",
+                    rows.subList(start, Math.min(start + pageSize, rows.size())));
+
+            String preset = java.util.Objects.toString(request.getParameter("salesPeriod"), "");
+            request.setAttribute("salesPagination",
+                    new InventoryPagination(page, totalPages,
+                            target -> ProductView.url(request.getContextPath(), "/app/admin/sales",
+                                    Map.of("from", range[0].toString(), "through", range[1].toString(),
+                                            "salesPeriod", preset, "page", Integer.toString(target)))));
             request.setAttribute("salesAnalytics", new AdminSalesDAO().analyze(range[0], range[1]));
         } catch (IllegalArgumentException e) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);

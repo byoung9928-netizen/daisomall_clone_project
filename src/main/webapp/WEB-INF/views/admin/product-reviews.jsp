@@ -26,7 +26,7 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin-reviews.css?v=5">
     <script defer src="${pageContext.request.contextPath}/assets/js/common/admin-reviews.js?v=5"></script>
 </head>
-<body class="admin-body">
+<body class="admin-body product-admin-ux">
     <a class="skip-link" href="#admin-content">관리자 본문 바로가기</a>
     <%@ include file="../common/admin-header.jspf" %>
     <div class="admin-layout">

@@ -100,7 +100,7 @@
 }
 .admin-review-table :is(time, .admin-review-links) { white-space: nowrap; }
 .admin-review-table .admin-review-links a { display: block; padding-inline: 0; }
-.admin-review-table .admin-review-detail > td { max-width: none; padding: 1rem; background: #fff9fa; }
+.admin-review-table .admin-review-detail > td { max-width: none; padding: 1rem; background: var(--admin-pink); }
 .admin-review-detail :is(h2, h3) { margin: .25rem 0 .5rem; font-size: 1rem; }
 .admin-review-detail .admin-review-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .admin-review-detail .admin-product-actions { margin-top: .75rem; }

@@ -10,8 +10,6 @@
     Map<ProductDTO, Map<String, String>> productRows =
             (Map<ProductDTO, Map<String, String>>) request.getAttribute("productRows");
     ProductDTO deletion = (ProductDTO) request.getAttribute("deleteProduct");
-    Map<Integer, String> pageLinks = (Map<Integer, String>) request.getAttribute("adminProductPageLinks");
-    Integer currentPage = (Integer) request.getAttribute("adminProductPage");
     Map<String, String> filters = (Map<String, String>) request.getAttribute("adminProductFilters");
     Map<String, String> categoryFilters = (Map<String, String>) request.getAttribute("adminCategoryFilters");
     Map<String, String> stockFilters = (Map<String, String>) request.getAttribute("adminStockFilters");
@@ -467,25 +465,17 @@
                         </tbody>
                     </table>
                 </div>
-                <nav class="admin-product-pagination" aria-label="상품 관리 페이지">
-                    <% if (request.getAttribute("adminProductPrev") != null) { %>
-                        <a class="button secondary" rel="prev" href="<%= request.getAttribute("adminProductPrev") %>">이전 페이지</a>
-                    <% } %>
-                    <div class="admin-product-page-numbers">
-                        <% for (Map.Entry<Integer, String> link : pageLinks.entrySet()) { %>
-                            <% if (link.getKey().equals(currentPage)) { %>
-                                <span class="admin-product-page-number" aria-current="page"><%= link.getKey() %></span>
-                            <% } else { %>
-                                <a class="admin-product-page-number" href="<%= link.getValue() %>"
-                                   aria-label="<%= link.getKey() %>페이지"><%= link.getKey() %></a>
-                            <% } %>
-                        <% } %>
-                    </div>
-                    <% if (request.getAttribute("adminProductNext") != null) { %>
-                        <a class="button secondary" rel="next" href="<%= request.getAttribute("adminProductNext") %>">다음 페이지</a>
-                    <% } %>
-                </nav>
-                <dialog class="product-delete-dialog" id="product-delete-dialog" aria-labelledby="product-delete-title"
+				<%
+				daiso.product.controller.InventoryPagination inventoryPagination = (daiso.product.controller.InventoryPagination) request
+					.getAttribute("adminProductPagination");
+					if (inventoryPagination != null && inventoryPagination.pages > 1) {
+						request.setAttribute("adminPaginationLabel", "상품 관리 페이지");
+				%>
+				<%@ include file="inventory-pagination.jspf"%>
+				<%
+				}
+				%>
+				<dialog class="product-delete-dialog" id="product-delete-dialog" aria-labelledby="product-delete-title"
                         aria-describedby="product-delete-message">
                     <h2 id="product-delete-title">상품을 삭제할까요?</h2>
                     <p id="product-delete-message"><strong data-delete-product-name></strong> 상품을 삭제하면 되돌릴 수 없습니다.</p>

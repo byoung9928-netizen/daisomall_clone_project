@@ -37,7 +37,6 @@ public final class AdminProductController {
     private static final String BULK = AdminProductController.class.getName() + ".bulk";
     private static final String NOTICE = "adminProductNotice";
     private static final int PAGE_SIZE = 30;
-    private static final int PAGE_LINKS = 6;
     private static final int MIN_PRICE = 1000;
     private static final int MAX_PRICE = 5000;
     private static final String PRICE_RANGE = "가격은 1,000원 이상 5,000원 이하로 입력해 주세요.";
@@ -681,17 +680,9 @@ public final class AdminProductController {
             }
             request.setAttribute("productRows", rows);
             request.setAttribute("adminProductCount", result.total);
-            Map<Integer, String> pageLinks = new LinkedHashMap<>();
-            int firstPage = ((page - 1) / PAGE_LINKS) * PAGE_LINKS + 1;
-            for (int number = firstPage; number <= Math.min(firstPage + PAGE_LINKS - 1, pages); number++) {
-                pageLinks.put(number, ProductView.url(context, url, ProductView.with(filters, "page", Integer.toString(number))));
-            }
-            request.setAttribute("adminProductPage", page);
-            request.setAttribute("adminProductPageLinks", pageLinks);
-            request.setAttribute("adminProductPrev", page > 1 ? ProductView.url(context, url,
-                    ProductView.with(filters, "page", Integer.toString(page - 1))) : null);
-            request.setAttribute("adminProductNext", page < pages ? ProductView.url(context, url,
-                    ProductView.with(filters, "page", Integer.toString(page + 1))) : null);
+            request.setAttribute("adminProductPagination",
+                    new InventoryPagination(page, pages, target -> ProductView.url(context, url,
+                            ProductView.with(filters, "page", Integer.toString(target)))));
             request.setAttribute("adminProductNew", ProductView.url(context, url, ProductView.with(filters, "new", "1")));
             request.setAttribute("adminProductList", inventoryReturn.isEmpty() ? ProductView.url(context, url, filters)
                     : ProductView.url(context, OnlineInventoryController.ROUTE, inventoryReturn));

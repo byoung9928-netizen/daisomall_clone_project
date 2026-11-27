@@ -12,7 +12,7 @@ public final class InventoryPagination {
     public final String next;
     public final Map<Integer, String> links;
 
-    InventoryPagination(int page, int pages, IntFunction<String> url) {
+    public InventoryPagination(int page, int pages, IntFunction<String> url) {
         this.page = page;
         this.pages = pages;
         previous = page > 1 ? url.apply(page - 1) : null;

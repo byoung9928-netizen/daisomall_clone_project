@@ -3,8 +3,10 @@
 <header class="site-header">
     <div class="announcement">
         <div class="container announcement-inner">
-            <span>새로 들어온 신상, 지금 확인하세요</span>
-            <div class="store-tools">
+			<a
+				href="${pageContext.request.contextPath}/app/products?collection=new">
+				새로 들어온 신상, 지금 확인하세요 </a>
+			<div class="store-tools">
                 <a href="${pageContext.request.contextPath}/app/stores/locations">매장 위치 찾기</a>
                 <a class="store-search-link" href="${pageContext.request.contextPath}/app/stores/products">매장 상품 찾기</a>
 				<%
