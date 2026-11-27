@@ -1,0 +1,6 @@
+<%@ page pageEncoding="UTF-8" %>
+<input type="hidden" name="csrf" value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
+<input type="hidden" name="formToken" value="<%= ProductView.escape(model.token) %>">
+<% for (Map.Entry<String, String> param : model.params.entrySet()) { %>
+    <input type="hidden" name="<%= param.getKey() %>" value="<%= ProductView.escape(param.getValue()) %>">
+<% } %>

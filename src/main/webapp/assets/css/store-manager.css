@@ -1,0 +1,75 @@
+.store-manager-body {
+    --admin-line: #dfe3e8;
+    background: #f6f7f8;
+}
+
+.store-manager-body .store-manager-header {
+    border-top: 0;
+}
+
+.store-manager-account p {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.store-manager-account span {
+    color: #475569;
+}
+
+.store-manager-layout .admin-content {
+    width: 100%;
+    min-width: 0;
+}
+
+.store-manager-layout .admin-table th {
+    color: var(--color-ink);
+    background: #f6f7f8;
+}
+
+.store-manager-overview,
+.store-manager-quick-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.store-manager-overview {
+    justify-content: space-between;
+}
+
+.store-manager-skip {
+    position: absolute;
+    z-index: 2;
+    top: 8px;
+    left: 8px;
+    padding: 10px 14px;
+    color: var(--color-ink);
+    background: #fff;
+    transform: translateY(calc(-100% - 8px));
+}
+
+.store-manager-skip:focus {
+    transform: none;
+}
+
+.store-manager-body :focus-visible {
+    outline: 2px solid var(--admin-red-strong);
+    outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+    .store-manager-layout .admin-sidebar {
+        flex-wrap: wrap;
+        padding: 12px;
+        border-right: 0;
+        border-bottom: 1px solid var(--admin-line);
+    }
+
+    .store-manager-layout .admin-sidebar a {
+        padding: 10px;
+    }
+}
