@@ -27,6 +27,10 @@ public class KakaoOAuthClient {
     private static final String USER_INFO_URL =
             "https://kapi.kakao.com/v2/user/me";
     
+    public static String redirectUri() {
+        return System.getProperty("daisomall.kakao.redirectUri", REDIRECT_URI);
+    }
+    
     public String getRestApiKey() throws Exception {
         return getEnvironmentValue("kakaoRestApiKey");
     }
@@ -111,7 +115,7 @@ public class KakaoOAuthClient {
         String formData =
                 "grant_type=authorization_code"
                 + "&client_id=" + encode(restApiKey)
-                + "&redirect_uri=" + encode(REDIRECT_URI)
+                + "&redirect_uri=" + encode(redirectUri())
                 + "&code=" + encode(authorizationCode)
                 + "&client_secret=" + encode(clientSecret);
 
