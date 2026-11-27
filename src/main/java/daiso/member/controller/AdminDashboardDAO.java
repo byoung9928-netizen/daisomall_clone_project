@@ -11,6 +11,37 @@ import javax.naming.NamingException;
 import javax.sql.DataSource;
 
 public class AdminDashboardDAO {
+	
+	private static final String ONLINE_SOLD_OUT_SQL =
+	        "SELECT COUNT(*) FROM products WHERE stock_quantity = 0";
+
+	private static final String PENDING_RETURNS_SQL =
+	        "SELECT COUNT(*) FROM order_returns WHERE status = 'REQUESTED'";
+
+	public long countOnlineSoldOut() throws NamingException, SQLException {
+	    return count(ONLINE_SOLD_OUT_SQL);
+	}
+
+	public long countPendingReturns() throws NamingException, SQLException {
+	    return count(PENDING_RETURNS_SQL);
+	}
+	
+	public long countAwaitingShipment() throws NamingException, SQLException {
+	    return findSummary().awaitingShipmentCount;
+	}
+
+	private long count(String sql) throws NamingException, SQLException {
+	    DataSource dataSource = InitialContext.doLookup("java:comp/env/jdbc/mysqlDB");
+
+	    try (Connection connection = dataSource.getConnection();
+	         PreparedStatement statement = connection.prepareStatement(sql);
+	         ResultSet result = statement.executeQuery()) {
+	        if (!result.next()) {
+	            throw new SQLException("관리자 집계 결과가 없습니다.");
+	        }
+	        return result.getLong(1);
+	    }
+	}
 
     public Summary findSummary() throws NamingException, SQLException {
         String sql =
@@ -35,8 +66,8 @@ public class AdminDashboardDAO {
                 + " WHERE p.status = 'APPROVED' "
                 + " AND o.status IN ('PAID', 'PREPARING') "
                 + " AND o.canceled_at IS NULL) AS awaiting_shipment_count, "
-                + "(SELECT COUNT(*) FROM products WHERE stock_quantity = 0) AS online_sold_out_count, "
-                + "(SELECT COUNT(*) FROM order_returns WHERE status = 'REQUESTED') AS pending_return_count";
+                + "(" + ONLINE_SOLD_OUT_SQL + ") AS online_sold_out_count, "
+                + "(" + PENDING_RETURNS_SQL + ") AS pending_return_count";
         
 
         DataSource dataSource = InitialContext.doLookup("java:comp/env/jdbc/mysqlDB");
