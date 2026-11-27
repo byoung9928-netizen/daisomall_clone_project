@@ -181,7 +181,7 @@
 	        window.Daiso.ui.showToast({
 	            message: isPickup ? "매장픽업 장바구니에 담았습니다." : "택배배송 장바구니에 담았습니다.",
 	            actionText: "바로가기",
-	            actionUrl: cart.dataset.cartViewUrl,
+	            actionUrl: cart.dataset.cartViewUrl+(isPickup ? "?tab=pickup" : "?tab=delivery"),
 	            origin: cartButton
 	        });
 	    } catch (error) {

@@ -133,6 +133,15 @@ public final class ProductReviewService {
                 total, page, pages);
     }
 
+    public int countWrittenReviews(String memberId) throws SQLException, NamingException{
+    		try(Connection connection = ProductConnectionFactory.openQueryConnection()){
+    			int count =dao.mineCounts(connection, memberId, true)
+    					.values().stream().mapToInt(Integer::intValue).sum();
+    			connection.commit();
+    			return count;
+    		}
+    }
+    
     public Map<String, Boolean> orderReviewStates(String memberId, String orderNo) throws SQLException, NamingException {
         try (Connection connection = ProductConnectionFactory.openQueryConnection()) {
             Map<String, Boolean> states = dao.orderReviewStates(connection, memberId, orderNo);

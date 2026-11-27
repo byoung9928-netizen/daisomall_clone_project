@@ -24,13 +24,13 @@ import daiso.common.annotation.DaisoResponseBody;
 import daiso.member.controller.MemberProfileInfo;
 import daiso.member.controller.MemberService;
 import daiso.order.db.AdminOrderDAO;
+import daiso.order.db.DeliveryAddressDAO;
 import daiso.order.db.OrderDAO;
 import daiso.order.delivery.DeliveryTrackerClient;
 import daiso.order.delivery.DemoTrackingNumber;
 import daiso.order.payment.kakaoPayClient;
-import daiso.product.service.ProductReviewService;
-import daiso.order.db.DeliveryAddressDAO;
 import daiso.product.dao.StoreInventoryDAO.Location;
+import daiso.product.service.ProductReviewService;
 
 @DaisoController
 public class OrderMyPageController {
@@ -197,6 +197,12 @@ public class OrderMyPageController {
         request.setAttribute("myPageYear", year);
         request.setAttribute("myPagePurchaseCount", purchaseCount);
         request.setAttribute("myPagePurchaseAmount", purchaseAmount);
+        try {
+        	request.setAttribute("myPageReviewCount", reviews.countWrittenReviews(memberId));
+        	
+        }catch(java.sql.SQLException|javax.naming.NamingException e) {
+        	request.getServletContext().log("마이페이지 리뷰 수 조회 실패",e);
+        }
 
         request.setAttribute("myOrders", orders);
         request.setAttribute("myOrder", selected);

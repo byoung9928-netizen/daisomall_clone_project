@@ -469,6 +469,8 @@
                         </ul>
                         <p class="pickup-note" id="pickup-payment-note" aria-live="polite">결제수단을 선택해 주세요.</p>
                     </section>
+                    <div class="order-agreements"><label><input id="order-consent" type="checkbox"><span>주문 상품과 배송 정보를 확인했으며, 주문 및 결제 진행에 동의합니다.</span></label></div>
+                    
                     <%-- ===== 주문서 하단 결제 버튼 ===== --%>
                     <div class="pickup-checkout-actions">
                         <button class="button primary pickup-pay-button" type="button" data-pickup-pay>
@@ -576,12 +578,19 @@
 
                     document.querySelectorAll("[data-pickup-pay]").forEach(button => {
                         button.addEventListener("click", async() => {
-                            const name = selectedPaymentName();
+                        	const consent = document.getElementById('order-consent');
+                            if (!consent.checked) {
+                                window.Daiso.ui.notice('주문 및 결제 진행에 동의해 주세요.');
+                                consent.focus();
+                                return;
+                            }
+                        	const name = selectedPaymentName();
                             if (!name) {
                                 window.Daiso.ui.notice("결제수단을 선택해 주세요.");
                                 paymentOptions[0].focus();
                                 return;
                             }
+                            
                             const isKakao = document.getElementById("pickup-kakao-pay").checked;
 
                             try {

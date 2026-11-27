@@ -133,7 +133,7 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 
 .my-stats {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 16px;
 	padding: 28px 32px
 }
@@ -980,10 +980,6 @@ java.text.NumberFormat cancelMoney=java.text.NumberFormat.getIntegerInstance(jav
 						</div>
 						<div>
 							<div class="my-stat-label">리뷰 수</div>
-							<div class="my-stat-value">-</div>
-						</div>
-						<div>
-							<div class="my-stat-label">리뷰 랭킹</div>
 							<div class="my-stat-value">-</div>
 						</div>
 					</div>

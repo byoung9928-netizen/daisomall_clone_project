@@ -3,6 +3,7 @@ package daiso.product.controller;
 import daiso.product.service.ProductBehaviorRecorder;
 import daiso.product.service.ProductBehaviorRecorder.Type;
 
+import daiso.cart.controller.CartTab;
 import daiso.cart.db.CartDAO;
 import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoPostMapping;
@@ -38,6 +39,7 @@ public final class ProductCartController {
         }
         try {
             if (new CartDAO().addSoldOutProduct((String) member, ids[0])) {
+                CartTab.remember(request, response, (String) member, false);
                 ProductBehaviorRecorder.record(request, Type.CART_ADD, ids[0]);
             }
             return "OK";
