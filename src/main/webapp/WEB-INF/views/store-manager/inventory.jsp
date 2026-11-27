@@ -107,6 +107,7 @@
                 <div class="store-inventory-actions">
                     <% if (!model.token.isEmpty()) { %>
                         <button type="button" class="button secondary" data-threshold-bulk disabled>선택 부족 기준 변경</button>
+                        <button type="button" class="button secondary" data-receive-bulk disabled><%= StoreManagerInventoryController.quantityWritesEnabled() ? "일괄 입고" : "일괄 입고 미리보기" %></button>
                         <span data-store-selection-count role="status">선택 0개</span>
                         <button type="button" class="button secondary" data-store-selection-clear hidden>선택 해제</button>
                     <% } %>
@@ -151,7 +152,8 @@
                             String historyUrl = ProductView.url(path, "/app/store-manager/history", Map.of("product", stock.id)); %>
                             <tr data-store-stock data-product-id="<%= ProductView.escape(stock.id) %>"
                                 data-name="<%= ProductView.escape(stock.name) %>" data-version="<%= stock.version %>"
-                                data-threshold="<%= stock.threshold %>" data-quantity="<%= stock.quantity %>">
+                                data-threshold="<%= stock.threshold %>" data-quantity="<%= stock.quantity %>"
+                                data-code="<%= ProductView.escape(stock.code) %>" data-image="<%= ProductView.image(path, stock.image) %>">
                                 <td class="admin-batch-choice"><% if (!model.token.isEmpty()) { %>
                                     <input type="checkbox" data-store-select aria-label="<%= ProductView.escape(stock.name) %> 선택">
                                 <% } %></td>
@@ -164,42 +166,9 @@
                                 <td><span class="store-inventory-state" data-stock-kind="<%= stock.state().name() %>"><%= stock.state().label %></span></td>
                                 <td><%= row.lastQuantityChange == null ? "기록 없음" : StoreManagerInventoryController.recordedTime(row.lastQuantityChange) %></td>
                                 <td class="store-stock-management">
-                                    <button type="button" class="button secondary" data-adjust-preview>조정 미리보기</button>
+                                    <button type="button" class="button secondary" data-adjust-preview><%= StoreManagerInventoryController.quantityWritesEnabled() ? "재고 조정" : "조정 미리보기" %></button>
                                     <% if (!model.token.isEmpty()) { %><button type="button" class="button secondary" data-threshold-one>부족 기준 수정</button><% } %>
                                     <a class="button secondary" href="<%= historyUrl %>">변경 이력</a>
-    <details>
-        <summary>기존 재고 저장</summary>
-        <form method="post"
-              action="${pageContext.request.contextPath}/app/store-manager/inventory/adjust">
-            <input type="hidden" name="csrf"
-                   value="<%= ProductView.escape(request.getAttribute("storeManagerCsrf")) %>">
-            <input type="hidden" name="viewStoreId"
-                   value="<%= ProductView.escape(request.getAttribute("storeManagerId")) %>">
-            <input type="hidden" name="productId"
-                   value="<%= ProductView.escape(stock.id) %>">
-            <input type="hidden" name="version" value="<%= stock.version %>">
-            <input type="hidden" name="page" value="<%= model.pagination.page %>">
-
-            <label>변경 유형
-                <select name="change">
-                    <option value="RECEIVE">입고</option>
-                    <option value="DAMAGE">파손</option>
-                    <option value="COUNT">재고 조사</option>
-                </select>
-            </label>
-
-            <label>수량
-                <input type="number" name="amount" min="0" max="2147483647" required>
-            </label>
-            <p>입고·파손은 증감 수량, 재고 조사는 최종 수량을 입력하세요.</p>
-
-            <label>변경 사유
-                <input type="text" name="reason" maxlength="255" required>
-            </label>
-
-            <button type="submit" class="button secondary">저장</button>
-        </form>
-    </details>
                                 </td>
                             </tr>
                     <%  }

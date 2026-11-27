@@ -18,9 +18,7 @@ import daiso.common.annotation.DaisoResponseBody;
 import daiso.member.controller.MemberService;
 import daiso.order.db.OrderDAO;
 import daiso.product.dao.StoreInventoryDAO;
-import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.HistoryFilter;
-import daiso.product.dao.StoreInventoryDAO.Stock;
 
 @DaisoController
 public class StoreManagerController {
@@ -294,92 +292,4 @@ public class StoreManagerController {
             return null;
         }
     }
-
-    @DaisoPostMapping("/store-manager/inventory/adjust")
-    public String adjust(HttpServletRequest request, HttpServletResponse response)
-            throws IOException {
-        request.setCharacterEncoding("UTF-8");
-
-        HttpSession session = request.getSession(false);
-        String memberId = StoreManagerAccess.memberId(session);
-        if (memberId == null) {
-            return LOGIN;
-        }
-
-        if (!AdminProductController.validToken(request, session)) {
-            response.sendError(403, "재고 화면을 다시 연 뒤 시도해 주세요.");
-            return null;
-        }
-
-        try {
-            String productId = ProductQueries.text(request, "productId", 100);
-            String viewedStoreId = ProductQueries.text(request, "viewStoreId", 40);
-            String reason = ProductQueries.text(request, "reason", 255);
-            Change change = Change.valueOf(ProductQueries.text(request, "change", 12));
-            Integer amount = ProductQueries.integer(request, "amount", null, 0, Integer.MAX_VALUE);
-            long version = Long.parseLong(ProductQueries.text(request, "version", 19));
-            int page = ProductQueries.integer(request, "page", 1, 1, Integer.MAX_VALUE / PAGE_SIZE);
-
-            if (productId.isEmpty() || reason.isEmpty() || amount == null || version < 0
-                    || !java.util.Set.of(Change.RECEIVE, Change.DAMAGE, Change.COUNT).contains(change)) {
-                response.sendError(400, "변경 유형, 수량, 사유를 확인해 주세요.");
-                return null;
-            }
-
-            try (Connection connection = ProductQueries.connect()) {
-                try {
-                    StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, true);
-                    if (manager == null) {
-                        connection.rollback();
-                        response.sendError(HttpServletResponse.SC_FORBIDDEN, NO_ASSIGNMENT);
-                        return null;
-                    }
-                    String storeId = manager.storeId;
-
-                    if (!storeId.equals(viewedStoreId)) {
-                        connection.rollback();
-                        response.sendError(409, "담당 매장이 변경되었습니다. 재고 화면을 다시 열어 주세요.");
-                        return null;
-                    }
-
-                    StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
-                    Stock before = dao.find(connection, storeId, productId, true);
-
-                    if (before == null || !before.carried || before.version != version) {
-                        connection.rollback();
-                        response.sendError(409, "재고가 변경됐거나 취급이 종료됐습니다. 목록을 새로고침해 주세요.");
-                        return null;
-                    }
-
-                    int after;
-                    try {
-                        after = change.after(before.quantity, amount);
-                    } catch (IllegalArgumentException error) {
-                        connection.rollback();
-                        response.sendError(400, error.getMessage());
-                        return null;
-                    }
-
-                    dao.update(connection, storeId, before, after, change, reason, memberId);
-                    connection.commit();
-                    return "redirect:/store-manager/inventory?page=" + page;
-                } catch (SQLException error) {
-                    try {
-                        connection.rollback();
-                    } catch (SQLException rollbackError) {
-                        error.addSuppressed(rollbackError);
-                    }
-                    throw error;
-                }
-            }
-        } catch (IllegalArgumentException error) {
-            response.sendError(400, "변경 유형, 수량, 사유를 확인해 주세요.");
-            return null;
-        } catch (SQLException | NamingException error) {
-            request.getServletContext().log("매장 관리자 재고 조정 실패", error);
-            response.sendError(503, "재고를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-            return null;
-        }
-    }
-
 }

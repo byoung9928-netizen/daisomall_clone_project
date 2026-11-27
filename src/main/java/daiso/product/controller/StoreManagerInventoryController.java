@@ -24,6 +24,7 @@ import daiso.common.annotation.DaisoController;
 import daiso.common.annotation.DaisoGetMapping;
 import daiso.common.annotation.DaisoPostMapping;
 import daiso.product.dao.StoreInventoryDAO;
+import daiso.product.dao.StoreInventoryDAO.Change;
 import daiso.product.dao.StoreInventoryDAO.InventoryFilter;
 import daiso.product.dao.StoreInventoryDAO.InventorySnapshot;
 import daiso.product.dao.StoreInventoryDAO.ManagerSort;
@@ -173,8 +174,31 @@ public final class StoreManagerInventoryController {
         return null;
     }
 
+    private enum Save { THRESHOLD, ADJUST, RECEIVE_BATCH }
+
+    // Enable relative quantity submissions after the approved MySQL concurrency tests.
+    private static final Set<Change> VERIFIED_RELATIVE_WRITES = Set.of();
+
+    public static boolean quantityWritesEnabled() {
+        return VERIFIED_RELATIVE_WRITES.containsAll(Set.of(Change.RECEIVE, Change.DAMAGE));
+    }
+
     @DaisoPostMapping(MAPPING + "/threshold")
     public String threshold(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return save(request, response, Save.THRESHOLD);
+    }
+
+    @DaisoPostMapping(MAPPING + "/adjust")
+    public String adjust(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return save(request, response, Save.ADJUST);
+    }
+
+    @DaisoPostMapping(MAPPING + "/receive-batch")
+    public String receiveBatch(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return save(request, response, Save.RECEIVE_BATCH);
+    }
+
+    private String save(HttpServletRequest request, HttpServletResponse response, Save operation) throws IOException {
         request.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setHeader("Cache-Control", "private, no-store");
         HttpSession session = request.getSession(false);
@@ -182,56 +206,67 @@ public final class StoreManagerInventoryController {
         if (memberId == null || !AdminProductController.validToken(request, session)) return denied(response);
 
         Filters filters;
+        Change change;
         try {
             filters = new Filters(request);
+            change = quantityChange(request, operation);
         } catch (IllegalArgumentException error) {
-            response.sendError(400, "조회 조건을 확인해 주세요.");
+            response.sendError(400, "조회 조건 또는 재고 변경 유형을 확인해 주세요.");
             return null;
         }
 
+        boolean allowed = operation == Save.THRESHOLD
+                || change != Change.COUNT && quantityWritesEnabled();
         String store = null;
         Notice notice;
         try (Connection connection = ProductQueries.connect()) {
-            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, true);
+            StoreManagerAccess manager = StoreManagerAccess.find(connection, memberId, allowed);
             if (manager == null) {
                 connection.rollback();
                 return denied(response);
             }
             store = manager.storeId;
+            if (!allowed) {
+                connection.rollback();
+                response.sendError(409, change == Change.COUNT
+                        ? "실사 저장은 픽업 결제와의 동시성 검증을 마친 뒤 사용할 수 있습니다."
+                        : "픽업 결제와 통합 관리자 재고 변경 시 수량이 어긋날 수 있어 수량 저장을 사용할 수 없습니다.");
+                return null;
+            }
+
             try {
-                String token = ProductQueries.text(request, "formToken", 36);
-                synchronized (session) {
-                    Map<String, String> tokens = state(session).tokens;
-                    if (!store.equals(tokens.get(token))) {
-                        throw new IllegalArgumentException("이미 처리됐거나 매장이 변경된 요청입니다. 목록에서 다시 확인해 주세요.");
-                    }
-                    tokens.remove(token);
-                }
-
-                Integer threshold = ProductQueries.integer(request, "threshold", null, 1, Integer.MAX_VALUE);
+                consumeToken(session, ProductQueries.text(request, "formToken", 36), store);
                 String reason = ProductQueries.text(request, "reason", 255);
-                if (threshold == null || reason.isEmpty()) {
-                    throw new IllegalArgumentException("부족 기준과 변경 사유를 입력해 주세요.");
-                }
-                Map<String, Long> selection = selection(request.getParameterValues("item"), request.getParameterValues("version"));
-                StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
-                if (!dao.thresholdsEnabled()) throw new IllegalArgumentException("현재 DB에서 부족 기준 변경을 사용할 수 없습니다.");
+                if (reason.isEmpty()) throw new IllegalArgumentException("변경 사유를 입력해 주세요.");
 
-                int updated = updateThresholds(connection, dao, store, selection, threshold, reason, memberId);
+                StoreInventoryDAO dao = StoreInventoryDAO.forInventory(connection);
+                String message;
+                if (operation == Save.THRESHOLD) {
+                    Integer threshold = ProductQueries.integer(request, "threshold", null, 1, Integer.MAX_VALUE);
+                    if (threshold == null) throw new IllegalArgumentException("부족 기준을 입력해 주세요.");
+                    if (!dao.thresholdsEnabled()) throw new IllegalArgumentException("현재 DB에서 부족 기준 변경을 사용할 수 없습니다.");
+                    Map<String, Long> selected = selection(request.getParameterValues("item"), request.getParameterValues("version"));
+                    int updated = updateThresholds(connection, dao, store, selected, threshold, reason, memberId);
+                    message = updated == 0 ? "변경할 부족 기준이 없습니다." : updated + "개 상품의 부족 기준을 변경했습니다.";
+                } else {
+                    Map<String, Integer> amounts = quantities(request, operation == Save.ADJUST);
+                    StoreManagerQuantityChange.apply(connection, dao, store, change, amounts, reason, memberId);
+                    message = amounts.size() + "개 상품의 재고를 변경했습니다. 변경 이력에서 실제 수량을 확인할 수 있습니다.";
+                }
                 connection.commit();
-                notice = new Notice(store, updated == 0 ? "변경할 부족 기준이 없습니다." : updated + "개 상품의 부족 기준을 변경했습니다.", false);
+                notice = new Notice(store, message, false);
             } catch (IllegalArgumentException | SQLException failure) {
                 try { connection.rollback(); } catch (SQLException rollback) { failure.addSuppressed(rollback); }
                 if (failure instanceof SQLException) throw (SQLException) failure;
                 notice = new Notice(store, failure.getMessage(), true);
             }
         } catch (SQLException | NamingException error) {
-            request.getServletContext().log("매장 부족 기준 저장 실패", error);
+            request.getServletContext().log("매장 재고 저장 실패", error);
             if (store == null) {
-                response.sendError(503, "부족 기준을 저장하지 못했습니다.");
+                response.sendError(503, "재고를 저장하지 못했습니다.");
                 return null;
             }
-            notice = new Notice(store, "부족 기준을 저장하지 못했습니다. 목록을 확인한 후 다시 시도해 주세요.", true);
+            notice = new Notice(store, "재고를 저장하지 못했습니다. 현재 목록과 변경 이력을 확인한 뒤 다시 시도해 주세요.", true);
         }
 
         String receipt = UUID.randomUUID().toString();
@@ -240,6 +275,53 @@ public final class StoreManagerInventoryController {
         }
         return "redirect:" + ProductView.rawUrl("", MAPPING,
                 ProductView.with(filters.params(filters.page), "receipt", receipt));
+    }
+
+    private static Change quantityChange(HttpServletRequest request, Save operation) {
+        if (operation == Save.THRESHOLD) return null;
+        if (operation == Save.RECEIVE_BATCH) return Change.RECEIVE;
+        Change change = Change.valueOf(ProductQueries.text(request, "change", 12));
+        if (!Set.of(Change.RECEIVE, Change.DAMAGE, Change.COUNT).contains(change)) throw new IllegalArgumentException();
+        return change;
+    }
+
+    private static void consumeToken(HttpSession session, String token, String store) {
+        synchronized (session) {
+            Map<String, String> tokens = state(session).tokens;
+            if (!store.equals(tokens.get(token))) {
+                throw new IllegalArgumentException("이미 처리됐거나 매장이 변경된 요청입니다. 목록에서 다시 확인해 주세요.");
+            }
+            tokens.remove(token);
+        }
+    }
+
+    private static Map<String, Integer> quantities(HttpServletRequest request, boolean single) {
+        String[] ids = request.getParameterValues("item");
+        String[] inputs = request.getParameterValues("amount");
+        int limit = single ? 1 : AdminInventoryBatchController.BATCH_LIMIT;
+        if (ids == null || ids.length == 0 || ids.length > limit || inputs == null || inputs.length != ids.length) {
+            throw new IllegalArgumentException("상품을 1~" + limit + "개 선택해 주세요.");
+        }
+
+        Map<String, Integer> amounts = new TreeMap<>();
+        for (int i = 0; i < ids.length; i++) {
+            String id = ids[i];
+            if (!validProductId(id) || !inputs[i].matches("[0-9]{1,10}")) {
+                throw new IllegalArgumentException("상품과 변경 수량을 확인해 주세요.");
+            }
+            long amount = Long.parseLong(inputs[i]);
+            if (amount < 1 || amount > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("변경 수량은 1개 이상의 정수여야 합니다.");
+            }
+            if (amounts.putIfAbsent(id, (int) amount) != null) {
+                throw new IllegalArgumentException("중복 선택된 상품이 있습니다.");
+            }
+        }
+        return amounts;
+    }
+
+    private static boolean validProductId(String id) {
+        return !id.isBlank() && id.length() <= 100 && id.equals(id.strip());
     }
 
     static int updateThresholds(Connection connection, StoreInventoryDAO dao, String store,
@@ -263,7 +345,7 @@ public final class StoreManagerInventoryController {
         }
         Map<String, Long> result = new TreeMap<>();
         for (int i = 0; i < ids.length; i++) {
-            if (ids[i].isBlank() || ids[i].length() > 100 || !ids[i].equals(ids[i].strip())
+            if (!validProductId(ids[i])
                     || !versions[i].matches("[0-9]{1,19}")) throw new IllegalArgumentException("상품 정보를 확인해 주세요.");
             long version;
             try { version = Long.parseLong(versions[i]); }
